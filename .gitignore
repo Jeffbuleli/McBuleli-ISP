@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Environment and secrets (never commit)
+.env
+backend/.env
+frontend/.env
+*.local
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build outputs
+dist/
+frontend/dist/
+*.log
+npm-debug.log*
+
+# Cursor / agent (optional local artifacts)
+.cursor/
