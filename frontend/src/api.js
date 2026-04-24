@@ -50,14 +50,25 @@ async function request(path, options) {
     headers.Authorization = `Bearer ${authToken}`;
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    headers,
-    ...options
-  });
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      headers,
+      ...options
+    });
+  } catch (err) {
+    const reason = String(err?.message || "").toLowerCase();
+    if (reason.includes("failed to fetch") || reason.includes("networkerror")) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
+    throw new Error(err?.message || "Erreur réseau lors de l'appel API.");
+  }
 
   if (!response.ok) {
     const error = await extractErrorPayload(response);
-    const err = new Error(error.message || `Échec de la requête (${response.status})`);
+    const err = new Error(buildApiErrorMessage(response.status, error));
     if (response.status === 402 || error.code === "PLATFORM_SUBSCRIPTION_REQUIRED") {
       err.code = "PLATFORM_SUBSCRIPTION_REQUIRED";
     }
@@ -72,12 +83,32 @@ export async function publicRequest(path, options = {}) {
     "Content-Type": "application/json",
     ...(options.headers || {})
   };
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  } catch (err) {
+    const reason = String(err?.message || "").toLowerCase();
+    if (reason.includes("failed to fetch") || reason.includes("networkerror")) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
+    throw new Error(err?.message || "Erreur réseau lors de l'appel API.");
+  }
   if (!response.ok) {
     const error = await extractErrorPayload(response);
-    throw new Error(error.message || `Échec de la requête (${response.status})`);
+    throw new Error(buildApiErrorMessage(response.status, error));
   }
   return readJsonOrApiMisroute(response);
+}
+
+function buildApiErrorMessage(status, errorPayload) {
+  const msg = String(errorPayload?.message || "").trim();
+  if (msg) return msg;
+  if (status === 500) {
+    return "Erreur serveur (500). Vérifiez la configuration backend (DATABASE_URL, JWT_SECRET, NETWORK_NODE_SECRET_KEY) et les logs Render.";
+  }
+  return `Échec de la requête (${status})`;
 }
 
 async function readJsonOrApiMisroute(response) {
@@ -122,10 +153,17 @@ function triggerBrowserDownload(blob, filename) {
 async function authFetchBlob(path) {
   const headers = {};
   if (authToken) headers.Authorization = `Bearer ${authToken}`;
-  const response = await fetch(`${API_URL}${path}`, { headers });
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { headers });
+  } catch (err) {
+    throw new Error(
+      `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+    );
+  }
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.message || "Request failed");
+    const err = await extractErrorPayload(response);
+    throw new Error(buildApiErrorMessage(response.status, err));
   }
   return response.blob();
 }
@@ -167,14 +205,21 @@ export const api = {
     form.append("logo", file);
     const headers = {};
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
-    const response = await fetch(`${API_URL}${withIsp("/branding/logo", ispId)}`, {
-      method: "POST",
-      headers,
-      body: form
-    });
+    let response;
+    try {
+      response = await fetch(`${API_URL}${withIsp("/branding/logo", ispId)}`, {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.message || "Request failed");
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
     }
     return response.json();
   },
@@ -204,14 +249,21 @@ export const api = {
     form.append("defaultRole", String(defaultRole || "billing_agent"));
     const headers = {};
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
-    const response = await fetch(`${API_URL}${withIsp("/users/import", ispId)}`, {
-      method: "POST",
-      headers,
-      body: form
-    });
+    let response;
+    try {
+      response = await fetch(`${API_URL}${withIsp("/users/import", ispId)}`, {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.message || "Request failed");
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
     }
     return response.json();
   },
@@ -408,14 +460,21 @@ export const api = {
     }
     const headers = {};
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
-    const response = await fetch(`${API_URL}${withIsp("/customers/import", ispId)}`, {
-      method: "POST",
-      headers,
-      body: form
-    });
+    let response;
+    try {
+      response = await fetch(`${API_URL}${withIsp("/customers/import", ispId)}`, {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.message || "Request failed");
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
     }
     return response.json();
   },

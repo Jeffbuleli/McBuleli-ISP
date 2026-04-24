@@ -26,3 +26,5 @@ npm-debug.log*
 
 # Cursor / agent (optional local artifacts)
 .cursor/
+.vercel
+.env*.local
