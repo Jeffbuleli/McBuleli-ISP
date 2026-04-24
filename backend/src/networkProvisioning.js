@@ -1,5 +1,6 @@
 import { query } from "./db.js";
 import { decryptSecret } from "./secrets.js";
+import { resolveFreeradiusRadcheckTable, resolveFreeradiusRadreplyTable } from "./freeradiusTables.js";
 
 function getProtocol(node) {
   return node.use_tls ? "https" : "http";
@@ -9,7 +10,7 @@ function buildBaseUrl(node) {
   return `${getProtocol(node)}://${node.host}:${node.api_port}/rest`;
 }
 
-async function mikrotikRequest(node, path, { method = "GET", body } = {}) {
+export async function mikrotikRequest(node, path, { method = "GET", body } = {}) {
   const password = decryptSecret(node.password_enc || node.password || "");
   const response = await fetch(`${buildBaseUrl(node)}${path}`, {
     method,
@@ -51,7 +52,15 @@ async function logRadiusSyncEvent({
   );
 }
 
-async function syncFreeRadius({ ispId, subscriptionId, username, password, rateLimit, disabled }) {
+async function syncFreeRadius({
+  ispId,
+  subscriptionId,
+  username,
+  password,
+  rateLimit,
+  disabled,
+  simultaneousUse = null
+}) {
   if (process.env.FREERADIUS_SYNC_ENABLED !== "true") {
     await logRadiusSyncEvent({
       ispId,
@@ -64,20 +73,29 @@ async function syncFreeRadius({ ispId, subscriptionId, username, password, rateL
     return;
   }
   try {
-    await query("DELETE FROM radius_radcheck WHERE username = $1", [username]);
-    await query("DELETE FROM radius_radreply WHERE username = $1", [username]);
+    const radcheck = resolveFreeradiusRadcheckTable();
+    const radreply = resolveFreeradiusRadreplyTable();
+    await query(`DELETE FROM ${radcheck} WHERE username = $1`, [username]);
+    await query(`DELETE FROM ${radreply} WHERE username = $1`, [username]);
 
     await query(
-      "INSERT INTO radius_radcheck (username, attribute, op, value) VALUES ($1, 'Cleartext-Password', ':=', $2)",
+      `INSERT INTO ${radcheck} (username, attribute, op, value) VALUES ($1, 'Cleartext-Password', ':=', $2)`,
       [username, password]
     );
+    if (!disabled && simultaneousUse != null && Number(simultaneousUse) >= 1) {
+      const n = Math.min(256, Math.max(1, Math.floor(Number(simultaneousUse))));
+      await query(
+        `INSERT INTO ${radcheck} (username, attribute, op, value) VALUES ($1, 'Simultaneous-Use', ':=', $2)`,
+        [username, String(n)]
+      );
+    }
     await query(
-      "INSERT INTO radius_radcheck (username, attribute, op, value) VALUES ($1, 'Auth-Type', ':=', $2)",
+      `INSERT INTO ${radcheck} (username, attribute, op, value) VALUES ($1, 'Auth-Type', ':=', $2)`,
       [username, disabled ? "Reject" : "Accept"]
     );
     if (!disabled && rateLimit) {
       await query(
-        "INSERT INTO radius_radreply (username, attribute, op, value) VALUES ($1, 'Mikrotik-Rate-Limit', ':=', $2)",
+        `INSERT INTO ${radreply} (username, attribute, op, value) VALUES ($1, 'Mikrotik-Rate-Limit', ':=', $2)`,
         [username, String(rateLimit)]
       );
     }
@@ -87,7 +105,11 @@ async function syncFreeRadius({ ispId, subscriptionId, username, password, rateL
       username,
       action: disabled ? "suspend" : "activate",
       status: "success",
-      details: { rateLimit: rateLimit || null, disabled }
+      details: {
+        rateLimit: rateLimit || null,
+        disabled,
+        simultaneousUse: !disabled && simultaneousUse != null ? Number(simultaneousUse) : null
+      }
     });
   } catch (error) {
     await logRadiusSyncEvent({
@@ -126,7 +148,13 @@ async function getDefaultNode(ispId) {
 
 async function loadSubscriptionContext(ispId, subscriptionId) {
   const result = await query(
-    "SELECT s.id, s.isp_id, s.access_type, s.status, s.customer_id, s.plan_id, c.full_name, c.phone, p.rate_limit, p.duration_days FROM subscriptions s JOIN customers c ON c.id = s.customer_id JOIN plans p ON p.id = s.plan_id WHERE s.id = $1 AND s.isp_id = $2",
+    `SELECT s.id, s.isp_id, s.access_type, s.status, s.customer_id, s.plan_id,
+            s.max_simultaneous_devices, p.max_devices AS plan_max_devices,
+            c.full_name, c.phone, p.rate_limit, p.duration_days
+     FROM subscriptions s
+     JOIN customers c ON c.id = s.customer_id
+     JOIN plans p ON p.id = s.plan_id
+     WHERE s.id = $1 AND s.isp_id = $2`,
     [subscriptionId, ispId]
   );
   return result.rows[0] || null;
@@ -197,6 +225,10 @@ export async function provisionSubscriptionAccess({ ispId, subscriptionId, actio
   }
 
   const disabled = action === "suspend";
+  const simultaneousUse = Math.max(
+    1,
+    Number(context.max_simultaneous_devices) || Number(context.plan_max_devices) || 1
+  );
   try {
     const result =
       context.access_type === "hotspot"
@@ -208,7 +240,8 @@ export async function provisionSubscriptionAccess({ ispId, subscriptionId, actio
       username: result.username,
       password: result.password,
       rateLimit: context.rate_limit,
-      disabled
+      disabled,
+      simultaneousUse
     });
     await logProvisioningEvent({
       ispId,
@@ -222,7 +255,8 @@ export async function provisionSubscriptionAccess({ ispId, subscriptionId, actio
         host: node.host,
         username: result.username,
         mode: result.mode,
-        disabled
+        disabled,
+        simultaneousUse
       }
     });
     return {

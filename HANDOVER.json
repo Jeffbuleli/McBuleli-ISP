@@ -1,6 +1,6 @@
 {
   "project": {
-    "name": "Multi-ISP Billing System (DRC)",
+    "name": "McBuleli",
     "type": "Multi-tenant SaaS for ISP billing and access operations",
     "current_phase": "MVP+ (tenant isolation, white-labeling, manual payments, vouchers, analytics)",
     "status": "active_development"

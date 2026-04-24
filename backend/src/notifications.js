@@ -105,10 +105,66 @@ async function sendWithTwilio(row, config) {
   };
 }
 
+async function sendWithSmtp(row, config) {
+  const host = String(config.host || "").trim();
+  const from = String(config.from || "").trim();
+  if (!host || !from) {
+    return { ok: false, error: "SMTP config requires host and from" };
+  }
+  let nodemailer;
+  try {
+    nodemailer = await import("nodemailer");
+  } catch (_e) {
+    return { ok: false, error: "nodemailer package is required for SMTP (npm install nodemailer)" };
+  }
+  const transport = nodemailer.createTransport({
+    host,
+    port: Number(config.port) || 587,
+    secure: Boolean(config.secure),
+    auth:
+      config.user && config.pass
+        ? { user: String(config.user).trim(), pass: String(config.pass).trim() }
+        : undefined
+  });
+  const subject =
+    row.payload?.subject ||
+    `Notice: ${String(row.template_key || "notification").replace(/_/g, " ")}`;
+  const text =
+    row.payload?.message ||
+    row.payload?.text ||
+    `${row.template_key}: ${JSON.stringify(row.payload || {})}`;
+  const info = await transport.sendMail({
+    from,
+    to: String(row.recipient).trim(),
+    subject: String(subject).slice(0, 500),
+    text: String(text).slice(0, 50000)
+  });
+  return { ok: true, providerMessageId: info.messageId || `smtp-${row.id}` };
+}
+
 async function deliverRow(row) {
   if (row.channel === "internal") {
     return { ok: true, providerMessageId: `internal-${row.id}` };
   }
+
+  if (row.channel === "email") {
+    if (!row.recipient || !String(row.recipient).trim()) {
+      return { ok: false, error: "Missing email recipient" };
+    }
+    const provider = await resolveProvider(row.isp_id, "email");
+    if (!provider) {
+      return { ok: false, error: "No active provider configured for channel email" };
+    }
+    const config = normalizeConfig(provider.config);
+    if (provider.providerKey === "smtp") {
+      return sendWithSmtp(row, config);
+    }
+    if (provider.providerKey === "webhook") {
+      return sendWithWebhook(row, config);
+    }
+    return { ok: false, error: `Unsupported email provider ${provider.providerKey}` };
+  }
+
   if (!row.recipient) {
     return { ok: false, error: `Missing recipient for channel ${row.channel}` };
   }

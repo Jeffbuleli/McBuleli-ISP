@@ -4,15 +4,274 @@ import helmet from "helmet";
 import morgan from "morgan";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { v4 as uuidv4 } from "uuid";
 import { query } from "./db.js";
-import { authenticate, requireRoles, resolveIspId, signToken } from "./auth.js";
+import { authenticate as authenticateJwt, requireRoles, resolveIspId, signToken } from "./auth.js";
+import { enforcePlatformAccess } from "./platformAccess.js";
+import {
+  applySuccessfulSaasDeposit,
+  cdfAmountForUsd,
+  getLatestPlatformSubscription,
+  getPlatformBillingSnapshot,
+  getPlatformFeatureLimits,
+  markSaasDepositFailed,
+  usdAmountString
+} from "./platformBilling.js";
+import { fetchPawapayDepositStatus, initiatePawapayDeposit } from "./pawapayClient.js";
 import { processNotificationOutboxBatch, sendNotificationDirect } from "./notifications.js";
 import { provisionSubscriptionAccess } from "./networkProvisioning.js";
+import { collectAndStoreNetworkTelemetry } from "./networkTelemetry.js";
 import { encryptSecret } from "./secrets.js";
+import {
+  extendSubscriptionAfterPayment,
+  processOverdueInvoices,
+  processRenewalInvoices
+} from "./billingJobs.js";
+import { authenticatePortal } from "./portalAuth.js";
+import {
+  normalizeSubscriberPhone,
+  signSubscriberToken,
+  verifyCustomerSetupToken
+} from "./subscriberAuth.js";
+import {
+  getPawapayCallbackDocumentation,
+  processPawapayCallback,
+  verifyPawapayCallbackSecret
+} from "./pawapayWebhooks.js";
+import {
+  completeWifiGuestPurchase,
+  defaultRedirectUrl,
+  markWifiGuestPurchaseFailed
+} from "./wifiGuestCheckout.js";
+import { WIFI_GUEST_NETWORK_OPTIONS, resolveWifiGuestPawapayProvider } from "./wifiGuestProviders.js";
+import { createPublicRateLimiter } from "./publicRateLimit.js";
+import { insertRadiusAccountingRecord } from "./radiusAccountingIngest.js";
+import fs from "fs";
+import path from "path";
+import multer from "multer";
+import { parseCsv, rowsToCsv } from "./csvUtils.js";
+import {
+  brandingUploadDir,
+  ensureBrandingUploadDir,
+  clearBrandingLogoFiles
+} from "./uploadsConfig.js";
+import {
+  deleteBrandingObjectInS3,
+  getBrandingLogoStreamFromS3,
+  isS3BrandingConfigured,
+  purgeHostedBrandingAssets,
+  putBrandingLogoInS3
+} from "./brandingLogoStorage.js";
+
+function authenticate(req, res, next) {
+  authenticateJwt(req, res, () => enforcePlatformAccess(req, res, next));
+}
 
 const app = express();
+app.set("trust proxy", process.env.TRUST_PROXY === "true" ? 1 : 0);
+
+function isUuidString(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || "")
+  );
+}
+
+const PAYMENT_METHOD_TYPES = new Set([
+  "pawapay",
+  "onafriq",
+  "paypal",
+  "binance_pay",
+  "crypto_wallet",
+  "bank_transfer",
+  "cash",
+  "mobile_money",
+  "gateway",
+  "other"
+]);
+
+function normalizeMethodType(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeGatewayStatus(input) {
+  const status = String(input || "confirmed")
+    .trim()
+    .toLowerCase();
+  if (["confirmed", "completed", "success", "successful", "paid"].includes(status)) return "confirmed";
+  if (["failed", "error", "cancelled", "canceled", "rejected"].includes(status)) return "failed";
+  return "pending";
+}
+
+function resolvePublicApiBase(req) {
+  const explicit = process.env.PUBLIC_API_BASE_URL || process.env.APP_PUBLIC_URL;
+  if (explicit) return String(explicit).replace(/\/$/, "");
+  const proto = (req.headers["x-forwarded-proto"] || req.protocol || "https").toString().split(",")[0].trim();
+  const host = req.headers["x-forwarded-host"] || req.get("host");
+  return `${proto}://${host}`;
+}
+
+function resolveGatewayCallbackSecret(req) {
+  const auth = String(req.get("authorization") || "");
+  if (auth.toLowerCase().startsWith("bearer ")) return auth.slice(7).trim();
+  return (
+    req.get("x-gateway-callback-secret") ||
+    req.get("x-callback-secret") ||
+    req.query.secret ||
+    req.body?.secret ||
+    ""
+  )
+    .toString()
+    .trim();
+}
+
+async function applyInvoicePayment({
+  ispId,
+  invoiceId,
+  providerRef,
+  amountUsd,
+  status,
+  methodType
+}) {
+  const invResult = await query("SELECT * FROM invoices WHERE id = $1 AND isp_id = $2", [invoiceId, ispId]);
+  const invoice = invResult.rows[0];
+  if (!invoice) return { ok: false, code: 404, message: "Invoice not found" };
+
+  const normalizedStatus = normalizeGatewayStatus(status);
+  const normalizedProviderRef = String(providerRef || "n/a").slice(0, 255);
+  const existing = await query(
+    `SELECT id, isp_id AS "ispId", invoice_id AS "invoiceId", provider_ref AS "providerRef",
+            amount_usd AS "amountUsd", status, method, paid_at AS "paidAt"
+     FROM payments
+     WHERE isp_id = $1 AND invoice_id = $2 AND provider_ref = $3
+     ORDER BY paid_at DESC LIMIT 1`,
+    [ispId, invoiceId, normalizedProviderRef]
+  );
+  if (existing.rows[0]) {
+    return { ok: true, duplicate: true, payment: existing.rows[0], invoiceAlreadyPaid: invoice.status === "paid" };
+  }
+
+  const paymentInsert = await query(
+    "INSERT INTO payments (id, isp_id, invoice_id, provider_ref, amount_usd, status, method) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6) RETURNING id, isp_id AS \"ispId\", invoice_id AS \"invoiceId\", provider_ref AS \"providerRef\", amount_usd AS \"amountUsd\", status, method, paid_at AS \"paidAt\"",
+    [
+      ispId,
+      invoiceId,
+      normalizedProviderRef,
+      Number(amountUsd || invoice.amount_usd),
+      normalizedStatus,
+      normalizeMethodType(methodType) || "mobile_money"
+    ]
+  );
+
+  let activated = false;
+  if (normalizedStatus === "confirmed") {
+    await query("UPDATE invoices SET status = 'paid' WHERE id = $1", [invoiceId]);
+    await extendSubscriptionAfterPayment(ispId, invoice.subscription_id);
+    await provisionSubscriptionAccess({
+      ispId,
+      subscriptionId: invoice.subscription_id,
+      action: "activate"
+    });
+    activated = true;
+  }
+
+  return {
+    ok: true,
+    duplicate: false,
+    payment: paymentInsert.rows[0],
+    activated
+  };
+}
+
+/** Map CSV row keys (already lowercased / underscored headers) to customer fields. */
+function customerImportCells(row) {
+  const r = row || {};
+  const pick = (...keys) => {
+    for (const k of keys) {
+      const v = r[k];
+      if (v != null && String(v).trim()) return String(v).trim();
+    }
+    return "";
+  };
+  const nameCol = pick("name");
+  const fullName =
+    pick("full_name", "fullname", "customer", "display_name", "displayname") || nameCol;
+  const phoneRaw =
+    pick("phone", "mobile", "msisdn", "username", "user", "login") || nameCol || fullName;
+  const emailRaw = pick("email", "e-mail", "e_mail", "mail");
+  const passRaw = pick("password", "secret", "initial_password", "portal_password");
+  return { fullName, phoneRaw, emailRaw, passRaw };
+}
+
+function teamUserImportCells(row) {
+  const r = row || {};
+  const pick = (...keys) => {
+    for (const k of keys) {
+      const v = r[k];
+      if (v != null && String(v).trim()) return String(v).trim();
+    }
+    return "";
+  };
+  const fullName = pick("full_name", "fullname", "name");
+  const email = pick("email", "mail");
+  const role = pick("role");
+  const password = pick("password", "pass", "secret");
+  const accreditationLevel =
+    pick("accreditation_level", "accreditationlevel", "accreditation") || "basic";
+  return { fullName, email, role, password, accreditationLevel };
+}
+
+function allowedRolesForUserImport(requesterRole) {
+  const map = {
+    super_admin: ["company_manager", "isp_admin", "billing_agent", "noc_operator", "field_agent"],
+    company_manager: ["isp_admin", "billing_agent", "noc_operator", "field_agent"],
+    isp_admin: ["billing_agent", "noc_operator", "field_agent"]
+  };
+  return map[requesterRole] || [];
+}
+
+const uploadLogoMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 }
+});
+
+const uploadCsvMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 6 * 1024 * 1024 }
+});
+
+const rlPublicRead = createPublicRateLimiter("public_read", {
+  windowMs: Number(process.env.PUBLIC_RL_READ_WINDOW_MS) || 60_000,
+  max: Number(process.env.PUBLIC_RL_READ_MAX) || 120
+});
+const rlSignup = createPublicRateLimiter("signup", {
+  windowMs: Number(process.env.PUBLIC_RL_SIGNUP_WINDOW_MS) || 3_600_000,
+  max: Number(process.env.PUBLIC_RL_SIGNUP_MAX) || 10
+});
+const rlWifiInit = createPublicRateLimiter("wifi_init", {
+  windowMs: Number(process.env.PUBLIC_RL_WIFI_INIT_WINDOW_MS) || 600_000,
+  max: Number(process.env.PUBLIC_RL_WIFI_INIT_MAX) || 25
+});
+const rlWifiStatus = createPublicRateLimiter("wifi_status", {
+  windowMs: Number(process.env.PUBLIC_RL_WIFI_STATUS_WINDOW_MS) || 600_000,
+  max: Number(process.env.PUBLIC_RL_WIFI_STATUS_MAX) || 240
+});
+const rlSubscriberAuth = createPublicRateLimiter("subscriber_auth", {
+  windowMs: Number(process.env.PUBLIC_RL_SUBSCRIBER_AUTH_WINDOW_MS) || 900_000,
+  max: Number(process.env.PUBLIC_RL_SUBSCRIBER_AUTH_MAX) || 45
+});
+const rlRadiusAcct = createPublicRateLimiter("radius_acct_webhook", {
+  windowMs: Number(process.env.PUBLIC_RL_RADIUS_ACCT_WINDOW_MS) || 60_000,
+  max: Number(process.env.PUBLIC_RL_RADIUS_ACCT_MAX) || 400
+});
+
 app.use(helmet());
-app.use(cors());
+app.use(
+  cors({
+    allowedHeaders: ["Content-Type", "Authorization", "X-Portal-Token"]
+  })
+);
 app.use(express.json());
 app.use(morgan("dev"));
 
@@ -54,6 +313,533 @@ app.use(async (req, _res, next) => {
 });
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
+const BRANDING_LOGO_MIME = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif"
+};
+
+app.get("/api/public/branding-logo/:ispId", rlPublicRead, async (req, res) => {
+  const { ispId } = req.params;
+  if (!isUuidString(ispId)) return res.status(400).end();
+  try {
+    const row = await query("SELECT logo_object_key FROM isp_branding WHERE isp_id = $1", [ispId]);
+    const objectKey = row.rows[0]?.logo_object_key;
+    if (objectKey && isS3BrandingConfigured()) {
+      const { stream, contentType } = await getBrandingLogoStreamFromS3(objectKey);
+      res.type(contentType);
+      res.set("Cache-Control", "public, max-age=86400");
+      stream.on("error", () => {
+        try {
+          if (!res.headersSent) res.sendStatus(502);
+          else res.destroy();
+        } catch {
+          /* ignore */
+        }
+      });
+      stream.pipe(res);
+      return;
+    }
+  } catch (_err) {
+    /* fall through to local disk */
+  }
+  ensureBrandingUploadDir();
+  for (const ext of Object.keys(BRANDING_LOGO_MIME)) {
+    const fp = path.join(brandingUploadDir, `${ispId}${ext}`);
+    try {
+      await fs.promises.access(fp, fs.constants.R_OK);
+      res.type(BRANDING_LOGO_MIME[ext]);
+      res.set("Cache-Control", "public, max-age=86400");
+      return res.sendFile(path.resolve(fp));
+    } catch {
+      /* try next extension */
+    }
+  }
+  return res.status(404).end();
+});
+
+const TRIAL_DAYS = Math.min(Math.max(Number(process.env.PLATFORM_TRIAL_DAYS || 7), 1), 90);
+const SAAS_PLAN_CODES = ["essential", "pro", "business"];
+
+app.get("/api/public/platform-packages", rlPublicRead, async (_req, res) => {
+  const result = await query(
+    `SELECT id, code, name, monthly_price_usd AS "monthlyPriceUsd", feature_flags AS "featureFlags"
+     FROM platform_packages
+     WHERE code = ANY($1::text[])
+     ORDER BY monthly_price_usd ASC`,
+    [SAAS_PLAN_CODES]
+  );
+  return res.json(result.rows);
+});
+
+app.post("/api/public/signup", rlSignup, async (req, res) => {
+  const {
+    companyName,
+    location,
+    contactPhone,
+    adminFullName,
+    adminEmail,
+    adminPassword,
+    packageCode,
+    subdomain: requestedSubdomain
+  } = req.body;
+  if (!companyName || !location || !contactPhone || !adminFullName || !adminEmail || !adminPassword) {
+    return res.status(400).json({
+      message: "companyName, location, contactPhone, adminFullName, adminEmail and adminPassword are required"
+    });
+  }
+  if (!packageCode || !SAAS_PLAN_CODES.includes(String(packageCode))) {
+    return res.status(400).json({ message: `packageCode must be one of: ${SAAS_PLAN_CODES.join(", ")}` });
+  }
+  if (String(adminPassword).length < 6) {
+    return res.status(400).json({ message: "Password must be at least 6 characters" });
+  }
+  const pkg = await query("SELECT id FROM platform_packages WHERE code = $1", [packageCode]);
+  if (!pkg.rows[0]) return res.status(400).json({ message: "Unknown package" });
+
+  const email = String(adminEmail).toLowerCase().trim();
+  const dup = await query("SELECT id FROM users WHERE email = $1", [email]);
+  if (dup.rows[0]) return res.status(409).json({ message: "An account with this email already exists" });
+
+  const safeSubdomain =
+    requestedSubdomain ||
+    `${String(companyName)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "tenant"}-${crypto.randomBytes(2).toString("hex")}.tenant.local`;
+
+  const startsAt = new Date();
+  const endsAt = new Date(startsAt);
+  endsAt.setDate(endsAt.getDate() + TRIAL_DAYS);
+
+  try {
+    const insertedIsp = await query(
+      "INSERT INTO isps (id, name, location, contact_phone, subdomain) VALUES (gen_random_uuid(), $1, $2, $3, $4) RETURNING id, name, location, subdomain, contact_phone AS \"contactPhone\", created_at AS \"createdAt\"",
+      [companyName, location, contactPhone, safeSubdomain]
+    );
+    const ispId = insertedIsp.rows[0].id;
+    await query(
+      "INSERT INTO isp_branding (id, isp_id, display_name, contact_phone) VALUES (gen_random_uuid(), $1, $2, $3)",
+      [ispId, companyName, contactPhone]
+    );
+    const hash = await bcrypt.hash(adminPassword, 10);
+    const insertedUser = await query(
+      `INSERT INTO users (id, isp_id, full_name, email, password_hash, role, accreditation_level, is_active, must_change_password)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, 'isp_admin', 'basic', TRUE, FALSE)
+       RETURNING id, isp_id AS "ispId", full_name AS "fullName", email, role`,
+      [ispId, adminFullName, email, hash]
+    );
+    const insertedSub = await query(
+      `INSERT INTO isp_platform_subscriptions (id, isp_id, package_id, status, starts_at, ends_at)
+       VALUES (gen_random_uuid(), $1, $2, 'trialing', $3, $4)
+       RETURNING id, status, starts_at AS "startsAt", ends_at AS "endsAt"`,
+      [ispId, pkg.rows[0].id, startsAt.toISOString(), endsAt.toISOString()]
+    );
+    await logAudit({
+      ispId,
+      actorUserId: insertedUser.rows[0].id,
+      action: "platform.tenant_self_signup",
+      entityType: "isp",
+      entityId: ispId,
+      details: { packageCode, trialDays: TRIAL_DAYS }
+    });
+    const userRow = insertedUser.rows[0];
+    const token = signToken({
+      id: userRow.id,
+      role: userRow.role,
+      isp_id: userRow.ispId,
+      email: userRow.email
+    });
+    return res.status(201).json({
+      token,
+      user: {
+        id: userRow.id,
+        email: userRow.email,
+        fullName: userRow.fullName,
+        role: userRow.role,
+        ispId: userRow.ispId,
+        isActive: true,
+        mustChangePassword: false
+      },
+      isp: insertedIsp.rows[0],
+      platformSubscription: insertedSub.rows[0],
+      trialDays: TRIAL_DAYS
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("signup error", err?.message || err);
+    return res.status(500).json({ message: "Could not complete signup. Please try again." });
+  }
+});
+
+async function handleUnifiedPawapayWebhook(req, res) {
+  if (!verifyPawapayCallbackSecret(req)) {
+    return res.status(401).json({ message: "Invalid or missing callback secret" });
+  }
+  try {
+    const result = await processPawapayCallback(req.body || {});
+    return res.status(200).json({ ok: true, ...result });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("pawapay webhook", err?.message || err);
+    return res.status(500).json({ message: "Webhook handling failed" });
+  }
+}
+
+app.get("/api/webhooks/pawapay", (_req, res) => {
+  return res.json(getPawapayCallbackDocumentation());
+});
+
+app.post("/api/webhooks/pawapay", handleUnifiedPawapayWebhook);
+app.post("/api/webhooks/pawapay-platform", handleUnifiedPawapayWebhook);
+
+app.post("/api/webhooks/radius-accounting", rlRadiusAcct, async (req, res) => {
+  const secret = process.env.RADIUS_ACCOUNTING_WEBHOOK_SECRET;
+  if (secret) {
+    const headerSecret = req.headers["x-radius-accounting-secret"];
+    const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "").trim();
+    if (headerSecret !== secret && bearer !== secret) {
+      return res.status(401).json({ message: "Invalid RADIUS accounting webhook credentials" });
+    }
+  } else if (process.env.NODE_ENV === "production") {
+    return res.status(503).json({
+      message: "Set RADIUS_ACCOUNTING_WEBHOOK_SECRET to accept accounting webhooks in production"
+    });
+  }
+  const ispId = req.body?.ispId || req.query?.ispId || null;
+  if (ispId) {
+    const chk = await query("SELECT id FROM isps WHERE id = $1", [ispId]);
+    if (!chk.rows[0]) return res.status(400).json({ message: "Unknown ispId" });
+  }
+  try {
+    await insertRadiusAccountingRecord({ ispId, body: req.body || {} });
+    return res.status(204).send();
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || "Could not store accounting record" });
+  }
+});
+
+app.get("/api/public/wifi-networks", rlPublicRead, (_req, res) => {
+  return res.json(WIFI_GUEST_NETWORK_OPTIONS.map(({ key, label }) => ({ key, label })));
+});
+
+app.get("/api/public/wifi-plans", rlPublicRead, async (req, res) => {
+  const ispId = req.query.ispId;
+  if (!ispId) return res.status(400).json({ message: "ispId query parameter is required" });
+  const isp = await query("SELECT id FROM isps WHERE id = $1", [ispId]);
+  if (!isp.rows[0]) return res.status(404).json({ message: "ISP not found" });
+  const brand = await query(
+    `SELECT display_name AS "displayName", logo_url AS "logoUrl", primary_color AS "primaryColor",
+            secondary_color AS "secondaryColor", wifi_portal_redirect_url AS "wifiPortalRedirectUrl"
+     FROM isp_branding WHERE isp_id = $1`,
+    [ispId]
+  );
+  const plans = await query(
+    `SELECT id, name, price_usd AS "priceUsd", duration_days AS "durationDays", rate_limit AS "rateLimit",
+            speed_label AS "speedLabel", default_access_type AS "defaultAccessType", max_devices AS "maxDevices",
+            availability_status AS "availabilityStatus", is_published AS "isPublished"
+     FROM plans WHERE isp_id = $1 AND is_published = TRUE AND availability_status = 'available'
+     ORDER BY price_usd ASC`,
+    [ispId]
+  );
+  return res.json({ ispId, branding: brand.rows[0] || {}, plans: plans.rows });
+});
+
+app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
+  const { ispId, planId, phoneNumber, networkKey } = req.body || {};
+  if (!ispId || !planId || !phoneNumber || !networkKey) {
+    return res.status(400).json({ message: "ispId, planId, phoneNumber and networkKey are required" });
+  }
+  const pawapayProvider = resolveWifiGuestPawapayProvider(networkKey);
+  if (!pawapayProvider) {
+    return res.status(400).json({ message: "networkKey must be one of: orange, airtel, mpesa" });
+  }
+  const phone = String(phoneNumber).replace(/\s+/g, "").replace(/^\+/, "");
+  const planRow = await query(
+    `SELECT p.id, p.isp_id AS "ispId", p.name, p.price_usd AS "priceUsd", p.duration_days AS "durationDays",
+            p.success_redirect_url AS "successRedirectUrl"
+     FROM plans p
+     WHERE p.id = $1 AND p.isp_id = $2 AND p.is_published = TRUE AND p.availability_status = 'available'`,
+    [planId, ispId]
+  );
+  const plan = planRow.rows[0];
+  if (!plan) return res.status(404).json({ message: "Plan not found or not offered on the public portal" });
+  const brandRow = await query(
+    'SELECT wifi_portal_redirect_url AS "wifiPortalRedirectUrl" FROM isp_branding WHERE isp_id = $1',
+    [ispId]
+  );
+  const redirectUrl = defaultRedirectUrl(plan, brandRow.rows[0] || {});
+  const amount = usdAmountString(plan.priceUsd);
+  const depositId = uuidv4();
+  const body = {
+    depositId,
+    amount,
+    currency: "USD",
+    payer: {
+      type: "MMO",
+      accountDetails: {
+        phoneNumber: phone,
+        provider: pawapayProvider
+      }
+    },
+    clientReferenceId: `wifi-guest-${depositId}`.slice(0, 200),
+    customerMessage: String(plan.name || "WiFi").replace(/[^a-zA-Z0-9 ]/g, "").slice(0, 22) || "WiFi access"
+  };
+  try {
+    const pw = await initiatePawapayDeposit(body);
+    if (pw.status !== "ACCEPTED" && pw.status !== "DUPLICATE_IGNORED") {
+      return res.status(400).json({
+        message: pw.failureReason?.failureMessage || "Pawapay did not accept this deposit",
+        pawapay: pw
+      });
+    }
+    if (pw.status === "ACCEPTED") {
+      await query(
+        `INSERT INTO wifi_guest_purchases
+         (id, isp_id, plan_id, deposit_id, phone, pawapay_provider, currency, amount, status, redirect_url)
+         VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, 'USD', $6, 'pending', $7)`,
+        [ispId, planId, depositId, phone, pawapayProvider, amount, redirectUrl]
+      );
+    }
+    await logAudit({
+      ispId,
+      action: "wifi_guest.purchase_initiated",
+      entityType: "wifi_guest_purchase",
+      entityId: depositId,
+      details: { planId, networkKey }
+    });
+    return res.status(201).json({
+      depositId,
+      pawapay: pw,
+      amount,
+      currency: "USD",
+      redirectUrlAfterPayment: redirectUrl,
+      message:
+        pw.status === "ACCEPTED"
+          ? "Confirm the payment on your phone. This page will redirect when payment is confirmed."
+          : "Duplicate request ignored by Pawapay."
+    });
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "Pawapay initiation failed" });
+  }
+});
+
+app.get("/api/public/wifi-purchase/status/:depositId", rlWifiStatus, async (req, res) => {
+  const { depositId } = req.params;
+  const local = await query(
+    `SELECT id, status, redirect_url AS "redirectUrl", subscription_id AS "subscriptionId",
+            subscriber_setup_token AS "setupToken"
+     FROM wifi_guest_purchases WHERE deposit_id = $1::uuid`,
+    [depositId]
+  );
+  const row = local.rows[0];
+  if (!row) return res.status(404).json({ message: "Purchase not found" });
+  if (row.status === "completed") {
+    return res.json({
+      status: "completed",
+      redirectUrl: row.redirectUrl,
+      subscriptionId: row.subscriptionId,
+      setupToken: row.setupToken || null
+    });
+  }
+  if (row.status === "failed") {
+    return res.json({ status: "failed" });
+  }
+  try {
+    const pw = await fetchPawapayDepositStatus(depositId);
+    if (pw.status === "COMPLETED") {
+      try {
+        const done = await completeWifiGuestPurchase(depositId);
+        return res.json({
+          status: "completed",
+          pawapay: pw,
+          redirectUrl: done.redirectUrl || row.redirectUrl,
+          subscriptionId: done.subscriptionId,
+          setupToken: done.setupToken || null
+        });
+      } catch (err) {
+        return res.status(500).json({ message: err.message || "Could not activate access" });
+      }
+    }
+    if (pw.status === "FAILED") {
+      await markWifiGuestPurchaseFailed(depositId);
+      return res.json({ status: "failed", pawapay: pw });
+    }
+    return res.json({ status: "pending", pawapay: pw });
+  } catch (err) {
+    return res.json({ status: "pending", pawapayError: err.message });
+  }
+});
+
+app.post("/api/subscriber/auth/login", rlSubscriberAuth, async (req, res) => {
+  const { ispId, phone, password } = req.body || {};
+  if (!ispId || !phone || !password) {
+    return res.status(400).json({ message: "ispId, phone and password are required" });
+  }
+  const norm = normalizeSubscriberPhone(phone);
+  const c = await query(
+    `SELECT id, isp_id AS "ispId", password_hash AS "passwordHash", must_set_password AS "mustSetPassword"
+     FROM customers WHERE isp_id = $1 AND phone = $2 ORDER BY created_at DESC LIMIT 1`,
+    [ispId, norm]
+  );
+  const row = c.rows[0];
+  if (!row?.passwordHash) {
+    return res.status(401).json({ message: "Invalid phone or password" });
+  }
+  const ok = await bcrypt.compare(String(password), row.passwordHash);
+  if (!ok) {
+    return res.status(401).json({ message: "Invalid phone or password" });
+  }
+  const token = signSubscriberToken({ id: row.id, isp_id: row.ispId });
+  return res.json({ token, mustSetPassword: row.mustSetPassword });
+});
+
+app.post("/api/subscriber/auth/setup-password", rlSubscriberAuth, async (req, res) => {
+  const { setupToken, newPassword } = req.body || {};
+  if (!setupToken || !newPassword) {
+    return res.status(400).json({ message: "setupToken and newPassword are required" });
+  }
+  if (String(newPassword).length < 6) {
+    return res.status(400).json({ message: "Password must be at least 6 characters" });
+  }
+  let payload;
+  try {
+    payload = verifyCustomerSetupToken(setupToken);
+  } catch (_e) {
+    return res.status(400).json({ message: "Invalid or expired setup link" });
+  }
+  const hash = await bcrypt.hash(String(newPassword), 10);
+  const up = await query(
+    `UPDATE customers SET password_hash = $1, must_set_password = FALSE WHERE id = $2 AND isp_id = $3
+     RETURNING id, isp_id AS "ispId"`,
+    [hash, payload.sub, payload.ispId]
+  );
+  if (!up.rows[0]) {
+    return res.status(404).json({ message: "Customer not found" });
+  }
+  await query(`UPDATE wifi_guest_purchases SET subscriber_setup_token = NULL WHERE customer_id = $1`, [
+    up.rows[0].id
+  ]);
+  const token = signSubscriberToken({ id: up.rows[0].id, isp_id: up.rows[0].ispId });
+  return res.json({ token });
+});
+
+app.get("/api/portal/session", authenticatePortal, async (req, res) => {
+  const { ispId, customerId } = req.portal;
+  const [customer, invoices, subscriptions, brand] = await Promise.all([
+    query(
+      `SELECT id, full_name AS "fullName", phone, email, status FROM customers WHERE id = $1 AND isp_id = $2`,
+      [customerId, ispId]
+    ),
+    query(
+      "SELECT id, subscription_id AS \"subscriptionId\", amount_usd AS \"amountUsd\", status, due_date AS \"dueDate\", created_at AS \"createdAt\" FROM invoices WHERE isp_id = $1 AND customer_id = $2 ORDER BY created_at DESC LIMIT 50",
+      [ispId, customerId]
+    ),
+    query(
+      `SELECT id, plan_id AS "planId", status, access_type AS "accessType", start_date AS "startDate", end_date AS "endDate",
+              max_simultaneous_devices AS "maxSimultaneousDevices"
+       FROM subscriptions WHERE isp_id = $1 AND customer_id = $2 ORDER BY start_date DESC LIMIT 20`,
+      [ispId, customerId]
+    ),
+    query(
+      "SELECT display_name AS \"displayName\", logo_url AS \"logoUrl\", primary_color AS \"primaryColor\", secondary_color AS \"secondaryColor\" FROM isp_branding WHERE isp_id = $1",
+      [ispId]
+    )
+  ]);
+  const c = customer.rows[0];
+  if (!c) return res.status(404).json({ message: "Customer not found" });
+  return res.json({
+    customer: c,
+    invoices: invoices.rows,
+    subscriptions: subscriptions.rows,
+    branding: brand.rows[0] || null
+  });
+});
+
+app.post("/api/portal/tid-submissions", authenticatePortal, async (req, res) => {
+  const { ispId, customerId } = req.portal;
+  const { invoiceId, tid, submittedByPhone, amountUsd } = req.body;
+  if (!invoiceId || !tid) {
+    return res.status(400).json({ message: "invoiceId and tid are required" });
+  }
+  const inv = await query(
+    "SELECT id, isp_id, customer_id, subscription_id, amount_usd, status FROM invoices WHERE id = $1 AND isp_id = $2 AND customer_id = $3",
+    [invoiceId, ispId, customerId]
+  );
+  const invoice = inv.rows[0];
+  if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+  if (!["unpaid", "overdue"].includes(invoice.status)) {
+    return res.status(400).json({ message: "This invoice is not open for payment" });
+  }
+  const duplicateTid = await query(
+    "SELECT id, status FROM payment_tid_submissions WHERE isp_id = $1 AND tid = $2 ORDER BY created_at DESC LIMIT 1",
+    [invoice.isp_id, tid]
+  );
+  if (duplicateTid.rows[0] && duplicateTid.rows[0].status !== "rejected") {
+    return res.status(409).json({
+      message: "This TID is already submitted and awaiting/approved verification."
+    });
+  }
+  const inserted = await query(
+    "INSERT INTO payment_tid_submissions (id, isp_id, invoice_id, customer_id, subscription_id, tid, submitted_by_phone, amount_usd, status) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 'pending') RETURNING id, isp_id AS \"ispId\", invoice_id AS \"invoiceId\", tid, submitted_by_phone AS \"submittedByPhone\", amount_usd AS \"amountUsd\", status, created_at AS \"createdAt\"",
+    [
+      invoice.isp_id,
+      invoice.id,
+      invoice.customer_id,
+      invoice.subscription_id,
+      tid,
+      submittedByPhone || null,
+      Number(amountUsd || invoice.amount_usd)
+    ]
+  );
+  await logAudit({
+    ispId: invoice.isp_id,
+    action: "payment.tid_submitted_portal",
+    entityType: "payment_tid_submission",
+    entityId: inserted.rows[0].id,
+    details: { invoiceId: invoice.id, tid, source: "customer_portal" }
+  });
+  return res.status(201).json(inserted.rows[0]);
+});
+
+app.post(
+  "/api/portal/tokens",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "field_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { customerId, expiresDays = 30 } = req.body;
+    if (!customerId) return res.status(400).json({ message: "customerId is required" });
+    const days = Math.min(Math.max(Number(expiresDays) || 30, 1), 365);
+    const cust = await query("SELECT id FROM customers WHERE id = $1 AND isp_id = $2", [customerId, ispId]);
+    if (!cust.rows[0]) return res.status(404).json({ message: "Customer not found" });
+    const token = crypto.randomBytes(32).toString("hex");
+    const inserted = await query(
+      `INSERT INTO customer_portal_tokens (id, isp_id, customer_id, token, expires_at, created_by)
+       VALUES (gen_random_uuid(), $1, $2, $3, NOW() + ($4::text || ' days')::interval, $5)
+       RETURNING id, expires_at AS "expiresAt"`,
+      [ispId, customerId, token, String(days), req.user.sub]
+    );
+    const portalUrl = `${PLATFORM_PUBLIC_BASE_URL}/portal?token=${encodeURIComponent(token)}`;
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "portal.token_issued",
+      entityType: "customer_portal_token",
+      entityId: inserted.rows[0].id,
+      details: { customerId, expiresDays: days }
+    });
+    return res.status(201).json({
+      token,
+      portalUrl,
+      expiresAt: inserted.rows[0].expiresAt
+    });
+  }
+);
 
 app.get("/api/tenant/context", async (req, res) => {
   if (!req.tenantContext) {
@@ -104,6 +890,10 @@ app.get("/api/auth/me", authenticate, async (req, res) => {
   );
   const user = result.rows[0];
   if (!user) return res.status(404).json({ message: "User not found" });
+  let platformBilling = null;
+  if (user.isp_id) {
+    platformBilling = await getPlatformBillingSnapshot(user.isp_id);
+  }
   return res.json({
     id: user.id,
     email: user.email,
@@ -111,7 +901,8 @@ app.get("/api/auth/me", authenticate, async (req, res) => {
     role: user.role,
     ispId: user.isp_id,
     isActive: user.is_active,
-    mustChangePassword: user.must_change_password
+    mustChangePassword: user.must_change_password,
+    platformBilling
   });
 });
 
@@ -195,7 +986,7 @@ app.get("/api/branding", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const result = await query(
-    "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+    "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
     [ispId]
   );
   res.json(result.rows[0] || null);
@@ -218,10 +1009,17 @@ app.post(
       contactEmail,
       contactPhone,
       customDomain,
-      subdomain
+      subdomain,
+      wifiPortalRedirectUrl
     } = req.body;
+    const clearsStoredLogo =
+      logoUrl !== undefined &&
+      (!logoUrl || !String(logoUrl).trim().startsWith("/api/public/branding-logo/"));
+    if (clearsStoredLogo) {
+      await purgeHostedBrandingAssets(ispId);
+    }
     const updated = await query(
-      "UPDATE isp_branding SET display_name = COALESCE($1, display_name), logo_url = $2, primary_color = COALESCE($3, primary_color), secondary_color = COALESCE($4, secondary_color), invoice_footer = $5, address = $6, contact_email = $7, contact_phone = $8, custom_domain = $9, updated_at = NOW() WHERE isp_id = $10 RETURNING id",
+      "UPDATE isp_branding SET display_name = COALESCE($1, display_name), logo_url = $2, primary_color = COALESCE($3, primary_color), secondary_color = COALESCE($4, secondary_color), invoice_footer = $5, address = $6, contact_email = $7, contact_phone = $8, custom_domain = $9, wifi_portal_redirect_url = COALESCE($10, wifi_portal_redirect_url), updated_at = NOW() WHERE isp_id = $11 RETURNING id",
       [
         displayName || null,
         logoUrl || null,
@@ -232,6 +1030,7 @@ app.post(
         contactEmail || null,
         contactPhone || null,
         customDomain || null,
+        wifiPortalRedirectUrl !== undefined ? wifiPortalRedirectUrl || null : null,
         ispId
       ]
     );
@@ -246,7 +1045,71 @@ app.post(
       entityId: updated.rows[0]?.id || null
     });
     const finalResult = await query(
-      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+      [ispId]
+    );
+    return res.json(finalResult.rows[0]);
+  }
+);
+
+app.post(
+  "/api/branding/logo",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  uploadLogoMemory.single("logo"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    if (!req.file?.buffer) {
+      return res.status(400).json({ message: "Choose an image file (logo field)." });
+    }
+    const mimeToExt = {
+      "image/png": ".png",
+      "image/jpeg": ".jpg",
+      "image/jpg": ".jpg",
+      "image/webp": ".webp",
+      "image/gif": ".gif"
+    };
+    const ext = mimeToExt[req.file.mimetype];
+    if (!ext) {
+      return res.status(400).json({ message: "Logo must be PNG, JPEG, WebP or GIF." });
+    }
+    const existing = await query("SELECT logo_object_key FROM isp_branding WHERE isp_id = $1", [ispId]);
+    const oldKey = existing.rows[0]?.logo_object_key;
+    if (oldKey) await deleteBrandingObjectInS3(oldKey);
+    await clearBrandingLogoFiles(ispId);
+
+    const publicPath = `/api/public/branding-logo/${ispId}`;
+    if (isS3BrandingConfigured()) {
+      const objectKey = await putBrandingLogoInS3({
+        ispId,
+        ext,
+        buffer: req.file.buffer,
+        contentType: req.file.mimetype
+      });
+      await query(
+        "UPDATE isp_branding SET logo_url = $1, logo_object_key = $2, updated_at = NOW() WHERE isp_id = $3",
+        [publicPath, objectKey, ispId]
+      );
+    } else {
+      ensureBrandingUploadDir();
+      const fp = path.join(brandingUploadDir, `${ispId}${ext}`);
+      await fs.promises.writeFile(fp, req.file.buffer);
+      await query(
+        "UPDATE isp_branding SET logo_url = $1, logo_object_key = NULL, updated_at = NOW() WHERE isp_id = $2",
+        [publicPath, ispId]
+      );
+    }
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "branding.logo_uploaded",
+      entityType: "branding",
+      entityId: ispId,
+      details: { mime: req.file.mimetype }
+    });
+    const finalResult = await query(
+      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
       [ispId]
     );
     return res.json(finalResult.rows[0]);
@@ -291,6 +1154,162 @@ app.post("/api/platform/subscriptions", authenticate, requireRoles("super_admin"
   res.status(201).json(inserted.rows[0]);
 });
 
+app.get("/api/platform/billing/status", authenticate, async (req, res) => {
+  const ispId = resolveIspId(req, res);
+  if (!ispId) return;
+  const snapshot = await getPlatformBillingSnapshot(ispId);
+  return res.json(snapshot);
+});
+
+app.post(
+  "/api/platform/billing/initiate-deposit",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { currency, phoneNumber, provider } = req.body;
+    if (!currency || !phoneNumber || !provider) {
+      return res.status(400).json({ message: "currency, phoneNumber and provider are required (Pawapay MMO codes, e.g. MTN_MOMO_COD)" });
+    }
+    const cur = String(currency).toUpperCase();
+    if (cur !== "USD" && cur !== "CDF") {
+      return res.status(400).json({ message: "currency must be USD or CDF" });
+    }
+    const sub = await getLatestPlatformSubscription(ispId);
+    if (!sub) return res.status(400).json({ message: "No platform subscription on file for this workspace" });
+    const pkgRow = await query(
+      "SELECT monthly_price_usd AS \"monthlyPriceUsd\" FROM platform_packages WHERE id = $1",
+      [sub.packageId]
+    );
+    const monthlyUsd = pkgRow.rows[0]?.monthlyPriceUsd;
+    if (monthlyUsd == null) return res.status(400).json({ message: "Package not found" });
+    const amount = cur === "USD" ? usdAmountString(monthlyUsd) : cdfAmountForUsd(monthlyUsd);
+    const depositId = uuidv4();
+    const phone = String(phoneNumber).replace(/\s+/g, "").replace(/^\+/, "");
+    const body = {
+      depositId,
+      amount,
+      currency: cur,
+      payer: {
+        type: "MMO",
+        accountDetails: {
+          phoneNumber: phone,
+          provider: String(provider).trim()
+        }
+      },
+      clientReferenceId: `saas-${ispId}-${sub.id}`.slice(0, 200),
+      customerMessage: "McBuleli plan"
+    };
+    try {
+      const pw = await initiatePawapayDeposit(body);
+      if (pw.status !== "ACCEPTED" && pw.status !== "DUPLICATE_IGNORED") {
+        return res.status(400).json({
+          message: pw.failureReason?.failureMessage || "Pawapay did not accept this deposit request",
+          pawapay: pw
+        });
+      }
+      if (pw.status === "ACCEPTED") {
+        await query(
+          `INSERT INTO platform_saas_deposit_sessions
+           (id, isp_id, platform_subscription_id, deposit_id, amount, currency, provider, phone_number, status, pawapay_init_status)
+           VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, $6, $7, 'initiated', $8)`,
+          [ispId, sub.id, depositId, amount, cur, provider, phone, pw.status || null]
+        );
+      }
+      await logAudit({
+        ispId,
+        actorUserId: req.user.sub,
+        action: "platform.billing.deposit_initiated",
+        entityType: "platform_saas_deposit",
+        entityId: depositId,
+        details: { currency: cur, amount, provider }
+      });
+      return res.status(201).json({
+        depositId,
+        pawapay: pw,
+        amount,
+        currency: cur,
+        message:
+          pw.status === "ACCEPTED"
+            ? "Payment prompt sent to the handset. Complete the PIN step; we will extend your subscription when Pawapay confirms."
+            : pw.failureReason?.failureMessage || "See pawapay.status"
+      });
+    } catch (err) {
+      return res.status(400).json({ message: err.message || "Pawapay initiation failed" });
+    }
+  }
+);
+
+app.get(
+  "/api/platform/billing/deposit-status/:depositId",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { depositId } = req.params;
+    const local = await query(
+      "SELECT id, deposit_id AS \"depositId\", status, amount, currency, provider FROM platform_saas_deposit_sessions WHERE deposit_id = $1::uuid AND isp_id = $2",
+      [depositId, ispId]
+    );
+    if (!local.rows[0]) return res.status(404).json({ message: "Deposit session not found" });
+    try {
+      const pw = await fetchPawapayDepositStatus(depositId);
+      if (pw.status === "COMPLETED") {
+        await applySuccessfulSaasDeposit(depositId);
+      } else if (pw.status === "FAILED") {
+        await markSaasDepositFailed(depositId);
+      }
+      return res.json({ pawapay: pw, local: local.rows[0] });
+    } catch (err) {
+      return res.status(400).json({ message: err.message || "Status check failed", local: local.rows[0] });
+    }
+  }
+);
+
+app.post(
+  "/api/platform/billing/upgrade-plan",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { packageId } = req.body;
+    if (!packageId) return res.status(400).json({ message: "packageId is required" });
+    const allowed = await query("SELECT id FROM platform_packages WHERE id = $1 AND code = ANY($2::text[])", [
+      packageId,
+      SAAS_PLAN_CODES
+    ]);
+    if (!allowed.rows[0]) return res.status(400).json({ message: "Invalid package for self-serve plans" });
+    const updated = await query(
+      `UPDATE isp_platform_subscriptions s
+       SET package_id = $1
+       WHERE s.id = (
+         SELECT id FROM isp_platform_subscriptions WHERE isp_id = $2 ORDER BY ends_at DESC, created_at DESC LIMIT 1
+       )
+       AND s.isp_id = $2
+       AND s.status = 'trialing'
+       RETURNING s.id, s.package_id AS "packageId", s.status`,
+      [packageId, ispId]
+    );
+    if (!updated.rows[0]) {
+      return res.status(400).json({
+        message: "Plan can only be changed while you are still on the free trial. After paying, contact support to change tiers."
+      });
+    }
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "platform.billing.plan_changed_trial",
+      entityType: "platform_subscription",
+      entityId: updated.rows[0].id,
+      details: { packageId }
+    });
+    return res.json(updated.rows[0]);
+  }
+);
+
 app.get("/api/payment-methods", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
@@ -312,9 +1331,15 @@ app.post(
     if (!methodType || !providerName) {
       return res.status(400).json({ message: "methodType and providerName are required" });
     }
+    const normalizedMethodType = normalizeMethodType(methodType);
+    if (!PAYMENT_METHOD_TYPES.has(normalizedMethodType)) {
+      return res.status(400).json({
+        message: `Unsupported methodType. Allowed: ${Array.from(PAYMENT_METHOD_TYPES).join(", ")}`
+      });
+    }
     const inserted = await query(
       "INSERT INTO isp_payment_methods (id, isp_id, method_type, provider_name, config_json, is_active, created_by) VALUES (gen_random_uuid(), $1, $2, $3, $4::jsonb, $5, $6) RETURNING id, isp_id AS \"ispId\", method_type AS \"methodType\", provider_name AS \"providerName\", config_json AS \"config\", is_active AS \"isActive\", created_at AS \"createdAt\"",
-      [ispId, methodType, providerName, JSON.stringify(config), Boolean(isActive), req.user.sub]
+      [ispId, normalizedMethodType, providerName, JSON.stringify(config), Boolean(isActive), req.user.sub]
     );
     await logAudit({
       ispId,
@@ -325,6 +1350,119 @@ app.post(
       details: { methodType, providerName }
     });
     return res.status(201).json(inserted.rows[0]);
+  }
+);
+
+app.post(
+  "/api/payment-methods/:methodId/callback-secret",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { methodId } = req.params;
+    const method = await query(
+      "SELECT id, method_type AS \"methodType\", provider_name AS \"providerName\", config_json AS \"config\" FROM isp_payment_methods WHERE id = $1 AND isp_id = $2",
+      [methodId, ispId]
+    );
+    if (!method.rows[0]) {
+      return res.status(404).json({ message: "Payment method not found" });
+    }
+    const secret = crypto.randomBytes(24).toString("hex");
+    await query(
+      `UPDATE isp_payment_methods
+       SET config_json = COALESCE(config_json, '{}'::jsonb) || jsonb_build_object('callbackSecret', $1, 'callbackEnabled', true)
+       WHERE id = $2 AND isp_id = $3`,
+      [secret, methodId, ispId]
+    );
+    const callbackUrl = `${resolvePublicApiBase(req)}/api/public/payment-gateways/${methodId}/callback`;
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "payment_method.callback_secret_rotated",
+      entityType: "payment_method",
+      entityId: methodId,
+      details: { methodType: method.rows[0].methodType, providerName: method.rows[0].providerName }
+    });
+    return res.json({
+      methodId,
+      methodType: method.rows[0].methodType,
+      providerName: method.rows[0].providerName,
+      callbackUrl,
+      callbackSecret: secret,
+      expectedHeader: "x-gateway-callback-secret",
+      examplePayload: {
+        invoiceId: "uuid-de-la-facture",
+        providerRef: "txn-12345",
+        amountUsd: 10,
+        status: "confirmed"
+      }
+    });
+  }
+);
+
+app.post(
+  "/api/payment-methods/:methodId/test-callback",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { methodId } = req.params;
+    const method = await query(
+      `SELECT id, method_type AS "methodType", provider_name AS "providerName", is_active AS "isActive"
+       FROM isp_payment_methods WHERE id = $1 AND isp_id = $2`,
+      [methodId, ispId]
+    );
+    const pm = method.rows[0];
+    if (!pm) return res.status(404).json({ message: "Payment method not found" });
+    if (!pm.isActive) return res.status(400).json({ message: "Payment method is inactive" });
+
+    const body = req.body || {};
+    let invoiceId = body.invoiceId || body.invoice_id;
+    if (!invoiceId) {
+      const inv = await query(
+        `SELECT id FROM invoices
+         WHERE isp_id = $1 AND status IN ('unpaid', 'overdue')
+         ORDER BY created_at ASC
+         LIMIT 1`,
+        [ispId]
+      );
+      invoiceId = inv.rows[0]?.id || null;
+    }
+    if (!invoiceId) {
+      return res.status(404).json({ message: "No unpaid invoice found. Provide invoiceId to test callback." });
+    }
+
+    const result = await applyInvoicePayment({
+      ispId,
+      invoiceId,
+      providerRef:
+        body.providerRef ||
+        body.provider_ref ||
+        `test-${pm.methodType}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+      amountUsd: body.amountUsd ?? body.amount_usd,
+      status: body.status || "confirmed",
+      methodType: pm.methodType
+    });
+    if (!result.ok) return res.status(result.code || 400).json({ message: result.message || "Test callback rejected" });
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "payment_method.test_callback",
+      entityType: "payment_method",
+      entityId: methodId,
+      details: { methodType: pm.methodType, invoiceId, activated: Boolean(result.activated) }
+    });
+    return res.json({
+      ok: true,
+      methodType: pm.methodType,
+      providerName: pm.providerName,
+      invoiceId,
+      activated: Boolean(result.activated),
+      duplicate: Boolean(result.duplicate),
+      payment: result.payment
+    });
   }
 );
 
@@ -440,11 +1578,14 @@ app.post(
     if (!["sms", "email", "whatsapp"].includes(channel)) {
       return res.status(400).json({ message: "channel must be sms, email, or whatsapp" });
     }
-    if (!["webhook", "twilio"].includes(providerKey)) {
-      return res.status(400).json({ message: "providerKey must be webhook or twilio" });
+    if (!["webhook", "twilio", "smtp"].includes(providerKey)) {
+      return res.status(400).json({ message: "providerKey must be webhook, twilio, or smtp" });
     }
     if (providerKey === "twilio" && !["sms", "whatsapp"].includes(channel)) {
       return res.status(400).json({ message: "Twilio supports sms and whatsapp channels only" });
+    }
+    if (providerKey === "smtp" && channel !== "email") {
+      return res.status(400).json({ message: "SMTP provider is only valid for the email channel" });
     }
     const result = await query(
       "INSERT INTO isp_notification_providers (id, isp_id, channel, provider_key, config_json, is_active, created_by, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, $4::jsonb, $5, $6, NOW()) ON CONFLICT (isp_id, channel) DO UPDATE SET provider_key = EXCLUDED.provider_key, config_json = EXCLUDED.config_json, is_active = EXCLUDED.is_active, updated_at = NOW() RETURNING id, isp_id AS \"ispId\", channel, provider_key AS \"providerKey\", config_json AS config, is_active AS \"isActive\", updated_at AS \"updatedAt\"",
@@ -571,6 +1712,16 @@ app.post(
     } = req.body;
     if (!name || !host || !username || !password) {
       return res.status(400).json({ message: "name, host, username and password are required" });
+    }
+    const limits = await getPlatformFeatureLimits(ispId);
+    const maxNodes = limits?.maxNetworkNodes;
+    if (Number.isFinite(maxNodes)) {
+      const count = await query("SELECT COUNT(*)::int AS c FROM isp_network_nodes WHERE isp_id = $1", [ispId]);
+      if (count.rows[0].c >= maxNodes) {
+        return res.status(403).json({
+          message: `Your McBuleli plan allows up to ${maxNodes} network node(s). Upgrade to Business to add more.`
+        });
+      }
     }
     const encryptedPassword = encryptSecret(password);
     const inserted = await query(
@@ -714,6 +1865,124 @@ app.post(
 );
 
 app.get(
+  "/api/network/telemetry-snapshots",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "noc_operator", "billing_agent", "field_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 500);
+    const result = await query(
+      `SELECT t.id, t.isp_id AS "ispId", t.node_id AS "nodeId", n.name AS "nodeName",
+              t.pppoe_active AS "pppoeActive", t.hotspot_active AS "hotspotActive",
+              t.connected_devices AS "connectedDevices", t.details, t.created_at AS "createdAt"
+       FROM network_telemetry_snapshots t
+       JOIN isp_network_nodes n ON n.id = t.node_id
+       WHERE t.isp_id = $1
+       ORDER BY t.created_at DESC
+       LIMIT $2`,
+      [ispId, limit]
+    );
+    return res.json(result.rows);
+  }
+);
+
+app.get(
+  "/api/network/radius-accounting-ingest",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "noc_operator", "billing_agent", "field_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
+    const result = await query(
+      `SELECT id, isp_id AS "ispId", username, acct_session_id AS "acctSessionId", acct_status_type AS "acctStatusType",
+              nas_ip_address AS "nasIpAddress", framed_ip_address AS "framedIpAddress",
+              acct_input_octets AS "acctInputOctets", acct_output_octets AS "acctOutputOctets",
+              event_time AS "eventTime", created_at AS "createdAt"
+       FROM radius_accounting_ingest
+       WHERE isp_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [ispId, limit]
+    );
+    return res.json(result.rows);
+  }
+);
+
+app.post(
+  "/api/network/nodes/:nodeId/collect-telemetry",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "noc_operator"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { nodeId } = req.params;
+    try {
+      const result = await collectAndStoreNetworkTelemetry({ ispId, nodeId });
+      await logAudit({
+        ispId,
+        actorUserId: req.user.sub,
+        action: "network.telemetry_collected",
+        entityType: "network_node",
+        entityId: nodeId,
+        details: result
+      });
+      if (!result.ok) {
+        return res.status(400).json({ message: result.message || "Telemetry collection failed" });
+      }
+      return res.json(result);
+    } catch (err) {
+      return res.status(500).json({ message: err?.message || "Telemetry collection failed" });
+    }
+  }
+);
+
+app.post(
+  "/api/billing/process-overdue",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "noc_operator", "billing_agent"),
+  async (req, res) => {
+    const stats = await processOverdueInvoices();
+    const auditIspId =
+      req.user.role === "super_admin"
+        ? req.query.ispId || req.body.ispId || null
+        : req.user.ispId || req.tenantIspId || null;
+    await logAudit({
+      ispId: auditIspId,
+      actorUserId: req.user.sub,
+      action: "billing.overdue_processed",
+      entityType: "billing_job",
+      entityId: null,
+      details: stats
+    });
+    return res.json(stats);
+  }
+);
+
+app.post(
+  "/api/billing/generate-renewals",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "noc_operator", "billing_agent"),
+  async (req, res) => {
+    const stats = await processRenewalInvoices();
+    const auditIspId =
+      req.user.role === "super_admin"
+        ? req.query.ispId || req.body.ispId || null
+        : req.user.ispId || req.tenantIspId || null;
+    await logAudit({
+      ispId: auditIspId,
+      actorUserId: req.user.sub,
+      action: "billing.renewals_generated",
+      entityType: "billing_job",
+      entityId: null,
+      details: stats
+    });
+    return res.json(stats);
+  }
+);
+
+app.get(
   "/api/users",
   authenticate,
   requireRoles("super_admin", "company_manager", "isp_admin"),
@@ -725,6 +1994,146 @@ app.get(
     [ispId]
   );
     return res.json(result.rows);
+  }
+);
+
+app.get(
+  "/api/users/export",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const result = await query(
+      `SELECT full_name AS "fullName", email, role, accreditation_level AS "accreditationLevel",
+              is_active AS "isActive", created_at AS "createdAt"
+       FROM users WHERE isp_id = $1 ORDER BY created_at DESC`,
+      [ispId]
+    );
+    const headers = ["fullName", "email", "role", "accreditationLevel", "isActive", "createdAt"];
+    const csv = rowsToCsv(headers, result.rows);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="team-users-export-${String(ispId).slice(0, 8)}.csv"`
+    );
+    res.send(csv);
+  }
+);
+
+app.post(
+  "/api/users/import",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  uploadCsvMemory.fields([
+    { name: "file", maxCount: 1 },
+    { name: "defaultPassword", maxCount: 1 },
+    { name: "defaultRole", maxCount: 1 }
+  ]),
+  async (req, res) => {
+    const targetIspId = resolveIspId(req, res);
+    if (!targetIspId) return;
+    const fileBuf = req.files?.file?.[0]?.buffer;
+    if (!fileBuf) {
+      return res.status(400).json({ message: "CSV file is required (form field name: file)." });
+    }
+    const allowed = allowedRolesForUserImport(req.user.role);
+    const defaultRoleRaw =
+      req.body?.defaultRole != null ? String(req.body.defaultRole).trim() : "billing_agent";
+    const roleDefault = allowed.includes(defaultRoleRaw) ? defaultRoleRaw : null;
+    if (!roleDefault) {
+      return res.status(400).json({
+        message: `defaultRole must be one of: ${allowed.join(", ")}`
+      });
+    }
+    const defPass = req.body?.defaultPassword != null ? String(req.body.defaultPassword).trim() : "";
+
+    const limits = await query(
+      "SELECT p.feature_flags AS \"featureFlags\" FROM isp_platform_subscriptions s JOIN platform_packages p ON p.id = s.package_id WHERE s.isp_id = $1 AND s.status IN ('trialing', 'active') AND s.ends_at >= NOW() ORDER BY s.ends_at DESC LIMIT 1",
+      [targetIspId]
+    );
+    const maxUsers = limits.rows[0]?.featureFlags?.maxUsers;
+
+    const csvText = fileBuf.toString("utf8");
+    const { rows } = parseCsv(csvText);
+    if (!rows.length) {
+      return res.status(400).json({ message: "CSV has no data rows below the header." });
+    }
+
+    const created = [];
+    const skipped = [];
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const lineNo = i + 2;
+      const c = teamUserImportCells(rows[i]);
+      if (!c.fullName || !c.email) {
+        errors.push({ line: lineNo, message: "fullName and email are required." });
+        continue;
+      }
+      const emailLower = c.email.toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLower)) {
+        errors.push({ line: lineNo, message: "Invalid email." });
+        continue;
+      }
+      const role = (c.role && allowed.includes(c.role) ? c.role : roleDefault) || roleDefault;
+      if (!allowed.includes(role)) {
+        errors.push({ line: lineNo, message: `Role not allowed for your account: ${c.role || ""}` });
+        continue;
+      }
+      const password = c.password && c.password.length >= 6 ? c.password : defPass;
+      if (!password || password.length < 6) {
+        errors.push({
+          line: lineNo,
+          message: "Set a password column (min 6 chars) or send defaultPassword for rows without one."
+        });
+        continue;
+      }
+
+      const exists = await query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [emailLower]);
+      if (exists.rows[0]) {
+        skipped.push({ line: lineNo, email: emailLower, reason: "duplicate_email" });
+        continue;
+      }
+
+      if (Number.isFinite(maxUsers)) {
+        const activeUsers = await query(
+          "SELECT COUNT(*)::int AS count FROM users WHERE isp_id = $1 AND is_active = TRUE",
+          [targetIspId]
+        );
+        if (activeUsers.rows[0].count >= maxUsers) {
+          errors.push({ line: lineNo, message: `Active user limit reached (${maxUsers}).` });
+          continue;
+        }
+      }
+
+      try {
+        const hash = await bcrypt.hash(password, 10);
+        const inserted = await query(
+          "INSERT INTO users (id, isp_id, full_name, email, password_hash, role, accreditation_level, is_active, must_change_password) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, TRUE, TRUE) RETURNING id, isp_id AS \"ispId\", full_name AS \"fullName\", email, role, accreditation_level AS \"accreditationLevel\", is_active AS \"isActive\", must_change_password AS \"mustChangePassword\", created_at AS \"createdAt\"",
+          [targetIspId, c.fullName, emailLower, hash, role, c.accreditationLevel || "basic"]
+        );
+        created.push(inserted.rows[0]);
+      } catch (err) {
+        errors.push({ line: lineNo, message: err?.message || "Insert failed" });
+      }
+    }
+
+    await logAudit({
+      ispId: targetIspId,
+      actorUserId: req.user.sub,
+      action: "users.imported",
+      entityType: "user",
+      entityId: null,
+      details: { created: created.length, skipped: skipped.length, errors: errors.length }
+    });
+
+    return res.json({
+      createdCount: created.length,
+      skipped,
+      errors,
+      sample: created.slice(0, 5)
+    });
   }
 );
 
@@ -758,7 +2167,7 @@ app.post(
 
   const hash = await bcrypt.hash(password, 10);
   const limits = await query(
-    "SELECT p.feature_flags AS \"featureFlags\" FROM isp_platform_subscriptions s JOIN platform_packages p ON p.id = s.package_id WHERE s.isp_id = $1 AND s.status = 'active' AND s.ends_at >= NOW() ORDER BY s.ends_at DESC LIMIT 1",
+    "SELECT p.feature_flags AS \"featureFlags\" FROM isp_platform_subscriptions s JOIN platform_packages p ON p.id = s.package_id WHERE s.isp_id = $1 AND s.status IN ('trialing', 'active') AND s.ends_at >= NOW() ORDER BY s.ends_at DESC LIMIT 1",
     [targetIspId]
   );
   const maxUsers = limits.rows[0]?.featureFlags?.maxUsers;
@@ -921,29 +2330,214 @@ app.get("/api/customers", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const result = await query(
-    "SELECT id, isp_id AS \"ispId\", full_name AS \"fullName\", phone, status, created_at AS \"createdAt\" FROM customers WHERE isp_id = $1 ORDER BY created_at DESC",
+    `SELECT id, isp_id AS "ispId", full_name AS "fullName", phone, email, status, created_at AS "createdAt"
+     FROM customers WHERE isp_id = $1 ORDER BY created_at DESC`,
     [ispId]
   );
   res.json(result.rows);
 });
 
+app.get("/api/customers/export", authenticate, async (req, res) => {
+  const ispId = resolveIspId(req, res);
+  if (!ispId) return;
+  const result = await query(
+    `SELECT full_name AS "fullName", phone, email, status, created_at AS "createdAt"
+     FROM customers WHERE isp_id = $1 ORDER BY created_at DESC`,
+    [ispId]
+  );
+  const headers = ["fullName", "phone", "email", "status", "createdAt"];
+  const csv = rowsToCsv(headers, result.rows);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="customers-export-${String(ispId).slice(0, 8)}.csv"`
+  );
+  res.send(csv);
+});
+
+app.post(
+  "/api/customers/import",
+  authenticate,
+  uploadCsvMemory.fields([
+    { name: "file", maxCount: 1 },
+    { name: "defaultPassword", maxCount: 1 }
+  ]),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const fileBuf = req.files?.file?.[0]?.buffer;
+    if (!fileBuf) {
+      return res.status(400).json({ message: "CSV file is required (form field name: file)." });
+    }
+    const csvText = fileBuf.toString("utf8");
+    const { rows } = parseCsv(csvText);
+    if (!rows.length) {
+      return res.status(400).json({ message: "CSV has no data rows below the header." });
+    }
+    const dpRaw = req.body?.defaultPassword != null ? String(req.body.defaultPassword).trim() : "";
+    const defaultPassword = dpRaw.length >= 6 ? dpRaw : "";
+
+    const created = [];
+    const skipped = [];
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const lineNo = i + 2;
+      const { fullName, phoneRaw, emailRaw, passRaw } = customerImportCells(rows[i]);
+      if (!fullName) {
+        errors.push({ line: lineNo, message: "Missing name (use fullName, full_name, or name)." });
+        continue;
+      }
+      const phoneNorm = normalizeSubscriberPhone(phoneRaw);
+      if (!phoneNorm) {
+        errors.push({ line: lineNo, message: "Missing phone/username (use phone, mobile, or MikroTik name)." });
+        continue;
+      }
+      const dup = await query("SELECT id FROM customers WHERE isp_id = $1 AND phone = $2 LIMIT 1", [
+        ispId,
+        phoneNorm
+      ]);
+      if (dup.rows[0]) {
+        skipped.push({ line: lineNo, phone: phoneNorm, reason: "duplicate_phone" });
+        continue;
+      }
+      const emailTrim =
+        emailRaw && String(emailRaw).trim() ? String(emailRaw).trim().slice(0, 320) : null;
+      if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+        errors.push({ line: lineNo, message: "Invalid email format." });
+        continue;
+      }
+      const rowPass = passRaw && String(passRaw).length >= 6 ? String(passRaw) : defaultPassword;
+      if (rowPass && String(rowPass).length < 6) {
+        errors.push({
+          line: lineNo,
+          message: "Password must be at least 6 characters, or leave blank and set defaultPassword."
+        });
+        continue;
+      }
+      try {
+        let inserted;
+        if (rowPass) {
+          const hash = await bcrypt.hash(String(rowPass), 10);
+          inserted = await query(
+            `INSERT INTO customers (id, isp_id, full_name, phone, email, status, password_hash, must_set_password)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, 'active', $5, FALSE)
+             RETURNING id, isp_id AS "ispId", full_name AS "fullName", phone, email, status, created_at AS "createdAt"`,
+            [ispId, fullName, phoneNorm, emailTrim, hash]
+          );
+        } else {
+          inserted = await query(
+            `INSERT INTO customers (id, isp_id, full_name, phone, email, status)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, 'active')
+             RETURNING id, isp_id AS "ispId", full_name AS "fullName", phone, email, status, created_at AS "createdAt"`,
+            [ispId, fullName, phoneNorm, emailTrim]
+          );
+        }
+        created.push(inserted.rows[0]);
+      } catch (err) {
+        errors.push({ line: lineNo, message: err?.message || "Insert failed" });
+      }
+    }
+
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "customers.imported",
+      entityType: "customer",
+      entityId: null,
+      details: { created: created.length, skipped: skipped.length, errors: errors.length }
+    });
+
+    return res.json({
+      createdCount: created.length,
+      skipped,
+      errors,
+      sample: created.slice(0, 5)
+    });
+  }
+);
+
 app.post("/api/customers", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
-  const { fullName, phone } = req.body;
+  const { fullName, phone, initialPassword, email } = req.body;
   if (!fullName || !phone) return res.status(400).json({ message: "fullName and phone are required" });
-  const inserted = await query(
-    "INSERT INTO customers (id, isp_id, full_name, phone, status) VALUES (gen_random_uuid(), $1, $2, $3, 'active') RETURNING id, isp_id AS \"ispId\", full_name AS \"fullName\", phone, status, created_at AS \"createdAt\"",
-    [ispId, fullName, phone]
-  );
+  const phoneNorm = normalizeSubscriberPhone(phone);
+  if (!phoneNorm) return res.status(400).json({ message: "phone is required" });
+  const emailTrim =
+    email != null && String(email).trim() ? String(email).trim().slice(0, 320) : null;
+  if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+    return res.status(400).json({ message: "Invalid email format" });
+  }
+  if (initialPassword != null && String(initialPassword).length > 0 && String(initialPassword).length < 6) {
+    return res.status(400).json({ message: "initialPassword must be at least 6 characters when provided" });
+  }
+  let inserted;
+  if (initialPassword && String(initialPassword).length >= 6) {
+    const hash = await bcrypt.hash(String(initialPassword), 10);
+    inserted = await query(
+      `INSERT INTO customers (id, isp_id, full_name, phone, email, status, password_hash, must_set_password)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, 'active', $5, FALSE)
+       RETURNING id, isp_id AS "ispId", full_name AS "fullName", phone, email, status, created_at AS "createdAt"`,
+      [ispId, fullName, phoneNorm, emailTrim, hash]
+    );
+  } else {
+    inserted = await query(
+      `INSERT INTO customers (id, isp_id, full_name, phone, email, status)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, 'active')
+       RETURNING id, isp_id AS "ispId", full_name AS "fullName", phone, email, status, created_at AS "createdAt"`,
+      [ispId, fullName, phoneNorm, emailTrim]
+    );
+  }
   res.status(201).json(inserted.rows[0]);
 });
+
+app.patch(
+  "/api/customers/:customerId",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "field_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { customerId } = req.params;
+    const body = req.body || {};
+    if (!Object.prototype.hasOwnProperty.call(body, "email")) {
+      return res.status(400).json({ message: "Provide email (string or null to clear)" });
+    }
+    const { email } = body;
+    const ex = await query("SELECT id FROM customers WHERE id = $1 AND isp_id = $2", [customerId, ispId]);
+    if (!ex.rows[0]) return res.status(404).json({ message: "Customer not found" });
+    const emailTrim =
+      email === null || email === "" ? null : String(email).trim().slice(0, 320);
+    if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+    const updated = await query(
+      `UPDATE customers SET email = $1 WHERE id = $2 AND isp_id = $3
+       RETURNING id, isp_id AS "ispId", full_name AS "fullName", phone, email, status, created_at AS "createdAt"`,
+      [emailTrim, customerId, ispId]
+    );
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "customer.updated",
+      entityType: "customer",
+      entityId: customerId,
+      details: { email: emailTrim }
+    });
+    return res.json(updated.rows[0]);
+  }
+);
 
 app.get("/api/plans", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const result = await query(
-    "SELECT id, isp_id AS \"ispId\", name, price_usd AS \"priceUsd\", duration_days AS \"durationDays\", rate_limit AS \"rateLimit\", created_at AS \"createdAt\" FROM plans WHERE isp_id = $1 ORDER BY created_at DESC",
+    `SELECT id, isp_id AS "ispId", name, price_usd AS "priceUsd", duration_days AS "durationDays", rate_limit AS "rateLimit",
+            speed_label AS "speedLabel", default_access_type AS "defaultAccessType", max_devices AS "maxDevices",
+            is_published AS "isPublished", availability_status AS "availabilityStatus", success_redirect_url AS "successRedirectUrl",
+            created_at AS "createdAt"
+     FROM plans WHERE isp_id = $1 ORDER BY created_at DESC`,
     [ispId]
   );
   res.json(result.rows);
@@ -952,20 +2546,116 @@ app.get("/api/plans", authenticate, async (req, res) => {
 app.post("/api/plans", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
-  const { name, priceUsd, durationDays, rateLimit } = req.body;
-  if (!name || !priceUsd || !durationDays || !rateLimit) return res.status(400).json({ message: "All plan fields are required" });
+  const {
+    name,
+    priceUsd,
+    durationDays,
+    rateLimit,
+    speedLabel,
+    defaultAccessType = "pppoe",
+    maxDevices = 1,
+    isPublished = false,
+    availabilityStatus = "available",
+    successRedirectUrl
+  } = req.body;
+  if (!name || !priceUsd || !durationDays || !rateLimit) return res.status(400).json({ message: "name, priceUsd, durationDays and rateLimit are required" });
+  const access = defaultAccessType === "hotspot" ? "hotspot" : "pppoe";
+  const avail = availabilityStatus === "unavailable" ? "unavailable" : "available";
   const inserted = await query(
-    "INSERT INTO plans (id, isp_id, name, price_usd, duration_days, rate_limit) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5) RETURNING id, isp_id AS \"ispId\", name, price_usd AS \"priceUsd\", duration_days AS \"durationDays\", rate_limit AS \"rateLimit\", created_at AS \"createdAt\"",
-    [ispId, name, Number(priceUsd), Number(durationDays), rateLimit]
+    `INSERT INTO plans (id, isp_id, name, price_usd, duration_days, rate_limit, speed_label, default_access_type, max_devices, is_published, availability_status, success_redirect_url)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     RETURNING id, isp_id AS "ispId", name, price_usd AS "priceUsd", duration_days AS "durationDays", rate_limit AS "rateLimit",
+               speed_label AS "speedLabel", default_access_type AS "defaultAccessType", max_devices AS "maxDevices",
+               is_published AS "isPublished", availability_status AS "availabilityStatus", success_redirect_url AS "successRedirectUrl", created_at AS "createdAt"`,
+    [
+      ispId,
+      name,
+      Number(priceUsd),
+      Number(durationDays),
+      rateLimit,
+      speedLabel || null,
+      access,
+      Math.max(1, Number(maxDevices) || 1),
+      Boolean(isPublished),
+      avail,
+      successRedirectUrl || null
+    ]
   );
   res.status(201).json(inserted.rows[0]);
 });
+
+app.patch(
+  "/api/plans/:planId",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { planId } = req.params;
+    const existing = await query("SELECT id FROM plans WHERE id = $1 AND isp_id = $2", [planId, ispId]);
+    if (!existing.rows[0]) return res.status(404).json({ message: "Plan not found" });
+    const {
+      name,
+      priceUsd,
+      durationDays,
+      rateLimit,
+      speedLabel,
+      defaultAccessType,
+      maxDevices,
+      isPublished,
+      availabilityStatus,
+      successRedirectUrl
+    } = req.body;
+    const access =
+      defaultAccessType === undefined ? undefined : defaultAccessType === "hotspot" ? "hotspot" : "pppoe";
+    const avail =
+      availabilityStatus === undefined
+        ? undefined
+        : availabilityStatus === "unavailable"
+          ? "unavailable"
+          : "available";
+    const updated = await query(
+      `UPDATE plans SET
+         name = COALESCE($1, name),
+         price_usd = COALESCE($2, price_usd),
+         duration_days = COALESCE($3, duration_days),
+         rate_limit = COALESCE($4, rate_limit),
+         speed_label = COALESCE($5, speed_label),
+         default_access_type = COALESCE($6, default_access_type),
+         max_devices = COALESCE($7, max_devices),
+         is_published = COALESCE($8, is_published),
+         availability_status = COALESCE($9, availability_status),
+         success_redirect_url = COALESCE($10, success_redirect_url)
+       WHERE id = $11 AND isp_id = $12
+       RETURNING id, isp_id AS "ispId", name, price_usd AS "priceUsd", duration_days AS "durationDays", rate_limit AS "rateLimit",
+                 speed_label AS "speedLabel", default_access_type AS "defaultAccessType", max_devices AS "maxDevices",
+                 is_published AS "isPublished", availability_status AS "availabilityStatus", success_redirect_url AS "successRedirectUrl", created_at AS "createdAt"`,
+      [
+        name || null,
+        priceUsd != null ? Number(priceUsd) : null,
+        durationDays != null ? Number(durationDays) : null,
+        rateLimit || null,
+        speedLabel !== undefined ? speedLabel || null : null,
+        access || null,
+        maxDevices != null ? Math.max(1, Number(maxDevices)) : null,
+        isPublished !== undefined ? Boolean(isPublished) : null,
+        avail || null,
+        successRedirectUrl !== undefined ? successRedirectUrl || null : null,
+        planId,
+        ispId
+      ]
+    );
+    return res.json(updated.rows[0]);
+  }
+);
 
 app.get("/api/subscriptions", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const result = await query(
-    "SELECT id, isp_id AS \"ispId\", customer_id AS \"customerId\", plan_id AS \"planId\", status, access_type AS \"accessType\", start_date AS \"startDate\", end_date AS \"endDate\" FROM subscriptions WHERE isp_id = $1 ORDER BY start_date DESC",
+    `SELECT id, isp_id AS "ispId", customer_id AS "customerId", plan_id AS "planId", status, access_type AS "accessType",
+            start_date AS "startDate", end_date AS "endDate", max_simultaneous_devices AS "maxSimultaneousDevices"
+     FROM subscriptions WHERE isp_id = $1 ORDER BY start_date DESC`,
     [ispId]
   );
   res.json(result.rows);
@@ -976,16 +2666,20 @@ app.post("/api/subscriptions", authenticate, async (req, res) => {
   if (!ispId) return;
   const { customerId, planId, accessType = "pppoe" } = req.body;
   const customer = await query("SELECT id FROM customers WHERE id = $1 AND isp_id = $2", [customerId, ispId]);
-  const plan = await query("SELECT id, price_usd, duration_days FROM plans WHERE id = $1 AND isp_id = $2", [planId, ispId]);
+  const plan = await query(
+    "SELECT id, price_usd, duration_days, max_devices FROM plans WHERE id = $1 AND isp_id = $2",
+    [planId, ispId]
+  );
   if (!customer.rows[0] || !plan.rows[0]) return res.status(404).json({ message: "Customer or plan not found" });
 
   const now = new Date();
   const endDate = new Date(now);
   endDate.setDate(endDate.getDate() + Number(plan.rows[0].duration_days));
+  const maxDev = Math.max(1, Number(plan.rows[0].max_devices) || 1);
 
   const subInsert = await query(
-    "INSERT INTO subscriptions (id, isp_id, customer_id, plan_id, status, access_type, start_date, end_date) VALUES (gen_random_uuid(), $1, $2, $3, 'active', $4, $5, $6) RETURNING id, isp_id AS \"ispId\", customer_id AS \"customerId\", plan_id AS \"planId\", status, access_type AS \"accessType\", start_date AS \"startDate\", end_date AS \"endDate\"",
-    [ispId, customerId, planId, accessType, now.toISOString(), endDate.toISOString()]
+    "INSERT INTO subscriptions (id, isp_id, customer_id, plan_id, status, access_type, start_date, end_date, max_simultaneous_devices) VALUES (gen_random_uuid(), $1, $2, $3, 'active', $4, $5, $6, $7) RETURNING id, isp_id AS \"ispId\", customer_id AS \"customerId\", plan_id AS \"planId\", status, access_type AS \"accessType\", start_date AS \"startDate\", end_date AS \"endDate\"",
+    [ispId, customerId, planId, accessType, now.toISOString(), endDate.toISOString(), maxDev]
   );
   const subscription = subInsert.rows[0];
   const invoiceInsert = await query(
@@ -1073,8 +2767,8 @@ app.get("/api/invoices", authenticate, async (req, res) => {
 app.post("/api/payments/webhook", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
-  const { invoiceId, providerRef, amountUsd, status, method } = req.body;
-  const methodType = method || "cash";
+  const { invoiceId, providerRef, amountUsd, status, method } = req.body || {};
+  const methodType = normalizeMethodType(method || "cash");
   const paymentMethod = await query(
     "SELECT id FROM isp_payment_methods WHERE isp_id = $1 AND method_type = $2 AND is_active = TRUE LIMIT 1",
     [ispId, methodType]
@@ -1084,24 +2778,83 @@ app.post("/api/payments/webhook", authenticate, async (req, res) => {
       message: `No active ${methodType} payment method configured by this ISP.`
     });
   }
-  const invResult = await query("SELECT * FROM invoices WHERE id = $1 AND isp_id = $2", [invoiceId, ispId]);
-  const invoice = invResult.rows[0];
-  if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+  const result = await applyInvoicePayment({
+    ispId,
+    invoiceId,
+    providerRef,
+    amountUsd,
+    status,
+    methodType
+  });
+  if (!result.ok) return res.status(result.code || 400).json({ message: result.message || "Webhook rejected" });
+  return res.json({
+    message: result.duplicate ? "Duplicate callback ignored" : "Webhook processed",
+    payment: result.payment,
+    activated: Boolean(result.activated)
+  });
+});
 
-  const paymentInsert = await query(
-    "INSERT INTO payments (id, isp_id, invoice_id, provider_ref, amount_usd, status, method) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6) RETURNING id, isp_id AS \"ispId\", invoice_id AS \"invoiceId\", provider_ref AS \"providerRef\", amount_usd AS \"amountUsd\", status, method, paid_at AS \"paidAt\"",
-    [ispId, invoiceId, providerRef || "n/a", Number(amountUsd || invoice.amount_usd), status || "confirmed", method || "mobile_money"]
-  );
-  if ((status || "confirmed") === "confirmed") {
-    await query("UPDATE invoices SET status = 'paid' WHERE id = $1", [invoiceId]);
-    await query("UPDATE subscriptions SET status = 'active' WHERE id = $1", [invoice.subscription_id]);
-    await provisionSubscriptionAccess({
-      ispId,
-      subscriptionId: invoice.subscription_id,
-      action: "activate"
-    });
+app.post("/api/public/payment-gateways/:methodId/callback", async (req, res) => {
+  const { methodId } = req.params;
+  if (!isUuidString(methodId)) {
+    return res.status(400).json({ message: "Invalid payment method id" });
   }
-  res.json({ message: "Webhook processed", payment: paymentInsert.rows[0] });
+  const method = await query(
+    `SELECT id, isp_id AS "ispId", method_type AS "methodType", provider_name AS "providerName",
+            config_json AS "config", is_active AS "isActive"
+     FROM isp_payment_methods WHERE id = $1`,
+    [methodId]
+  );
+  const row = method.rows[0];
+  if (!row || !row.isActive) {
+    return res.status(404).json({ message: "Payment method not found or inactive" });
+  }
+  const expectedSecret = String(row.config?.callbackSecret || "").trim();
+  if (!expectedSecret) {
+    return res.status(409).json({ message: "Callback secret is not configured for this payment method" });
+  }
+  const providedSecret = resolveGatewayCallbackSecret(req);
+  if (!providedSecret || providedSecret !== expectedSecret) {
+    return res.status(401).json({ message: "Invalid callback secret" });
+  }
+  const payload = req.body || {};
+  const invoiceId = payload.invoiceId || payload.invoice_id || payload?.data?.invoiceId || payload?.data?.invoice_id;
+  const providerRef =
+    payload.providerRef ||
+    payload.provider_ref ||
+    payload.transactionId ||
+    payload.transaction_id ||
+    payload.reference ||
+    payload.id;
+  const result = await applyInvoicePayment({
+    ispId: row.ispId,
+    invoiceId,
+    providerRef,
+    amountUsd: payload.amountUsd ?? payload.amount_usd ?? payload.amount,
+    status: payload.status || payload.paymentStatus || payload.payment_status,
+    methodType: row.methodType
+  });
+  if (!result.ok) return res.status(result.code || 400).json({ message: result.message || "Callback rejected" });
+  await logAudit({
+    ispId: row.ispId,
+    action: "payment_gateway.callback_received",
+    entityType: "payment_method",
+    entityId: methodId,
+    details: {
+      providerName: row.providerName,
+      methodType: row.methodType,
+      invoiceId,
+      providerRef: String(providerRef || "")
+    }
+  });
+  return res.json({
+    ok: true,
+    methodType: row.methodType,
+    providerName: row.providerName,
+    activated: Boolean(result.activated),
+    duplicate: Boolean(result.duplicate),
+    payment: result.payment
+  });
 });
 
 app.post("/api/payments/tid-submissions", async (req, res) => {
@@ -1110,11 +2863,11 @@ app.post("/api/payments/tid-submissions", async (req, res) => {
     return res.status(400).json({ message: "invoiceId and tid are required" });
   }
   const inv = await query(
-    "SELECT id, isp_id, customer_id, subscription_id, amount_usd FROM invoices WHERE id = $1",
+    "SELECT id, isp_id, customer_id, subscription_id, amount_usd, status FROM invoices WHERE id = $1 AND status IN ('unpaid', 'overdue')",
     [invoiceId]
   );
   const invoice = inv.rows[0];
-  if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+  if (!invoice) return res.status(404).json({ message: "Invoice not found or not open for payment" });
   const duplicateTid = await query(
     "SELECT id, status FROM payment_tid_submissions WHERE isp_id = $1 AND tid = $2 ORDER BY created_at DESC LIMIT 1",
     [invoice.isp_id, tid]
@@ -1200,7 +2953,7 @@ app.post(
     );
     if (decision === "approved") {
       await query("UPDATE invoices SET status = 'paid' WHERE id = $1", [submission.invoice_id]);
-      await query("UPDATE subscriptions SET status = 'active' WHERE id = $1", [submission.subscription_id]);
+      await extendSubscriptionAfterPayment(ispId, submission.subscription_id);
       await query(
         "INSERT INTO payments (id, isp_id, invoice_id, provider_ref, amount_usd, status, method) VALUES (gen_random_uuid(), $1, $2, $3, $4, 'confirmed', 'manual_mobile_money')",
         [ispId, submission.invoice_id, submission.tid, Number(submission.amount_usd || 0)]
@@ -1273,21 +3026,27 @@ app.post(
   async (req, res) => {
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
-    const { planId, quantity = 1 } = req.body;
+    const { planId, quantity = 1, maxDevices: maxDevicesBody } = req.body;
     if (!planId) return res.status(400).json({ message: "planId is required" });
     const planResult = await query(
-      "SELECT id, rate_limit, duration_days FROM plans WHERE id = $1 AND isp_id = $2",
+      "SELECT id, rate_limit, duration_days, max_devices FROM plans WHERE id = $1 AND isp_id = $2",
       [planId, ispId]
     );
     const plan = planResult.rows[0];
     if (!plan) return res.status(404).json({ message: "Plan not found" });
+    const planCap = Math.max(1, Number(plan.max_devices) || 1);
+    const requested = maxDevicesBody != null ? Number(maxDevicesBody) : planCap;
+    const maxDevices = Math.min(planCap, Math.max(1, Number.isFinite(requested) ? requested : planCap));
     const qty = Math.min(Math.max(Number(quantity), 1), 100);
     const created = [];
     for (let i = 0; i < qty; i += 1) {
       const code = `VCH-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
       const row = await query(
-        "INSERT INTO access_vouchers (id, isp_id, plan_id, code, rate_limit, duration_days, status, created_by, expires_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'unused', $6, NOW() + INTERVAL '90 days') RETURNING id, code, rate_limit AS \"rateLimit\", duration_days AS \"durationDays\", status, expires_at AS \"expiresAt\"",
-        [ispId, plan.id, code, plan.rate_limit, plan.duration_days, req.user.sub]
+        `INSERT INTO access_vouchers (id, isp_id, plan_id, code, rate_limit, duration_days, status, created_by, expires_at, max_devices)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'unused', $6, NOW() + INTERVAL '90 days', $7)
+         RETURNING id, code, rate_limit AS "rateLimit", duration_days AS "durationDays", max_devices AS "maxDevices",
+                   status, expires_at AS "expiresAt"`,
+        [ispId, plan.id, code, plan.rate_limit, plan.duration_days, req.user.sub, maxDevices]
       );
       created.push(row.rows[0]);
     }
@@ -1296,7 +3055,7 @@ app.post(
       actorUserId: req.user.sub,
       action: "voucher.generated",
       entityType: "voucher_batch",
-      details: { planId, quantity: qty, rateLimit: plan.rate_limit }
+      details: { planId, quantity: qty, rateLimit: plan.rate_limit, maxDevices }
     });
     return res.status(201).json(created);
   }
@@ -1306,7 +3065,9 @@ app.get("/api/vouchers", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const result = await query(
-    "SELECT id, code, rate_limit AS \"rateLimit\", duration_days AS \"durationDays\", status, expires_at AS \"expiresAt\", used_at AS \"usedAt\" FROM access_vouchers WHERE isp_id = $1 ORDER BY created_at DESC LIMIT 200",
+    `SELECT id, code, rate_limit AS "rateLimit", duration_days AS "durationDays", max_devices AS "maxDevices",
+            status, expires_at AS "expiresAt", used_at AS "usedAt"
+     FROM access_vouchers WHERE isp_id = $1 ORDER BY created_at DESC LIMIT 200`,
     [ispId]
   );
   return res.json(result.rows);
@@ -1316,12 +3077,14 @@ app.get("/api/vouchers/export", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const result = await query(
-    "SELECT code, rate_limit AS \"rateLimit\", duration_days AS \"durationDays\", status, expires_at AS \"expiresAt\", used_at AS \"usedAt\" FROM access_vouchers WHERE isp_id = $1 ORDER BY created_at DESC",
+    `SELECT code, rate_limit AS "rateLimit", duration_days AS "durationDays", max_devices AS "maxDevices",
+            status, expires_at AS "expiresAt", used_at AS "usedAt"
+     FROM access_vouchers WHERE isp_id = $1 ORDER BY created_at DESC`,
     [ispId]
   );
-  const header = "code,rate_limit,duration_days,status,expires_at,used_at";
+  const header = "code,rate_limit,duration_days,max_devices,status,expires_at,used_at";
   const rows = result.rows.map((r) =>
-    [r.code, r.rateLimit, r.durationDays, r.status, r.expiresAt || "", r.usedAt || ""]
+    [r.code, r.rateLimit, r.durationDays, r.maxDevices, r.status, r.expiresAt || "", r.usedAt || ""]
       .map((v) => `"${String(v).replaceAll('"', '""')}"`)
       .join(",")
   );
@@ -1332,8 +3095,11 @@ app.get("/api/vouchers/export", authenticate, async (req, res) => {
 });
 
 app.post("/api/vouchers/redeem", async (req, res) => {
-  const { code, customerId } = req.body;
-  if (!code || !customerId) return res.status(400).json({ message: "code and customerId are required" });
+  const { code, customerId, ispId: bodyIspId, phone, newPassword } = req.body || {};
+  if (!code) return res.status(400).json({ message: "code is required" });
+  if (!customerId && !(bodyIspId && phone)) {
+    return res.status(400).json({ message: "Provide customerId, or ispId and phone" });
+  }
   const voucherResult = await query(
     "SELECT * FROM access_vouchers WHERE code = $1 AND status = 'unused'",
     [code]
@@ -1344,38 +3110,138 @@ app.post("/api/vouchers/redeem", async (req, res) => {
     await query("UPDATE access_vouchers SET status = 'expired' WHERE id = $1", [voucher.id]);
     return res.status(400).json({ message: "Voucher expired" });
   }
-  const customer = await query("SELECT id FROM customers WHERE id = $1 AND isp_id = $2", [
-    customerId,
-    voucher.isp_id
-  ]);
-  if (!customer.rows[0]) return res.status(404).json({ message: "Customer not found for this ISP" });
+  const voucherIsp = voucher.isp_id;
+  let resolvedCustomerId = customerId || null;
+  let customerRow = null;
+  if (resolvedCustomerId) {
+    const c = await query(
+      `SELECT id, password_hash AS "passwordHash" FROM customers WHERE id = $1 AND isp_id = $2`,
+      [resolvedCustomerId, voucherIsp]
+    );
+    if (!c.rows[0]) return res.status(404).json({ message: "Customer not found for this ISP" });
+    customerRow = c.rows[0];
+  } else {
+    if (String(bodyIspId) !== String(voucherIsp)) {
+      return res.status(400).json({ message: "ispId does not match this voucher" });
+    }
+    const norm = normalizeSubscriberPhone(phone);
+    const c = await query(
+      `SELECT id, password_hash AS "passwordHash" FROM customers WHERE isp_id = $1 AND phone = $2 ORDER BY created_at DESC LIMIT 1`,
+      [voucherIsp, norm]
+    );
+    if (!c.rows[0]) return res.status(404).json({ message: "Customer not found for this phone" });
+    resolvedCustomerId = c.rows[0].id;
+    customerRow = c.rows[0];
+  }
+
+  const hasPw = Boolean(customerRow.passwordHash);
+  if (!hasPw && !newPassword) {
+    return res.status(400).json({
+      message: "Set newPassword on first redeem for this account so you can log in later."
+    });
+  }
+  if (newPassword != null && String(newPassword).length > 0) {
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ message: "newPassword must be at least 6 characters" });
+    }
+    const hash = await bcrypt.hash(String(newPassword), 10);
+    await query(`UPDATE customers SET password_hash = $1, must_set_password = FALSE WHERE id = $2`, [
+      hash,
+      resolvedCustomerId
+    ]);
+  }
+
   await query(
     "UPDATE access_vouchers SET status = 'used', assigned_customer_id = $1, used_at = NOW() WHERE id = $2",
-    [customerId, voucher.id]
+    [resolvedCustomerId, voucher.id]
   );
-  await query(
-    "UPDATE subscriptions SET status = 'active', end_date = NOW() + ($1 || ' days')::interval WHERE customer_id = $2 AND isp_id = $3",
-    [String(voucher.duration_days), customerId, voucher.isp_id]
+
+  const planRow = await query(
+    `SELECT duration_days, default_access_type, max_devices, price_usd
+     FROM plans WHERE id = $1 AND isp_id = $2`,
+    [voucher.plan_id, voucherIsp]
   );
-  const subResult = await query(
-    "SELECT id FROM subscriptions WHERE customer_id = $1 AND isp_id = $2 ORDER BY end_date DESC LIMIT 1",
-    [customerId, voucher.isp_id]
+  const plan = planRow.rows[0];
+  if (!plan) return res.status(500).json({ message: "Voucher plan is missing" });
+  const voucherDeviceCap = Math.max(1, Number(voucher.max_devices) || 1);
+  const planDeviceCap = Math.max(1, Number(plan.max_devices) || 1);
+  const effectiveDevices = Math.min(voucherDeviceCap, planDeviceCap);
+  const durationDays = Number(voucher.duration_days) || 0;
+  const extendMs = durationDays * 86400000;
+  const now = new Date();
+
+  const activeSub = await query(
+    `SELECT id, end_date AS "endDate" FROM subscriptions
+     WHERE customer_id = $1 AND isp_id = $2 AND status = 'active'
+     ORDER BY end_date DESC LIMIT 1`,
+    [resolvedCustomerId, voucherIsp]
   );
-  if (subResult.rows[0]?.id) {
+  let subscriptionId = null;
+  if (activeSub.rows[0]) {
+    subscriptionId = activeSub.rows[0].id;
+    const curEnd = new Date(activeSub.rows[0].endDate);
+    const base = curEnd.getTime() > now.getTime() ? curEnd : now;
+    const newEnd = new Date(base.getTime() + extendMs);
+    await query(
+      `UPDATE subscriptions
+       SET end_date = $1, max_simultaneous_devices = $2, plan_id = $3, status = 'active'
+       WHERE id = $4`,
+      [newEnd.toISOString(), effectiveDevices, voucher.plan_id, subscriptionId]
+    );
+  } else {
+    const accessType =
+      String(plan.default_access_type || "").toLowerCase() === "hotspot" ? "hotspot" : "pppoe";
+    const endDate = new Date(now.getTime() + extendMs);
+    const subIns = await query(
+      `INSERT INTO subscriptions (id, isp_id, customer_id, plan_id, status, access_type, start_date, end_date, max_simultaneous_devices)
+       VALUES (gen_random_uuid(), $1, $2, $3, 'active', $4, $5, $6, $7)
+       RETURNING id`,
+      [voucherIsp, resolvedCustomerId, voucher.plan_id, accessType, now.toISOString(), endDate.toISOString(), effectiveDevices]
+    );
+    subscriptionId = subIns.rows[0].id;
+    const invIns = await query(
+      `INSERT INTO invoices (id, isp_id, subscription_id, customer_id, amount_usd, status, due_date)
+       VALUES (gen_random_uuid(), $1, $2, $3, 0, 'paid', $4)
+       RETURNING id`,
+      [voucherIsp, subscriptionId, resolvedCustomerId, endDate.toISOString()]
+    );
+    await query(
+      `INSERT INTO payments (id, isp_id, invoice_id, provider_ref, amount_usd, status, method)
+       VALUES (gen_random_uuid(), $1, $2, $3, 0, 'confirmed', 'voucher')`,
+      [voucherIsp, invIns.rows[0].id, `voucher-${voucher.id}`]
+    );
+  }
+
+  if (subscriptionId) {
     await provisionSubscriptionAccess({
-      ispId: voucher.isp_id,
-      subscriptionId: subResult.rows[0].id,
+      ispId: voucherIsp,
+      subscriptionId,
       action: "activate"
     });
   }
+
+  const cred = await query(`SELECT password_hash AS "passwordHash" FROM customers WHERE id = $1`, [
+    resolvedCustomerId
+  ]);
+  let subscriberToken = null;
+  if (cred.rows[0]?.passwordHash) {
+    subscriberToken = signSubscriberToken({ id: resolvedCustomerId, isp_id: voucherIsp });
+  }
+
   await logAudit({
-    ispId: voucher.isp_id,
+    ispId: voucherIsp,
     action: "voucher.redeemed",
     entityType: "voucher",
     entityId: voucher.id,
-    details: { customerId, code }
+    details: { customerId: resolvedCustomerId, code }
   });
-  return res.json({ message: "Voucher redeemed", rateLimit: voucher.rate_limit, durationDays: voucher.duration_days });
+  return res.json({
+    message: "Voucher redeemed",
+    rateLimit: voucher.rate_limit,
+    durationDays: voucher.duration_days,
+    maxDevices: effectiveDevices,
+    subscriberToken
+  });
 });
 
 app.get("/api/network/stats", authenticate, async (req, res) => {
@@ -1408,7 +3274,10 @@ app.get("/api/dashboard", authenticate, async (req, res) => {
   const [customers, active, unpaid, revenue] = await Promise.all([
     query("SELECT COUNT(*)::int AS value FROM customers WHERE isp_id = $1", [ispId]),
     query("SELECT COUNT(*)::int AS value FROM subscriptions WHERE isp_id = $1 AND status = 'active'", [ispId]),
-    query("SELECT COUNT(*)::int AS value FROM invoices WHERE isp_id = $1 AND status = 'unpaid'", [ispId]),
+    query(
+      "SELECT COUNT(*)::int AS value FROM invoices WHERE isp_id = $1 AND status IN ('unpaid', 'overdue')",
+      [ispId]
+    ),
     query("SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE isp_id = $1 AND status = 'paid'", [ispId])
   ]);
   res.json({
@@ -1434,5 +3303,210 @@ app.get("/api/super/dashboard", authenticate, requireRoles("super_admin"), async
     totalRevenueUsd: revenue.rows[0].value
   });
 });
+
+const EXPENSE_CATEGORIES = [
+  "field_agent_fixed",
+  "field_agent_percentage",
+  "equipment",
+  "operations",
+  "marketing",
+  "utilities",
+  "transport",
+  "salaries",
+  "taxes",
+  "other"
+];
+
+app.get(
+  "/api/expenses",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "noc_operator"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const from = String(req.query.from || "").slice(0, 10) || new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+    const to = String(req.query.to || "").slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const [rows, sumExp, sumPay] = await Promise.all([
+      query(
+        `SELECT e.id, e.isp_id AS "ispId", e.amount_usd AS "amountUsd", e.category, e.description,
+                e.period_start AS "periodStart", e.period_end AS "periodEnd",
+                e.field_agent_id AS "fieldAgentId", u.full_name AS "fieldAgentName",
+                e.agent_payout_type AS "agentPayoutType", e.agent_payout_percent AS "agentPayoutPercent",
+                e.revenue_basis_usd AS "revenueBasisUsd", e.metadata, e.created_at AS "createdAt",
+                e.created_by AS "createdBy", cu.full_name AS "createdByName"
+         FROM isp_expenses e
+         LEFT JOIN users u ON u.id = e.field_agent_id
+         LEFT JOIN users cu ON cu.id = e.created_by
+         WHERE e.isp_id = $1 AND e.period_start <= $2::date AND e.period_end >= $3::date
+         ORDER BY e.period_start DESC, e.created_at DESC
+         LIMIT 500`,
+        [ispId, to, from]
+      ),
+      query(
+        `SELECT COALESCE(SUM(amount_usd), 0)::float AS t FROM isp_expenses
+         WHERE isp_id = $1 AND period_start <= $2::date AND period_end >= $3::date`,
+        [ispId, to, from]
+      ),
+      query(
+        `SELECT COALESCE(SUM(p.amount_usd), 0)::float AS t FROM payments p
+         JOIN invoices i ON i.id = p.invoice_id
+         WHERE i.isp_id = $1 AND p.status = 'confirmed'
+         AND p.paid_at::date BETWEEN $2::date AND $3::date`,
+        [ispId, from, to]
+      )
+    ]);
+    return res.json({
+      items: rows.rows,
+      summary: {
+        totalExpensesUsd: sumExp.rows[0].t,
+        collectionsInPeriodUsd: sumPay.rows[0].t,
+        filterFrom: from,
+        filterTo: to
+      }
+    });
+  }
+);
+
+app.post(
+  "/api/expenses",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const {
+      amountUsd,
+      category,
+      description = "",
+      periodStart,
+      periodEnd,
+      fieldAgentId = null,
+      agentPayoutType = null,
+      agentPayoutPercent = null,
+      revenueBasisUsd = null,
+      metadata = {}
+    } = req.body || {};
+    if (amountUsd == null || category == null || !periodStart || !periodEnd) {
+      return res.status(400).json({ message: "amountUsd, category, periodStart and periodEnd are required" });
+    }
+    const amt = Number(amountUsd);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return res.status(400).json({ message: "amountUsd must be a positive number" });
+    }
+    if (!EXPENSE_CATEGORIES.includes(String(category))) {
+      return res.status(400).json({ message: `category must be one of: ${EXPENSE_CATEGORIES.join(", ")}` });
+    }
+    const ps = String(periodStart).slice(0, 10);
+    const pe = String(periodEnd).slice(0, 10);
+    if (pe < ps) return res.status(400).json({ message: "periodEnd must be on or after periodStart" });
+    let faid = fieldAgentId || null;
+    if (faid) {
+      const chk = await query(
+        "SELECT id, role, isp_id FROM users WHERE id = $1",
+        [faid]
+      );
+      const u = chk.rows[0];
+      if (!u || u.isp_id !== ispId) return res.status(400).json({ message: "fieldAgentId must belong to this ISP" });
+      if (u.role !== "field_agent") {
+        return res.status(400).json({ message: "fieldAgentId must reference a field_agent user" });
+      }
+    }
+    let apt = agentPayoutType ? String(agentPayoutType) : null;
+    if (apt && !["fixed", "percentage"].includes(apt)) {
+      return res.status(400).json({ message: "agentPayoutType must be fixed or percentage" });
+    }
+    if (category === "field_agent_fixed" || category === "field_agent_percentage") {
+      if (!faid) return res.status(400).json({ message: "fieldAgentId is required for field agent expense categories" });
+      if (category === "field_agent_fixed" && apt && apt !== "fixed") {
+        return res.status(400).json({ message: "field_agent_fixed expects agentPayoutType fixed or null" });
+      }
+      if (category === "field_agent_percentage") {
+        apt = "percentage";
+        const pct = Number(agentPayoutPercent);
+        if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+          return res.status(400).json({
+            message: "field_agent_percentage requires agentPayoutPercent greater than 0 and at most 100"
+          });
+        }
+      }
+      if (category === "field_agent_fixed") {
+        apt = apt || "fixed";
+      }
+    } else {
+      faid = null;
+      apt = null;
+    }
+    const revBasis =
+      revenueBasisUsd != null && revenueBasisUsd !== ""
+        ? Number(revenueBasisUsd)
+        : null;
+    if (revBasis != null && (!Number.isFinite(revBasis) || revBasis < 0)) {
+      return res.status(400).json({ message: "revenueBasisUsd must be a non-negative number when provided" });
+    }
+    let pctVal =
+      agentPayoutPercent != null && agentPayoutPercent !== ""
+        ? Number(agentPayoutPercent)
+        : null;
+    if (category !== "field_agent_percentage") {
+      pctVal = null;
+    }
+    const inserted = await query(
+      `INSERT INTO isp_expenses (id, isp_id, amount_usd, category, description, period_start, period_end,
+          field_agent_id, agent_payout_type, agent_payout_percent, revenue_basis_usd, metadata, created_by)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::date, $6::date, $7, $8, $9, $10, $11::jsonb, $12)
+       RETURNING id, isp_id AS "ispId", amount_usd AS "amountUsd", category, description,
+         period_start AS "periodStart", period_end AS "periodEnd",
+         field_agent_id AS "fieldAgentId", agent_payout_type AS "agentPayoutType",
+         agent_payout_percent AS "agentPayoutPercent", revenue_basis_usd AS "revenueBasisUsd",
+         metadata, created_at AS "createdAt", created_by AS "createdBy"`,
+      [
+        ispId,
+        amt,
+        String(category),
+        String(description || "").slice(0, 2000),
+        ps,
+        pe,
+        faid,
+        apt,
+        pctVal,
+        revBasis,
+        JSON.stringify(metadata && typeof metadata === "object" ? metadata : {}),
+        req.user.sub
+      ]
+    );
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "expense.created",
+      entityType: "expense",
+      entityId: inserted.rows[0].id,
+      details: { category, amountUsd: amt, periodStart: ps, periodEnd: pe }
+    });
+    return res.status(201).json(inserted.rows[0]);
+  }
+);
+
+app.delete(
+  "/api/expenses/:expenseId",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { expenseId } = req.params;
+    const ex = await query("SELECT id FROM isp_expenses WHERE id = $1 AND isp_id = $2", [expenseId, ispId]);
+    if (!ex.rows[0]) return res.status(404).json({ message: "Expense not found" });
+    await query("DELETE FROM isp_expenses WHERE id = $1", [expenseId]);
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "expense.deleted",
+      entityType: "expense",
+      entityId: expenseId,
+      details: {}
+    });
+    return res.json({ message: "Deleted" });
+  }
+);
 
 export default app;

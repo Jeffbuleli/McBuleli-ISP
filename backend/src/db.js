@@ -81,6 +81,11 @@ export async function initDb() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
+  await query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS password_hash TEXT NULL;");
+  await query(
+    "ALTER TABLE customers ADD COLUMN IF NOT EXISTS must_set_password BOOLEAN NOT NULL DEFAULT FALSE;"
+  );
+  await query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS email TEXT NULL;");
 
   await query(`
     CREATE TABLE IF NOT EXISTS plans (
@@ -93,6 +98,16 @@ export async function initDb() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
+  await query("ALTER TABLE plans ADD COLUMN IF NOT EXISTS speed_label TEXT NULL;");
+  await query(
+    "ALTER TABLE plans ADD COLUMN IF NOT EXISTS default_access_type TEXT NOT NULL DEFAULT 'pppoe';"
+  );
+  await query("ALTER TABLE plans ADD COLUMN IF NOT EXISTS max_devices INTEGER NOT NULL DEFAULT 1;");
+  await query("ALTER TABLE plans ADD COLUMN IF NOT EXISTS is_published BOOLEAN NOT NULL DEFAULT FALSE;");
+  await query(
+    "ALTER TABLE plans ADD COLUMN IF NOT EXISTS availability_status TEXT NOT NULL DEFAULT 'available';"
+  );
+  await query("ALTER TABLE plans ADD COLUMN IF NOT EXISTS success_redirect_url TEXT NULL;");
 
   await query(`
     CREATE TABLE IF NOT EXISTS subscriptions (
@@ -108,6 +123,42 @@ export async function initDb() {
   await query(
     "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS access_type TEXT NOT NULL DEFAULT 'pppoe';"
   );
+  await query(
+    "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS max_simultaneous_devices INTEGER NULL;"
+  );
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS wifi_guest_purchases (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      plan_id UUID NOT NULL REFERENCES plans(id) ON DELETE RESTRICT,
+      deposit_id UUID NOT NULL UNIQUE,
+      phone TEXT NOT NULL,
+      pawapay_provider TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      amount TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      subscription_id UUID NULL REFERENCES subscriptions(id) ON DELETE SET NULL,
+      customer_id UUID NULL REFERENCES customers(id) ON DELETE SET NULL,
+      redirect_url TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMP NULL
+    );
+  `);
+  await query(
+    "ALTER TABLE wifi_guest_purchases ADD COLUMN IF NOT EXISTS subscriber_setup_token TEXT NULL;"
+  );
+  await query(`
+    DO $wgp$ BEGIN
+      ALTER TABLE wifi_guest_purchases DROP CONSTRAINT IF EXISTS wifi_guest_purchases_status_check;
+    EXCEPTION WHEN undefined_object THEN NULL;
+    END $wgp$;
+  `);
+  await query(`
+    ALTER TABLE wifi_guest_purchases
+    ADD CONSTRAINT wifi_guest_purchases_status_check
+    CHECK (status IN ('pending', 'completed', 'failed'))
+  `);
 
   await query(`
     CREATE TABLE IF NOT EXISTS invoices (
@@ -139,13 +190,50 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS isp_payment_methods (
       id UUID PRIMARY KEY,
       isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
-      method_type TEXT NOT NULL CHECK (method_type IN ('pawapay', 'cash', 'bank_transfer', 'crypto_wallet', 'other')),
+      method_type TEXT NOT NULL CHECK (
+        method_type IN (
+          'pawapay',
+          'onafriq',
+          'paypal',
+          'binance_pay',
+          'crypto_wallet',
+          'bank_transfer',
+          'cash',
+          'mobile_money',
+          'gateway',
+          'other'
+        )
+      ),
       provider_name TEXT NOT NULL,
       config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
       created_by UUID REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
+  `);
+  await query(`
+    DO $pm$ BEGIN
+      ALTER TABLE isp_payment_methods DROP CONSTRAINT IF EXISTS isp_payment_methods_method_type_check;
+    EXCEPTION WHEN undefined_object THEN NULL;
+    END $pm$;
+  `);
+  await query(`
+    ALTER TABLE isp_payment_methods
+    ADD CONSTRAINT isp_payment_methods_method_type_check
+    CHECK (
+      method_type IN (
+        'pawapay',
+        'onafriq',
+        'paypal',
+        'binance_pay',
+        'crypto_wallet',
+        'bank_transfer',
+        'cash',
+        'mobile_money',
+        'gateway',
+        'other'
+      )
+    )
   `);
 
   await query(`
@@ -170,6 +258,39 @@ export async function initDb() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
+
+  const subStatusConstraints = await query(`
+    SELECT c.conname
+    FROM pg_constraint c
+    JOIN pg_class t ON c.conrelid = t.oid
+    WHERE t.relname = 'isp_platform_subscriptions' AND c.contype = 'c'
+  `);
+  for (const row of subStatusConstraints.rows) {
+    await query(`ALTER TABLE isp_platform_subscriptions DROP CONSTRAINT IF EXISTS "${row.conname}"`);
+  }
+  await query(`
+    ALTER TABLE isp_platform_subscriptions
+    ADD CONSTRAINT isp_platform_subscriptions_status_check
+    CHECK (status IN ('trialing', 'active', 'past_due', 'suspended'))
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS platform_saas_deposit_sessions (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      platform_subscription_id UUID NOT NULL REFERENCES isp_platform_subscriptions(id) ON DELETE CASCADE,
+      deposit_id UUID NOT NULL UNIQUE,
+      amount TEXT NOT NULL,
+      currency TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      phone_number TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('initiated', 'completed', 'failed')) DEFAULT 'initiated',
+      pawapay_init_status TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMP NULL
+    );
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_platform_saas_deposits_isp ON platform_saas_deposit_sessions (isp_id);");
 
   await query(`
     CREATE TABLE IF NOT EXISTS isp_role_profiles (
@@ -200,6 +321,34 @@ export async function initDb() {
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
+  await query("ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS wifi_portal_redirect_url TEXT NULL;");
+  await query("ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS logo_object_key TEXT NULL;");
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS isp_expenses (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      amount_usd NUMERIC(12,2) NOT NULL,
+      category TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      period_start DATE NOT NULL,
+      period_end DATE NOT NULL,
+      field_agent_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      agent_payout_type TEXT NULL,
+      agent_payout_percent NUMERIC(6,2) NULL,
+      revenue_basis_usd NUMERIC(12,2) NULL,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      CONSTRAINT isp_expenses_agent_payout_chk CHECK (
+        agent_payout_type IS NULL OR agent_payout_type IN ('fixed', 'percentage')
+      ),
+      CONSTRAINT isp_expenses_period_chk CHECK (period_end >= period_start)
+    );
+  `);
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_isp_expenses_isp_period ON isp_expenses (isp_id, period_start DESC, period_end DESC);"
+  );
 
   await query(`
     CREATE TABLE IF NOT EXISTS network_usage_daily (
@@ -238,6 +387,22 @@ export async function initDb() {
     "UPDATE isp_network_nodes SET password_enc = password WHERE password_enc IS NULL AND password IS NOT NULL;"
   );
   await query("CREATE INDEX IF NOT EXISTS idx_isp_network_nodes_isp ON isp_network_nodes (isp_id);");
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS network_telemetry_snapshots (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      node_id UUID NOT NULL REFERENCES isp_network_nodes(id) ON DELETE CASCADE,
+      pppoe_active INTEGER NOT NULL DEFAULT 0,
+      hotspot_active INTEGER NOT NULL DEFAULT 0,
+      connected_devices INTEGER NOT NULL DEFAULT 0,
+      details JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_network_telemetry_isp_created ON network_telemetry_snapshots (isp_id, created_at DESC);"
+  );
 
   await query(`
     CREATE TABLE IF NOT EXISTS network_provisioning_events (
@@ -286,6 +451,29 @@ export async function initDb() {
   await query("CREATE INDEX IF NOT EXISTS idx_radius_radreply_username ON radius_radreply (username);");
 
   await query(`
+    CREATE TABLE IF NOT EXISTS radius_accounting_ingest (
+      id BIGSERIAL PRIMARY KEY,
+      isp_id UUID NULL REFERENCES isps(id) ON DELETE SET NULL,
+      username TEXT NULL,
+      acct_session_id TEXT NULL,
+      acct_status_type TEXT NULL,
+      nas_ip_address TEXT NULL,
+      framed_ip_address TEXT NULL,
+      acct_input_octets BIGINT NULL,
+      acct_output_octets BIGINT NULL,
+      event_time TIMESTAMP NULL,
+      raw JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_radius_acct_ingest_isp_created ON radius_accounting_ingest (isp_id, created_at DESC);"
+  );
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_radius_acct_ingest_username ON radius_accounting_ingest (username);"
+  );
+
+  await query(`
     CREATE TABLE IF NOT EXISTS payment_tid_submissions (
       id UUID PRIMARY KEY,
       isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
@@ -322,6 +510,9 @@ export async function initDb() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
+  await query(
+    "ALTER TABLE access_vouchers ADD COLUMN IF NOT EXISTS max_devices INTEGER NOT NULL DEFAULT 1;"
+  );
 
   await query(`
     CREATE TABLE IF NOT EXISTS notification_outbox (
@@ -355,7 +546,7 @@ export async function initDb() {
       id UUID PRIMARY KEY,
       isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
       channel TEXT NOT NULL CHECK (channel IN ('sms', 'email', 'whatsapp')),
-      provider_key TEXT NOT NULL CHECK (provider_key IN ('webhook', 'twilio')),
+      provider_key TEXT NOT NULL CHECK (provider_key IN ('webhook', 'twilio', 'smtp')),
       config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
       created_by UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -368,8 +559,21 @@ export async function initDb() {
   await query(`
     ALTER TABLE isp_notification_providers
     ADD CONSTRAINT isp_notification_providers_provider_key_check
-    CHECK (provider_key IN ('webhook', 'twilio'));
+    CHECK (provider_key IN ('webhook', 'twilio', 'smtp'));
   `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS customer_portal_tokens (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      token TEXT UNIQUE NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_customer_portal_tokens_token ON customer_portal_tokens (token);");
 
   await query(`
     CREATE TABLE IF NOT EXISTS audit_logs (
@@ -437,10 +641,22 @@ export async function initDb() {
     );
   }
 
-  const packageCount = await query("SELECT COUNT(*)::int AS count FROM platform_packages");
-  if (packageCount.rows[0].count === 0) {
-    await query(
-      "INSERT INTO platform_packages (id, code, name, monthly_price_usd, feature_flags) VALUES (gen_random_uuid(), 'starter', 'Starter', 25, '{\"maxUsers\":10,\"advancedAnalytics\":false}'::jsonb), (gen_random_uuid(), 'growth', 'Growth', 79, '{\"maxUsers\":50,\"advancedAnalytics\":true}'::jsonb), (gen_random_uuid(), 'enterprise', 'Enterprise', 199, '{\"maxUsers\":500,\"advancedAnalytics\":true,\"customIntegrations\":true}'::jsonb)"
-    );
-  }
+  await query(`
+    INSERT INTO platform_packages (id, code, name, monthly_price_usd, feature_flags) VALUES
+      (gen_random_uuid(), 'essential', 'Essential', 10,
+        '{"maxUsers":5,"maxNetworkNodes":3,"advancedAnalytics":false,"customDomain":false}'::jsonb),
+      (gen_random_uuid(), 'pro', 'Pro', 15,
+        '{"maxUsers":20,"maxNetworkNodes":3,"advancedAnalytics":true,"customDomain":false}'::jsonb),
+      (gen_random_uuid(), 'business', 'Business', 20,
+        '{"maxUsers":80,"maxNetworkNodes":10,"advancedAnalytics":true,"customDomain":true}'::jsonb)
+    ON CONFLICT (code) DO UPDATE SET
+      name = EXCLUDED.name,
+      monthly_price_usd = EXCLUDED.monthly_price_usd,
+      feature_flags = EXCLUDED.feature_flags
+  `);
+  await query(`
+    DELETE FROM platform_packages pp
+    WHERE pp.code IN ('starter', 'growth', 'enterprise')
+      AND NOT EXISTS (SELECT 1 FROM isp_platform_subscriptions s WHERE s.package_id = pp.id)
+  `);
 }

@@ -1,6 +1,6 @@
-# Multi-ISP Billing System (DRC)
+# McBuleli
 
-Centipid-style foundation for managing many small ISPs in one platform.
+Multi-tenant ISP billing and operations: many ISPs, one platform (DRC-ready workflows, Pawapay, Mobile Money TID, vouchers, MikroTik nodes, optional FreeRADIUS).
 
 ## Included
 
@@ -12,19 +12,26 @@ Centipid-style foundation for managing many small ISPs in one platform.
   - tenant team user management (create/reset/deactivate/invite)
   - per-ISP payment methods (`pawapay`, `cash`, `bank_transfer`, etc)
   - manual Mobile Money TID verification queue (submit -> admin approve/reject)
-  - notification outbox worker with retries (`internal`, `webhook`, `twilio`)
+  - **Public API rate limiting** (in-memory per IP) on signup, Wi‑Fi public routes, and subscriber auth; set **`TRUST_PROXY=true`** behind a reverse proxy for correct client IPs
+  - **RADIUS accounting webhook** `POST /api/webhooks/radius-accounting` → `radius_accounting_ingest` (optional `ispId` in JSON); **`GET /api/network/radius-accounting-ingest`** for NOC review
+  - notification outbox worker with retries (`internal`, `webhook`, `twilio`, **`smtp`** on the email channel via **nodemailer**)
   - test notification endpoint for provider validation
   - access voucher generation/redeem with plan bandwidth and duration
   - MikroTik node management + subscription provisioning events
   - encrypted storage for network-node credentials
-  - optional FreeRADIUS sync events/logging
+  - optional FreeRADIUS sync events/logging; configurable table names (`FREERADIUS_TABLE_RADCHECK` / `FREERADIUS_TABLE_RADREPLY`) for stock `radcheck`/`radreply` schemas
+  - overdue billing job: suspend access for past-due unpaid invoices, mark invoices overdue, scheduled + manual trigger
+  - renewal invoices: create next invoice before subscription end, queue **SMS or email** (if `customers.email` is set and an active **email** provider is configured) plus internal fallback, extend period on payment
   - subscription suspend/reactivate with network sync hooks
   - manager-defined accreditation role profiles
-  - platform SaaS packages and tenant subscriptions
-  - customers, plans, subscriptions, invoices, payments
+  - platform SaaS packages and tenant subscriptions: **Essential ($10/mo), Pro ($15/mo), Business ($20/mo)** with different `feature_flags` (max users, network nodes, analytics, custom domain)
+  - **Self-serve tenant signup** (`POST /api/public/signup`) with **7-day trial** (`PLATFORM_TRIAL_DAYS`), then **Pawapay deposits** in **USD or CDF** (`POST /api/platform/billing/initiate-deposit`; `PLATFORM_USD_TO_CDF` for CDF amount estimate). **Unified Pawapay callback:** `POST /api/webhooks/pawapay` handles **deposits, payouts (withdrawals), and refunds** (same URL in the Pawapay dashboard for all). Optional secret: header `X-Pawapay-Callback-Secret` = `PAWAPAY_CALLBACK_SECRET` (or legacy `PAWAPAY_PLATFORM_CALLBACK_SECRET`). **`GET /api/webhooks/pawapay`** returns JSON instructions and example bodies for your test dashboard. `POST /api/webhooks/pawapay-platform` is an alias. Expired workspaces get **HTTP 402** until a matching deposit completes.
+  - customers (optional **email** for renewal notices), plans, subscriptions, invoices, payments
+  - **Network telemetry**: `POST /api/network/nodes/:nodeId/collect-telemetry` pulls active PPPoE / Hotspot session counts from MikroTik, stores snapshots, and merges peaks into `network_usage_daily` for dashboard stats
   - super-admin global dashboard + per-ISP dashboard
+  - customer self-service portal: opaque token **or** subscriber JWT (`POST /api/subscriber/auth/login`, `POST /api/subscriber/auth/setup-password`) for `GET /api/portal/session` and `POST /api/portal/tid-submissions`; staff `POST /api/portal/tokens` (set `PLATFORM_PUBLIC_BASE_URL` so generated links open the correct frontend host)
 - `frontend`: React dashboard for:
-  - login/logout
+  - login/logout and **`/signup`** company registration (trial + plan pick)
   - invite acceptance
   - forced password update on first login/reset
   - creating ISP tenants (super admin)
@@ -34,6 +41,8 @@ Centipid-style foundation for managing many small ISPs in one platform.
   - assigning platform package subscriptions
   - managing accreditation profiles for field teams
   - customer/plan/subscription/invoice operations
+  - `/portal` customer view (invoices, subscriptions, TID submit) via portal link, phone + password, or post–Wi‑Fi setup token
+  - **Wi‑Fi guest packages**: admin plans include speed, access type (hotspot/PPPoE), max devices, published flag, availability, per-plan redirect; **`/wifi?ispId=`** public page + **Pawapay** Mobile Money (Orange / Airtel / M‑Pesa) without login; success activates subscription and redirects (plan → ISP branding → Google)
 
 ## Run locally
 
@@ -101,12 +110,18 @@ Note: `mcbuleli.com` is only an example domain. Replace with your purchased doma
 4. Use `Sync Activate`/`Sync Suspend` buttons for manual retry.
 5. Check `Provisioning Events` for success/failed/skipped logs.
 
-To harden credentials, set `NETWORK_NODE_SECRET_KEY` in backend `.env`.
-To enable simulated FreeRADIUS sync tables/events, set `FREERADIUS_SYNC_ENABLED=true`.
+Set `NETWORK_NODE_SECRET_KEY` to a **long random value** (32+ characters in production). With `NODE_ENV=production`, the backend **refuses to start** if the key is missing, too short, or a known placeholder. Store it in a secrets manager or K8s secret, rotate only with a plan to re-encrypt stored node credentials.
+To enable FreeRADIUS SQL sync into this app’s PostgreSQL (`radius_radcheck` / `radius_radreply`), set `FREERADIUS_SYNC_ENABLED=true`. Provisioning then writes **Simultaneous-Use** from each subscription’s device cap (plan / voucher / Wi‑Fi checkout) alongside password, **Auth-Type**, and **Mikrotik-Rate-Limit**. Point your FreeRADIUS `sql` module at the same DB so NAS authentication uses these rows.
 
 ## Next implementation steps
 
-1. Add encrypted storage for network node passwords (KMS or app-level encryption key)
-2. Add FreeRADIUS table synchronization alongside RouterOS REST calls
-3. Add recurring billing scheduler + automatic suspension job
-4. Add deep network telemetry pull (active sessions, signal/rx-tx per CPE)
+1. Per-CPE signal / throughput time-series and charts (SNMP / MikroTik interface stats)
+2. Optional: encrypt `customers.email` at rest for strict compliance tenants
+3. Correlate `radius_accounting_ingest` with subscriptions for live “who is online” dashboards
+4. Optional CAPTCHA or fraud signals on Wi‑Fi checkout for high-risk markets
+
+### Recently added
+
+- **Public rate limits** (per IP): signup, Wi‑Fi catalog/purchase/status polling, subscriber login/setup-password (`TRUST_PROXY`, env `PUBLIC_RL_*` overrides).
+- **`POST /api/webhooks/radius-accounting`**: stores normalized accounting rows (`RADIUS_ACCOUNTING_WEBHOOK_SECRET` required when `NODE_ENV=production`).
+- **Telemetry snapshots** now include short **PPPoE / Hotspot session name samples** from MikroTik.

@@ -15,6 +15,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Uploaded branding logos (local disk)
+backend/uploads/
+
 # Build outputs
 dist/
 frontend/dist/
