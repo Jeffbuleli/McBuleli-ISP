@@ -852,9 +852,37 @@ function App() {
 
   async function onCreateCustomer(e) {
     e.preventDefault();
-    await api.createCustomer(selectedIspId, customerForm);
-    setCustomerForm({ fullName: "", phone: "", email: "", initialPassword: "" });
-    refresh();
+    setError("");
+    setNotice("");
+    if (!selectedIspId) {
+      setError("Sélectionnez d'abord un espace FAI.");
+      return;
+    }
+    const fullName = String(customerForm.fullName || "").trim();
+    const phone = String(customerForm.phone || "").trim();
+    const email = String(customerForm.email || "").trim();
+    const initialPassword = String(customerForm.initialPassword || "");
+    if (!fullName || !phone) {
+      setError("Indiquez au minimum le nom complet et le téléphone du client.");
+      return;
+    }
+    if (initialPassword && initialPassword.length > 0 && initialPassword.length < 6) {
+      setError("Le mot de passe portail doit faire au moins 6 caractères (ou laissez vide).");
+      return;
+    }
+    try {
+      await api.createCustomer(selectedIspId, {
+        fullName,
+        phone,
+        email: email || undefined,
+        initialPassword: initialPassword || undefined
+      });
+      setCustomerForm({ fullName: "", phone: "", email: "", initialPassword: "" });
+      setNotice("Client enregistré.");
+      refresh();
+    } catch (err) {
+      setError(err.message || "Impossible d'enregistrer le client.");
+    }
   }
 
   async function onCreateExpense(e) {
