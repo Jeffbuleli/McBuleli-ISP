@@ -12,6 +12,11 @@ export function cdfAmountForUsd(usd) {
   return String(Math.max(1, n));
 }
 
+export function usdAmountForCdf(cdf) {
+  const n = Number(cdf) / USD_TO_CDF;
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export function usdAmountString(usd) {
   const n = Number(usd);
   if (!Number.isFinite(n)) return "0";
