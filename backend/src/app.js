@@ -1339,9 +1339,10 @@ app.post(
   async (req, res) => {
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
-    const { currency, phoneNumber, provider } = req.body;
-    if (!currency || !phoneNumber || !provider) {
-      return res.status(400).json({ message: "currency, phoneNumber and provider are required (Pawapay MMO codes, e.g. MTN_MOMO_COD)" });
+    const { currency, phoneNumber, networkKey, provider } = req.body;
+    const pawapayProvider = provider ? String(provider).trim() : resolveWifiGuestPawapayProvider(networkKey);
+    if (!currency || !phoneNumber || !pawapayProvider) {
+      return res.status(400).json({ message: "currency, phoneNumber and networkKey are required" });
     }
     const cur = String(currency).toUpperCase();
     if (cur !== "USD" && cur !== "CDF") {
@@ -1366,7 +1367,7 @@ app.post(
         type: "MMO",
         accountDetails: {
           phoneNumber: phone,
-          provider: String(provider).trim()
+          provider: pawapayProvider
         }
       },
       clientReferenceId: `saas-${ispId}-${sub.id}`.slice(0, 200),
