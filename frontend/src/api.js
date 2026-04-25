@@ -182,6 +182,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  verifyLoginMfa: (payload) =>
+    publicRequest("/auth/mfa/verify-login", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   me: () => request("/auth/me"),
   changePassword: (payload) =>
     request("/auth/change-password", {
@@ -527,6 +532,7 @@ export const api = {
       body: JSON.stringify({ ...payload, ispId })
     }),
   getPlatformBillingStatus: (ispId) => request(withIsp("/platform/billing/status", ispId)),
+  getPawapayNetworks: () => publicRequest("/public/mobile-money-networks"),
   initiatePlatformDeposit: (ispId, payload) =>
     request(withIsp("/platform/billing/initiate-deposit", ispId), {
       method: "POST",
@@ -538,5 +544,16 @@ export const api = {
     request(withIsp("/platform/billing/upgrade-plan", ispId), {
       method: "POST",
       body: JSON.stringify({ packageId, ispId })
+    }),
+  getWithdrawals: (ispId) => request(withIsp("/withdrawals", ispId)),
+  requestWithdrawalMfa: (ispId, payload) =>
+    request(withIsp("/withdrawals/mfa", ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
+  createWithdrawal: (ispId, payload) =>
+    request(withIsp("/withdrawals", ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
     })
 };

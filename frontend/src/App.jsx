@@ -342,6 +342,8 @@ function App() {
   const [user, setUser] = useState(null);
   const [tenantContext, setTenantContext] = useState(null);
   const [loginForm, setLoginForm] = useState({ email: "admin@isp.local", password: "admin123" });
+  const [mfaLogin, setMfaLogin] = useState(null);
+  const [mfaCode, setMfaCode] = useState("");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
   const [isps, setIsps] = useState([]);
   const [selectedIspId, setSelectedIspId] = useState("");
@@ -509,9 +511,19 @@ function App() {
   const [saasPayForm, setSaasPayForm] = useState({
     currency: "CDF",
     phoneNumber: "",
-    provider: "MTN_MOMO_COD"
+    networkKey: "orange"
   });
   const [saasDepositResult, setSaasDepositResult] = useState(null);
+  const [pawapayNetworks, setPawapayNetworks] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
+  const [withdrawalForm, setWithdrawalForm] = useState({
+    amountUsd: "",
+    currency: "USD",
+    phoneNumber: "",
+    networkKey: "orange",
+    mfaCode: ""
+  });
+  const [withdrawalMfa, setWithdrawalMfa] = useState(null);
   const [upgradePackageId, setUpgradePackageId] = useState("");
   const [platformBillingStatus, setPlatformBillingStatus] = useState(null);
   const [networkNodeForm, setNetworkNodeForm] = useState({
@@ -548,14 +560,18 @@ function App() {
         setIsps([]);
         setSelectedIspId(sid);
         try {
-          const [packages, platformSubs, snap] = await Promise.all([
+          const [packages, platformSubs, snap, networks, withdrawalData] = await Promise.all([
             api.getPlatformPackages(),
             api.getPlatformSubscriptions(sid),
-            api.getPlatformBillingStatus(sid)
+            api.getPlatformBillingStatus(sid),
+            api.getPawapayNetworks(),
+            api.getWithdrawals(sid)
           ]);
           setPlatformPackages(packages);
           setPlatformSubscriptions(platformSubs);
           setPlatformBillingStatus(snap);
+          setPawapayNetworks(networks);
+          setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
         } catch (_e) {
           /* billing endpoints stay reachable */
         }
@@ -576,6 +592,8 @@ function App() {
       ]);
       const allIsps = take([allIspsResult], 0, [], "isps");
       const packages = take([packagesResult], 0, [], "platformPackages");
+      const [networkOptionsResult] = await Promise.allSettled([api.getPawapayNetworks()]);
+      setPawapayNetworks(take([networkOptionsResult], 0, [], "pawapayNetworks"));
 
       const activeIspId =
         tenantContext?.ispId || selectedTenantId || currentUser.ispId || allIsps[0]?.id || "";
@@ -620,6 +638,7 @@ function App() {
       let vchs = [];
       let telemetry = [];
       let radiusAcct = [];
+      let withdrawalData = { items: [] };
 
       if (activeIspId) {
         const settled = await Promise.allSettled([
@@ -645,7 +664,8 @@ function App() {
           api.getVouchers(activeIspId),
           api.getTelemetrySnapshots(activeIspId),
           api.getRadiusAccountingIngest(activeIspId, 80),
-          api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to)
+          api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to),
+          api.getWithdrawals(activeIspId)
         ]);
         dash = take(settled, 0, {}, "dashboard");
         c = take(settled, 1, [], "customers");
@@ -670,11 +690,17 @@ function App() {
         telemetry = take(settled, 20, [], "telemetry");
         radiusAcct = take(settled, 21, [], "radiusAccounting");
         const expData = take(settled, 22, { items: [], summary: null }, "expenses");
+        withdrawalData = take(settled, 23, { cashbox: null, items: [] }, "withdrawals");
         setExpenses(Array.isArray(expData?.items) ? expData.items : []);
         setExpenseSummary(expData?.summary || null);
+        setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
+        if (withdrawalData?.cashbox) {
+          dash = { ...dash, cashbox: withdrawalData.cashbox };
+        }
       } else {
         setExpenses([]);
         setExpenseSummary(null);
+        setWithdrawals([]);
       }
 
       if (loadFailures.length) {
@@ -802,6 +828,12 @@ function App() {
     setError("");
     try {
       const payload = await api.login(loginForm);
+      if (payload.mfaRequired) {
+        setMfaLogin(payload);
+        setMfaCode("");
+        setNotice(payload.message || "Code MFA requis.");
+        return;
+      }
       setAuthToken(payload.token);
       setUser(payload.user);
       refresh(payload.user.ispId || "");
@@ -810,9 +842,30 @@ function App() {
     }
   }
 
+  async function onVerifyLoginMfa(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = await api.verifyLoginMfa({
+        challengeId: mfaLogin?.challengeId,
+        code: mfaCode
+      });
+      setAuthToken(payload.token);
+      setUser(payload.user);
+      setMfaLogin(null);
+      setMfaCode("");
+      setNotice("");
+      refresh(payload.user.ispId || "");
+    } catch (err) {
+      setError(err.message || "Code MFA invalide.");
+    }
+  }
+
   function onLogout() {
     setAuthToken("");
     setUser(null);
+    setMfaLogin(null);
+    setMfaCode("");
     setIsps([]);
     setSelectedIspId("");
     setSuperDashboard(null);
@@ -838,6 +891,10 @@ function App() {
     setVouchers([]);
     setExpenses([]);
     setExpenseSummary(null);
+    setWithdrawals([]);
+    setWithdrawalMfa(null);
+    setMfaLogin(null);
+    setMfaCode("");
     setPlans([]);
     setSubscriptions([]);
     setInvoices([]);
@@ -993,7 +1050,7 @@ function App() {
       const data = await api.initiatePlatformDeposit(selectedIspId, {
         currency: saasPayForm.currency,
         phoneNumber: saasPayForm.phoneNumber,
-        provider: saasPayForm.provider
+        networkKey: saasPayForm.networkKey
       });
       setSaasDepositResult(data);
       setNotice(data.message || "Dépôt initié.");
@@ -1012,6 +1069,51 @@ function App() {
       await refresh();
     } catch (err) {
       setError(err.message || "Impossible de lire le statut du dépôt.");
+    }
+  }
+
+  async function onRequestWithdrawalMfa(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (!selectedIspId) return;
+    try {
+      const data = await api.requestWithdrawalMfa(selectedIspId, {
+        amountUsd: withdrawalForm.amountUsd,
+        currency: withdrawalForm.currency,
+        phoneNumber: withdrawalForm.phoneNumber,
+        networkKey: withdrawalForm.networkKey
+      });
+      setWithdrawalMfa(data);
+        setNotice(data.code ? `Code MFA généré pour valider le retrait : ${data.code}` : "Code MFA généré pour valider le retrait.");
+    } catch (err) {
+      setError(err.message || "Impossible de générer le code MFA de retrait.");
+    }
+  }
+
+  async function onCreateWithdrawal(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (!selectedIspId || !withdrawalMfa?.challengeId) {
+      setError("Demandez d'abord le code MFA du retrait.");
+      return;
+    }
+    try {
+      const data = await api.createWithdrawal(selectedIspId, {
+        amountUsd: withdrawalForm.amountUsd,
+        currency: withdrawalForm.currency,
+        phoneNumber: withdrawalForm.phoneNumber,
+        networkKey: withdrawalForm.networkKey,
+        mfaChallengeId: withdrawalMfa.challengeId,
+        mfaCode: withdrawalForm.mfaCode
+      });
+      setNotice(data.message || "Retrait demandé.");
+      setWithdrawalMfa(null);
+      setWithdrawalForm({ ...withdrawalForm, amountUsd: "", mfaCode: "" });
+      await refresh();
+    } catch (err) {
+      setError(err.message || "Impossible de créer le retrait.");
     }
   }
 
@@ -1669,28 +1771,53 @@ function App() {
               </div>
             </header>
             {error && <p className="error">{error}</p>}
-            <form className="panel" onSubmit={onLogin}>
-              <h2>{isEn ? "Login" : "Connexion"}</h2>
-              <input
-                placeholder={isEn ? "Email address" : "Adresse e-mail"}
-                value={loginForm.email}
-                onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-              />
-              <input
-                placeholder={isEn ? "Password" : "Mot de passe"}
-                type="password"
-                value={loginForm.password}
-                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-              />
-              <button type="submit">{isEn ? "Login" : "Se connecter"}</button>
-              <p>
-                <a href="/signup">{isEn ? "Create a McBuleli account" : "Créer un compte entreprise McBuleli"}</a>{" "}
-                ({isEn ? "7-day trial, Mobile Money billing" : "essai 7 jours, facturation Mobile Money"})
-              </p>
-              <p style={{ fontSize: "0.88rem", color: "var(--mb-muted)" }}>
-                {isEn ? "Demo admin:" : "Démo admin :"} admin@isp.local / admin123
-              </p>
-            </form>
+            {mfaLogin ? (
+              <form className="panel" onSubmit={onVerifyLoginMfa}>
+                <h2>{isEn ? "MFA verification" : "Vérification MFA"}</h2>
+                <p>
+                  {isEn
+                    ? "Enter the 6-digit code sent to the internal notification outbox or SMS provider."
+                    : "Saisissez le code à 6 chiffres envoyé dans la file de notifications interne ou par SMS."}
+                </p>
+                {mfaLogin.devCode ? (
+                  <p style={{ fontSize: "0.9rem", color: "var(--mb-muted)" }}>
+                    {isEn ? "Development code:" : "Code développement :"} <code>{mfaLogin.devCode}</code>
+                  </p>
+                ) : null}
+                <input
+                  placeholder={isEn ? "MFA code" : "Code MFA"}
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                />
+                <button type="submit">{isEn ? "Verify" : "Valider"}</button>
+                <button type="button" onClick={() => setMfaLogin(null)}>
+                  {isEn ? "Back to login" : "Retour connexion"}
+                </button>
+              </form>
+            ) : (
+              <form className="panel" onSubmit={onLogin}>
+                <h2>{isEn ? "Login" : "Connexion"}</h2>
+                <input
+                  placeholder={isEn ? "Email address" : "Adresse e-mail"}
+                  value={loginForm.email}
+                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                />
+                <input
+                  placeholder={isEn ? "Password" : "Mot de passe"}
+                  type="password"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                />
+                <button type="submit">{isEn ? "Login" : "Se connecter"}</button>
+                <p>
+                  <a href="/signup">{isEn ? "Create a McBuleli account" : "Créer un compte entreprise McBuleli"}</a>{" "}
+                  ({isEn ? "1-month trial, Mobile Money billing" : "essai 1 mois, facturation Mobile Money"})
+                </p>
+                <p style={{ fontSize: "0.88rem", color: "var(--mb-muted)" }}>
+                  {isEn ? "Demo admin:" : "Démo admin :"} admin@isp.local / admin123
+                </p>
+              </form>
+            )}
           </div>
         </div>
       </main>
@@ -1814,11 +1941,16 @@ function App() {
                     value={saasPayForm.phoneNumber}
                     onChange={(e) => setSaasPayForm({ ...saasPayForm, phoneNumber: e.target.value })}
                   />
-                  <input
-                    placeholder={t("Code fournisseur Mobile Money", "Mobile Money provider code")}
-                    value={saasPayForm.provider}
-                    onChange={(e) => setSaasPayForm({ ...saasPayForm, provider: e.target.value })}
-                  />
+                  <select
+                    value={saasPayForm.networkKey}
+                    onChange={(e) => setSaasPayForm({ ...saasPayForm, networkKey: e.target.value })}
+                  >
+                    {pawapayNetworks.map((network) => (
+                      <option key={network.key} value={network.key}>
+                        {network.label}
+                      </option>
+                    ))}
+                  </select>
                   <button type="submit" disabled={!selectedIspId}>
                     {t("Payer l'abonnement mensuel", "Pay monthly subscription")}
                   </button>
@@ -1874,6 +2006,13 @@ function App() {
         <Card title={t("Appareils connectés", "Connected Devices")} value={networkStats?.connectedDevices ?? 0} />
         <Card title={t("Bande passante (Go)", "Bandwidth (GB)")} value={networkStats?.bandwidthTotalGb ?? 0} />
         <Card title={t("Encaissements sur la période (USD)", "Revenue In Period (USD)")} value={networkStats?.revenueCollectedUsd ?? 0} />
+      </section>
+
+      <section className="grid metrics">
+        <Card title={t("Caisse cash (USD)", "Cash till (USD)")} value={networkStats?.cashbox?.cashUsd ?? dashboard?.cashbox?.cashUsd ?? 0} />
+        <Card title={t("Caisse TID (USD)", "TID till (USD)")} value={networkStats?.cashbox?.tidUsd ?? dashboard?.cashbox?.tidUsd ?? 0} />
+        <Card title={t("Mobile Money (USD)", "Mobile Money (USD)")} value={networkStats?.cashbox?.mobileMoneyUsd ?? dashboard?.cashbox?.mobileMoneyUsd ?? 0} />
+        <Card title={t("Retirable Mobile Money (USD)", "Withdrawable Mobile Money (USD)")} value={networkStats?.cashbox?.withdrawableMobileMoneyUsd ?? dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0} />
       </section>
 
       <section className="panel">
@@ -2904,6 +3043,78 @@ function App() {
         <Card title="Factures impayées" value={dashboard?.unpaidInvoices ?? 0} />
         <Card title="Chiffre d'affaires (USD)" value={dashboard?.revenueUsd ?? 0} />
       </section>
+
+      <section className="grid metrics">
+        <Card title="Cash encaissé (USD)" value={dashboard?.cashbox?.cashUsd ?? 0} />
+        <Card title="TID validés (USD)" value={dashboard?.cashbox?.tidUsd ?? 0} />
+        <Card title="Mobile Money Pawapay (USD)" value={dashboard?.cashbox?.mobileMoneyUsd ?? 0} />
+        <Card title="Retirable Mobile Money (USD)" value={dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0} />
+      </section>
+
+      {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+        <section className="panel">
+          <h2>Retrait Mobile Money sécurisé</h2>
+          <p>
+            Les retraits sont limités aux paiements Mobile Money confirmés via Pawapay. Les encaissements cash et TID
+            manuel restent visibles dans les statistiques, mais ne sont pas retirables depuis le compte Pawapay.
+          </p>
+          <form onSubmit={onRequestWithdrawalMfa}>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Montant à retirer (USD)"
+              value={withdrawalForm.amountUsd}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, amountUsd: e.target.value })}
+            />
+            <select
+              value={withdrawalForm.currency}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, currency: e.target.value })}
+            >
+              <option value="USD">USD</option>
+              <option value="CDF">CDF</option>
+            </select>
+            <input
+              placeholder="Téléphone bénéficiaire"
+              value={withdrawalForm.phoneNumber}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, phoneNumber: e.target.value })}
+            />
+            <select
+              value={withdrawalForm.networkKey}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, networkKey: e.target.value })}
+            >
+              {pawapayNetworks.map((n) => (
+                <option key={n.key} value={n.key}>
+                  {n.label}
+                </option>
+              ))}
+            </select>
+            <button type="submit" disabled={!selectedIspId}>
+              Demander le code MFA
+            </button>
+          </form>
+          {withdrawalMfa ? (
+            <form onSubmit={onCreateWithdrawal}>
+              <p>
+                Code envoyé. {withdrawalMfa.code ? `Code test: ${withdrawalMfa.code}` : null}
+              </p>
+              <input
+                placeholder="Code MFA"
+                value={withdrawalForm.mfaCode}
+                onChange={(e) => setWithdrawalForm({ ...withdrawalForm, mfaCode: e.target.value })}
+              />
+              <button type="submit">Valider le retrait</button>
+            </form>
+          ) : null}
+          {withdrawals.slice(0, 8).map((w) => (
+            <p key={w.id}>
+              {new Date(w.createdAt).toLocaleString()} — {w.amountUsd} {w.currency} vers {w.phoneNumber} ({w.provider}) —{" "}
+              {w.status}
+              {w.failureMessage ? ` — ${w.failureMessage}` : ""}
+            </p>
+          ))}
+        </section>
+      )}
 
       {(user.role === "super_admin" ||
         user.role === "company_manager" ||
