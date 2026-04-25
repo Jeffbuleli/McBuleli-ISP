@@ -40,7 +40,7 @@ export function requireRoles(...allowedRoles) {
 }
 
 export function resolveIspId(req, res) {
-  if (req.user.role === "super_admin") {
+  if (req.user.role === "system_owner" || req.user.role === "super_admin") {
     const requested =
       req.query.ispId || req.body.ispId || req.headers["x-isp-id"] || req.tenantIspId;
     if (!requested) {

@@ -26,6 +26,7 @@ export async function initDb() {
     );
   `);
   await query("ALTER TABLE isps ADD COLUMN IF NOT EXISTS subdomain TEXT UNIQUE;");
+  await query("ALTER TABLE isps ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE;");
 
   await query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -44,6 +45,7 @@ export async function initDb() {
     ADD CONSTRAINT users_role_check
     CHECK (
       role IN (
+        'system_owner',
         'super_admin',
         'company_manager',
         'isp_admin',
@@ -60,6 +62,7 @@ export async function initDb() {
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS accreditation_level TEXT NOT NULL DEFAULT 'basic';");
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_totp_secret TEXT NULL;");
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_totp_enabled BOOLEAN NOT NULL DEFAULT FALSE;");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS seeded_account_key TEXT UNIQUE NULL;");
 
   await query(`
     CREATE TABLE IF NOT EXISTS user_mfa_challenges (
@@ -694,14 +697,46 @@ export async function initDb() {
     ON CONFLICT (isp_id, channel) DO NOTHING;
   `);
 
+  const ownerEmail = process.env.SYSTEM_OWNER_EMAIL || "owner@mcbuleli.live";
+  const ownerPassword = process.env.SYSTEM_OWNER_INITIAL_PASSWORD || "owner12345";
+  const ownerHash = await bcrypt.hash(ownerPassword, 10);
+  await query(
+    `INSERT INTO users (id, isp_id, full_name, email, password_hash, role, is_active, must_change_password)
+     VALUES (gen_random_uuid(), NULL, $1, $2, $3, 'system_owner', TRUE, TRUE)
+     ON CONFLICT (email) DO UPDATE SET role = 'system_owner', isp_id = NULL, is_active = TRUE`,
+    ["Créateur système", ownerEmail.toLowerCase(), ownerHash]
+  );
+
   const adminCount = await query("SELECT COUNT(*)::int AS count FROM users WHERE role = 'super_admin'");
   if (adminCount.rows[0].count === 0) {
     const hash = await bcrypt.hash("admin123", 10);
     await query(
-      "INSERT INTO users (id, isp_id, full_name, email, password_hash, role, is_active, must_change_password) VALUES (gen_random_uuid(), NULL, $1, $2, $3, 'super_admin', TRUE, FALSE)",
+      "INSERT INTO users (id, isp_id, full_name, email, password_hash, role, is_active, must_change_password) VALUES (gen_random_uuid(), NULL, $1, $2, $3, 'super_admin', TRUE, TRUE)",
       ["Platform Admin", "admin@isp.local", hash]
     );
   }
+
+  const demoIspId = "00000000-0000-4000-8000-000000000123";
+  await query(
+    `INSERT INTO isps (id, name, location, contact_phone, subdomain, is_demo)
+     VALUES ($1, 'McBuleli Demo ISP', 'Demo', '+243000000000', 'demo.mcbuleli.local', TRUE)
+     ON CONFLICT (id) DO UPDATE SET is_demo = TRUE`,
+    [demoIspId]
+  );
+  await query(
+    `INSERT INTO isp_branding (id, isp_id, display_name, contact_phone)
+     VALUES (gen_random_uuid(), $1, 'McBuleli Demo', '+243000000000')
+     ON CONFLICT (isp_id) DO UPDATE SET display_name = EXCLUDED.display_name`,
+    [demoIspId]
+  );
+  const demoPassword = process.env.DEMO_ACCOUNT_INITIAL_PASSWORD || "demo12345";
+  const demoHash = await bcrypt.hash(demoPassword, 10);
+  await query(
+    `INSERT INTO users (id, isp_id, full_name, email, password_hash, role, is_active, must_change_password)
+     VALUES (gen_random_uuid(), $1, 'Compte Démo McBuleli', 'demo@mcbuleli.live', $2, 'isp_admin', TRUE, FALSE)
+     ON CONFLICT (email) DO UPDATE SET isp_id = $1, role = 'isp_admin', is_active = TRUE`,
+    [demoIspId, demoHash]
+  );
 
   await query(`
     INSERT INTO platform_packages (id, code, name, monthly_price_usd, feature_flags) VALUES

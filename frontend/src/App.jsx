@@ -613,7 +613,7 @@ function App() {
         tenantContext?.ispId || selectedTenantId || currentUser.ispId || allIsps[0]?.id || "";
 
       let superDash;
-      if (currentUser.role === "super_admin") {
+      if (currentUser.role === "system_owner" || currentUser.role === "super_admin") {
         const [sd] = await Promise.allSettled([api.getSuperDashboard()]);
         superDash = take([sd], 0, {
           totalIsps: allIsps.length,
@@ -2023,6 +2023,41 @@ function App() {
         />
         <Card title={t("Chiffre d'affaires global (USD)", "Global Revenue (USD)")} value={superDashboard?.totalRevenueUsd ?? 0} />
       </section>
+
+      {user.role === "system_owner" && superDashboard?.tenants ? (
+        <section className="panel">
+          <h2>Vue créateur système</h2>
+          <p>
+            Compte propriétaire global. Les mots de passe des entreprises sont stockés de façon chiffrée et ne sont pas
+            affichables ; utilisez les invitations ou la réinitialisation pour donner un nouvel accès.
+          </p>
+          <div className="grid">
+            {superDashboard.tenants.map((tenant) => (
+              <article className="panel" key={tenant.id}>
+                <h3>
+                  {tenant.name} {tenant.isDemo ? "(démo)" : ""}
+                </h3>
+                <p>
+                  {tenant.location} — {tenant.contactPhone} — {tenant.subscriptionStatus || "sans abonnement"}
+                </p>
+                <p>
+                  Plan: {tenant.packageName || "—"} · Fin:{" "}
+                  {tenant.subscriptionEndsAt
+                    ? new Date(tenant.subscriptionEndsAt).toLocaleDateString("fr-FR")
+                    : "—"}
+                </p>
+                <p>
+                  Créé le {new Date(tenant.createdAt).toLocaleDateString("fr-FR")} · Admins:{" "}
+                  {(tenant.adminUsers || []).map((admin) => `${admin.fullName} <${admin.email}>`).join(", ") || "—"}
+                </p>
+                <button type="button" onClick={() => refresh(tenant.id)}>
+                  Ouvrir cet espace
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid metrics">
         <Card title={t("Utilisateurs hotspot", "Hotspot Users")} value={networkStats?.hotspotUsers ?? 0} />

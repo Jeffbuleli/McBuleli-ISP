@@ -219,6 +219,7 @@ export const api = {
       body: JSON.stringify(payload)
     }),
   getIsps: () => request("/isps"),
+  getSystemOwnerOverview: () => request("/system-owner/overview"),
   getBranding: (ispId) => request(withIsp("/branding", ispId)),
   updateBranding: (ispId, payload) =>
     request(withIsp("/branding", ispId), {
