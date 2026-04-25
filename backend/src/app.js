@@ -963,9 +963,16 @@ app.get("/api/portal/session", authenticatePortal, async (req, res) => {
       [ispId, customerId]
     ),
     query(
-      `SELECT id, plan_id AS "planId", status, access_type AS "accessType", start_date AS "startDate", end_date AS "endDate",
-              max_simultaneous_devices AS "maxSimultaneousDevices"
-       FROM subscriptions WHERE isp_id = $1 AND customer_id = $2 ORDER BY start_date DESC LIMIT 20`,
+      `SELECT s.id, s.plan_id AS "planId", p.name AS "planName", p.price_usd AS "priceUsd",
+              p.duration_days AS "durationDays", p.rate_limit AS "rateLimit", p.speed_label AS "speedLabel",
+              p.default_access_type AS "defaultAccessType", s.status, s.access_type AS "accessType",
+              s.start_date AS "startDate", s.end_date AS "endDate",
+              s.max_simultaneous_devices AS "maxSimultaneousDevices"
+       FROM subscriptions s
+       JOIN plans p ON p.id = s.plan_id
+       WHERE s.isp_id = $1 AND s.customer_id = $2
+       ORDER BY s.end_date DESC, s.start_date DESC
+       LIMIT 20`,
       [ispId, customerId]
     ),
     query(
