@@ -46,6 +46,7 @@ import {
 import { WIFI_GUEST_NETWORK_OPTIONS, resolveWifiGuestPawapayProvider } from "./wifiGuestProviders.js";
 import { createPublicRateLimiter } from "./publicRateLimit.js";
 import { insertRadiusAccountingRecord } from "./radiusAccountingIngest.js";
+import { generateTotpSecret, totpAuthUrl, verifyTotpCode } from "./totp.js";
 import fs from "fs";
 import path from "path";
 import multer from "multer";
@@ -395,8 +396,24 @@ function publicUserPayload(user, extra = {}) {
     isActive: user.is_active,
     mustChangePassword: user.must_change_password,
     mfaRequired: MFA_REQUIRED_ROLES.has(user.role),
+    mfaTotpEnabled: Boolean(user.mfa_totp_enabled),
     ...extra
   };
+}
+
+async function verifyTotpForUser(userId, code) {
+  const result = await query(
+    "SELECT mfa_totp_secret, mfa_totp_enabled FROM users WHERE id = $1",
+    [userId]
+  );
+  const user = result.rows[0];
+  if (!user?.mfa_totp_enabled || !user?.mfa_totp_secret) {
+    return { ok: false, message: "Configure Google Authenticator before requesting withdrawals." };
+  }
+  if (!verifyTotpCode({ secret: user.mfa_totp_secret, code })) {
+    return { ok: false, message: "Invalid authenticator code." };
+  }
+  return { ok: true };
 }
 
 async function createMfaChallenge({ user, purpose, metadata = {} }) {
@@ -1061,7 +1078,7 @@ app.post("/api/auth/mfa/verify-login", async (req, res) => {
 
 app.get("/api/auth/me", authenticate, async (req, res) => {
   const result = await query(
-    "SELECT id, email, full_name, role, isp_id, is_active, must_change_password FROM users WHERE id = $1",
+    "SELECT id, email, full_name, role, isp_id, is_active, must_change_password, mfa_totp_enabled FROM users WHERE id = $1",
     [req.user.sub]
   );
   const user = result.rows[0];
@@ -1071,6 +1088,44 @@ app.get("/api/auth/me", authenticate, async (req, res) => {
     platformBilling = await getPlatformBillingSnapshot(user.isp_id);
   }
   return res.json(publicUserPayload(user, { platformBilling }));
+});
+
+app.post("/api/auth/mfa/totp/setup", authenticate, async (req, res) => {
+  const result = await query(
+    "SELECT id, email, role, mfa_totp_enabled FROM users WHERE id = $1",
+    [req.user.sub]
+  );
+  const user = result.rows[0];
+  if (!user) return res.status(404).json({ message: "User not found" });
+  if (!MFA_REQUIRED_ROLES.has(user.role)) {
+    return res.status(400).json({ message: "MFA setup is required only for protected roles." });
+  }
+  const secret = generateTotpSecret();
+  await query("UPDATE users SET mfa_totp_secret = $1, mfa_totp_enabled = FALSE WHERE id = $2", [
+    secret,
+    req.user.sub
+  ]);
+  return res.json({
+    secret,
+    otpauthUrl: totpAuthUrl({
+      secret,
+      accountName: user.email,
+      issuer: "McBuleli"
+    }),
+    enabled: false
+  });
+});
+
+app.post("/api/auth/mfa/totp/enable", authenticate, async (req, res) => {
+  const { code } = req.body;
+  const result = await query("SELECT id, mfa_totp_secret FROM users WHERE id = $1", [req.user.sub]);
+  const user = result.rows[0];
+  if (!user?.mfa_totp_secret) return res.status(400).json({ message: "Start TOTP setup first." });
+  if (!verifyTotpCode({ secret: user.mfa_totp_secret, code })) {
+    return res.status(400).json({ message: "Invalid authenticator code." });
+  }
+  await query("UPDATE users SET mfa_totp_enabled = TRUE WHERE id = $1", [req.user.sub]);
+  return res.json({ enabled: true });
 });
 
 app.post("/api/auth/change-password", authenticate, async (req, res) => {
@@ -1443,45 +1498,13 @@ app.get(
 );
 
 app.post(
-  "/api/withdrawals/mfa",
-  authenticate,
-  requireRoles("super_admin", "company_manager", "isp_admin"),
-  async (req, res) => {
-    const ispId = resolveIspId(req, res);
-    if (!ispId) return;
-    const userResult = await query("SELECT * FROM users WHERE id = $1", [req.user.sub]);
-    const user = userResult.rows[0];
-    if (!user) return res.status(404).json({ message: "User not found" });
-    const challenge = await createMfaChallenge({
-      user,
-      purpose: "withdrawal",
-      metadata: { ispId }
-    });
-    await logAudit({
-      ispId,
-      actorUserId: req.user.sub,
-      action: "withdrawal.mfa_requested",
-      entityType: "mfa_challenge",
-      entityId: challenge.id
-    });
-    return res.status(201).json({
-      challengeId: challenge.id,
-      expiresAt: challenge.expiresAt,
-      delivery: challenge.delivery,
-      devCode: challenge.code,
-      message: "Withdrawal MFA code generated."
-    });
-  }
-);
-
-app.post(
   "/api/withdrawals",
   authenticate,
   requireRoles("super_admin", "company_manager", "isp_admin"),
   async (req, res) => {
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
-    const { amountUsd, currency = "USD", phoneNumber, networkKey, provider, mfaChallengeId, mfaCode } = req.body;
+    const { amountUsd, currency = "USD", phoneNumber, networkKey, provider, mfaCode } = req.body;
     const amount = Number(amountUsd);
     if (!Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ message: "amountUsd must be a positive number" });
@@ -1489,16 +1512,11 @@ app.post(
     const cur = String(currency).toUpperCase();
     if (cur !== "USD" && cur !== "CDF") return res.status(400).json({ message: "currency must be USD or CDF" });
     const pawapayProvider = provider ? String(provider).trim() : resolveWifiGuestPawapayProvider(networkKey);
-    if (!phoneNumber || !pawapayProvider || !mfaChallengeId || !mfaCode) {
-      return res.status(400).json({ message: "phoneNumber, networkKey, mfaChallengeId and mfaCode are required" });
+    if (!phoneNumber || !pawapayProvider || !mfaCode) {
+      return res.status(400).json({ message: "phoneNumber, networkKey and mfaCode are required" });
     }
-    const verified = await verifyMfaChallenge({
-      userId: req.user.sub,
-      challengeId: mfaChallengeId,
-      code: mfaCode,
-      purpose: "withdrawal"
-    });
-    if (!verified.ok) return res.status(400).json({ message: "Invalid or expired withdrawal MFA code" });
+    const mfa = await verifyTotpForUser(req.user.sub, mfaCode);
+    if (!mfa.ok) return res.status(400).json({ message: mfa.message || "Invalid authenticator code" });
     const cashbox = await getCashboxSummary(ispId);
     if (amount > cashbox.withdrawableMobileMoneyUsd) {
       return res.status(400).json({
@@ -1540,7 +1558,7 @@ app.post(
       `INSERT INTO isp_withdrawal_requests
        (id, isp_id, amount_usd, currency, phone_number, provider, status, payout_id, pawapay_init_status,
         mobile_money_basis_usd, failure_message, requested_by, mfa_challenge_id)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::uuid, $8, $9, $10, $11, $12::uuid)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::uuid, $8, $9, $10, $11, NULL)
        RETURNING id, amount_usd AS "amountUsd", currency, phone_number AS "phoneNumber", provider, status,
                  payout_id AS "payoutId", pawapay_init_status AS "pawapayInitStatus",
                  mobile_money_basis_usd AS "mobileMoneyBasisUsd", failure_message AS "failureMessage",
@@ -1556,8 +1574,7 @@ app.post(
         pawapay?.status || null,
         cashbox.mobileMoneyUsd,
         failureMessage,
-        req.user.sub,
-        mfaChallengeId
+        req.user.sub
       ]
     );
     await logAudit({

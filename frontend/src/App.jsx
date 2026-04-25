@@ -534,7 +534,9 @@ function App() {
     networkKey: "orange",
     mfaCode: ""
   });
-  const [withdrawalMfa, setWithdrawalMfa] = useState(null);
+  const [totpSetup, setTotpSetup] = useState(null);
+  const [totpSetupCode, setTotpSetupCode] = useState("");
+  const [totpSetupLoading, setTotpSetupLoading] = useState(false);
   const [upgradePackageId, setUpgradePackageId] = useState("");
   const [platformBillingStatus, setPlatformBillingStatus] = useState(null);
   const [networkNodeForm, setNetworkNodeForm] = useState({
@@ -1085,35 +1087,16 @@ function App() {
     }
   }
 
-  async function onRequestWithdrawalMfa(e) {
-    e.preventDefault();
-    setError("");
-    setNotice("");
-    if (!selectedIspId) return;
-    try {
-      const data = await api.requestWithdrawalMfa(selectedIspId, {
-        amountUsd: withdrawalForm.amountUsd,
-        currency: withdrawalForm.currency,
-        phoneNumber: withdrawalForm.phoneNumber,
-        networkKey: withdrawalForm.networkKey
-      });
-      setWithdrawalMfa(data);
-      setNotice(
-        data.devCode
-          ? `Code MFA généré pour valider le retrait : ${data.devCode}`
-          : "Code MFA généré pour valider le retrait."
-      );
-    } catch (err) {
-      setError(err.message || "Impossible de générer le code MFA de retrait.");
-    }
-  }
-
   async function onCreateWithdrawal(e) {
     e.preventDefault();
     setError("");
     setNotice("");
-    if (!selectedIspId || !withdrawalMfa?.challengeId) {
-      setError("Demandez d'abord le code MFA du retrait.");
+    if (!selectedIspId) {
+      setError("Sélectionnez d'abord un espace FAI.");
+      return;
+    }
+    if (!user?.mfaTotpEnabled) {
+      setError("Configurez Google Authenticator avant de demander un retrait.");
       return;
     }
     try {
@@ -1122,15 +1105,44 @@ function App() {
         currency: withdrawalForm.currency,
         phoneNumber: withdrawalForm.phoneNumber,
         networkKey: withdrawalForm.networkKey,
-        mfaChallengeId: withdrawalMfa.challengeId,
         mfaCode: withdrawalForm.mfaCode
       });
       setNotice(data.message || "Retrait demandé.");
-      setWithdrawalMfa(null);
       setWithdrawalForm({ ...withdrawalForm, amountUsd: "", mfaCode: "" });
       await refresh();
     } catch (err) {
       setError(err.message || "Impossible de créer le retrait.");
+    }
+  }
+
+  async function onStartTotpSetup() {
+    setError("");
+    setNotice("");
+    setTotpSetupLoading(true);
+    try {
+      const data = await api.startTotpSetup();
+      setTotpSetup(data);
+      setTotpSetupCode("");
+      setNotice("Secret Google Authenticator généré.");
+    } catch (err) {
+      setError(err.message || "Impossible de démarrer la configuration MFA.");
+    } finally {
+      setTotpSetupLoading(false);
+    }
+  }
+
+  async function onEnableTotp(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    try {
+      await api.enableTotp({ code: totpSetupCode });
+      setTotpSetup(null);
+      setTotpSetupCode("");
+      setNotice("Google Authenticator activé pour les retraits.");
+      await refresh();
+    } catch (err) {
+      setError(err.message || "Code Google Authenticator invalide.");
     }
   }
 
@@ -3067,7 +3079,29 @@ function App() {
             Les retraits sont limités aux paiements Mobile Money confirmés via Pawapay. Les encaissements cash et TID
             manuel restent visibles dans les statistiques, mais ne sont pas retirables depuis le compte Pawapay.
           </p>
-          <form onSubmit={onRequestWithdrawalMfa}>
+          <section className="panel" style={{ background: "#f8f9fb" }}>
+            <h3>Google Authenticator</h3>
+            <p>
+              Statut : {user.mfaTotpEnabled ? "configuré" : "non configuré"}. Scannez l'URL otpauth avec Google
+              Authenticator/Authy, puis validez avec le code à 6 chiffres.
+            </p>
+            <button type="button" onClick={onStartTotpSetup} disabled={totpSetupLoading}>
+              {user.mfaTotpEnabled ? "Regénérer le secret MFA" : "Configurer Google Authenticator"}
+            </button>
+            {totpSetup ? (
+              <form onSubmit={onEnableTotp}>
+                <input readOnly value={totpSetup.secret || ""} />
+                <input readOnly value={totpSetup.otpauthUrl || ""} />
+                <input
+                  placeholder="Code Google Authenticator"
+                  value={totpSetupCode}
+                  onChange={(e) => setTotpSetupCode(e.target.value)}
+                />
+                <button type="submit">Activer MFA</button>
+              </form>
+            ) : null}
+          </section>
+          <form onSubmit={onCreateWithdrawal}>
             <input
               type="number"
               min="0"
@@ -3098,23 +3132,15 @@ function App() {
                 </option>
               ))}
             </select>
-            <button type="submit" disabled={!selectedIspId}>
-              Demander le code MFA
+            <input
+              placeholder="Code Google Authenticator"
+              value={withdrawalForm.mfaCode}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, mfaCode: e.target.value })}
+            />
+            <button type="submit" disabled={!selectedIspId || !user.mfaTotpEnabled}>
+              Valider le retrait
             </button>
           </form>
-          {withdrawalMfa ? (
-            <form onSubmit={onCreateWithdrawal}>
-              <p>
-                Code envoyé. {withdrawalMfa.devCode ? `Code test: ${withdrawalMfa.devCode}` : null}
-              </p>
-              <input
-                placeholder="Code MFA"
-                value={withdrawalForm.mfaCode}
-                onChange={(e) => setWithdrawalForm({ ...withdrawalForm, mfaCode: e.target.value })}
-              />
-              <button type="submit">Valider le retrait</button>
-            </form>
-          ) : null}
           {withdrawals.slice(0, 8).map((w) => (
             <p key={w.id}>
               {new Date(w.createdAt).toLocaleString()} — {w.amountUsd} {w.currency} vers {w.phoneNumber} ({w.provider}) —{" "}
