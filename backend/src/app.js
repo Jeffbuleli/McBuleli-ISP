@@ -1325,12 +1325,12 @@ app.post("/api/auth/accept-invite", async (req, res) => {
 
 app.get("/api/isps", authenticate, async (_req, res) => {
   const result = await query(
-    "SELECT id, name, location, subdomain, contact_phone AS \"contactPhone\", created_at AS \"createdAt\" FROM isps ORDER BY created_at DESC"
+    "SELECT id, name, location, subdomain, contact_phone AS \"contactPhone\", is_demo AS \"isDemo\", created_at AS \"createdAt\" FROM isps ORDER BY created_at DESC"
   );
   res.json(result.rows);
 });
 
-app.post("/api/isps", authenticate, requireRoles("super_admin"), async (req, res) => {
+app.post("/api/isps", authenticate, requireRoles("system_owner", "super_admin"), async (req, res) => {
   const { name, location, contactPhone, subdomain } = req.body;
   if (!name || !location || !contactPhone) return res.status(400).json({ message: "name, location and contactPhone are required" });
   const safeSubdomain =
@@ -3779,18 +3779,43 @@ app.get("/api/dashboard", authenticate, async (req, res) => {
   });
 });
 
-app.get("/api/super/dashboard", authenticate, requireRoles("super_admin"), async (_req, res) => {
-  const [isps, customers, active, revenue] = await Promise.all([
+app.get("/api/super/dashboard", authenticate, requireRoles("system_owner", "super_admin"), async (_req, res) => {
+  const [isps, customers, active, revenue, tenants] = await Promise.all([
     query("SELECT COUNT(*)::int AS value FROM isps"),
     query("SELECT COUNT(*)::int AS value FROM customers"),
     query("SELECT COUNT(*)::int AS value FROM subscriptions WHERE status = 'active'"),
-    query("SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE status = 'paid'")
+    query("SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE status = 'paid'"),
+    query(
+      `SELECT i.id, i.name, i.location, i.contact_phone AS "contactPhone", i.is_demo AS "isDemo",
+              i.created_at AS "createdAt", ps.status AS "subscriptionStatus", ps.ends_at AS "subscriptionEndsAt",
+              pp.name AS "packageName",
+              COALESCE(
+                json_agg(
+                  json_build_object('id', u.id, 'fullName', u.full_name, 'email', u.email, 'role', u.role)
+                ) FILTER (WHERE u.id IS NOT NULL),
+                '[]'::json
+              ) AS "adminUsers"
+       FROM isps i
+       LEFT JOIN LATERAL (
+         SELECT s.package_id, s.status, s.ends_at
+         FROM isp_platform_subscriptions s
+         WHERE s.isp_id = i.id
+         ORDER BY s.ends_at DESC, s.created_at DESC
+         LIMIT 1
+       ) ps ON TRUE
+       LEFT JOIN platform_packages pp ON pp.id = ps.package_id
+       LEFT JOIN users u ON u.isp_id = i.id AND u.role IN ('company_manager', 'isp_admin')
+       GROUP BY i.id, ps.status, ps.ends_at, pp.name
+       ORDER BY i.created_at DESC
+       LIMIT 100`
+    )
   ]);
   res.json({
     totalIsps: isps.rows[0].value,
     totalCustomers: customers.rows[0].value,
     totalActiveSubscriptions: active.rows[0].value,
-    totalRevenueUsd: revenue.rows[0].value
+    totalRevenueUsd: revenue.rows[0].value,
+    tenants: tenants.rows
   });
 });
 
