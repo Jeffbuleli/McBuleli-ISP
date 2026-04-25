@@ -437,6 +437,34 @@ button:disabled {
   gap: 12px;
 }
 
+.public-cta--single {
+  justify-content: flex-start;
+}
+
+.public-hero-grid--center {
+  display: block;
+}
+
+.visitor-hero-copy {
+  max-width: 860px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.visitor-hero-copy .public-hero-lead {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.visitor-hero-copy .public-stats {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.visitor-hero-copy .public-cta--single {
+  justify-content: center;
+}
+
 .public-cta a {
   display: inline-flex;
   align-items: center;
@@ -452,6 +480,14 @@ button:disabled {
   background: var(--mb-primary);
   color: #fff;
   box-shadow: 0 16px 36px rgba(93, 64, 55, 0.24);
+}
+
+.btn-primary--large {
+  min-width: 230px !important;
+  padding: 16px 24px !important;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .btn-primary:hover {
@@ -500,6 +536,14 @@ button:disabled {
   font-weight: 850;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.visitor-tagline {
+  margin: 0 0 12px !important;
+  color: var(--mb-primary) !important;
+  font-size: clamp(1.2rem, 3vw, 2rem);
+  font-weight: 850;
+  letter-spacing: -0.03em;
 }
 
 .hero-dashboard {

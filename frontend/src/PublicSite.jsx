@@ -201,25 +201,20 @@ export default function PublicSite() {
             </button>
           </div>
         </div>
-        <div className="public-hero-grid">
-          <section>
-            <p className="eyebrow">{t("Billing, réseau et encaissements pour FAI", "Billing, network and collections for ISPs")}</p>
-            <h1>{t("La plateforme professionnelle pour lancer, gérer et développer votre FAI.", "The professional platform to launch, manage and grow your ISP.")}</h1>
+        <div className="public-hero-grid public-hero-grid--center">
+          <section className="visitor-hero-copy">
+            <p className="eyebrow">{t("Plateforme de facturation ISP", "ISP billing platform")}</p>
+            <h1>McBuleli ISP Billing System</h1>
+            <p className="visitor-tagline">{t("Connecter. Encaisser. Développer.", "Connect. Earn. Expand.")}</p>
             <p className="public-hero-lead">
               {t(
-                "McBuleli réunit facturation, Mobile Money, portail client, Wi-Fi invité, agents terrain, MikroTik et reporting financier dans une interface claire pour les entreprises internet.",
-                "McBuleli brings billing, Mobile Money, customer portal, guest Wi-Fi, field agents, MikroTik and financial reporting into one clear workspace for internet companies."
+                "Une solution professionnelle pour les fournisseurs internet: facturation, Mobile Money, portail client, Wi-Fi invité, agents terrain et automatisation MikroTik dans une seule interface.",
+                "A professional solution for internet providers: billing, Mobile Money, customer portal, guest Wi-Fi, field agents and MikroTik automation in one interface."
               )}
             </p>
-            <div className="public-cta">
-              <a className="btn-primary" href="/signup">
-                {t("Démarrer l'essai gratuit", "Start free trial")}
-              </a>
-              <a className="btn-secondary" href="/login">
-                {t("Se connecter", "Login")}
-              </a>
-              <a className="btn-secondary" href="/portal">
-                {t("Portail client", "Customer portal")}
+            <div className="public-cta public-cta--single">
+              <a className="btn-primary btn-primary--large" href="/signup">
+                GET STARTED - FREE
               </a>
             </div>
             <div className="public-stats">
@@ -231,30 +226,6 @@ export default function PublicSite() {
               ))}
             </div>
           </section>
-          <aside className="hero-dashboard" aria-label={t("Aperçu interface McBuleli", "McBuleli interface preview")}>
-            <div className="hero-window-bar">
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className="hero-dashboard-head">
-              <div>
-                <small>{t("Tableau de bord FAI", "ISP dashboard")}</small>
-                <h2>{t("Revenus & opérations", "Revenue & operations")}</h2>
-              </div>
-              <b>+18%</b>
-            </div>
-            <div className="hero-metrics">
-              <span>{t("Clients actifs", "Active customers")}<strong>1 248</strong></span>
-              <span>{t("Factures impayées", "Open invoices")}<strong>37</strong></span>
-              <span>{t("Sites réseau", "Network sites")}<strong>12</strong></span>
-            </div>
-            <div className="hero-flow">
-              <p>{t("Paiement Mobile Money confirmé", "Mobile Money payment confirmed")}</p>
-              <p>{t("Activation PPPoE / Hotspot automatique", "Automatic PPPoE / Hotspot activation")}</p>
-              <p>{t("Portail client mis à jour", "Customer portal updated")}</p>
-            </div>
-          </aside>
         </div>
       </header>
 
