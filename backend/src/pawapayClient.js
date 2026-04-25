@@ -46,6 +46,9 @@ export async function fetchPawapayDepositStatus(depositId) {
       `Pawapay status check failed (${response.status})`;
     throw new Error(msg);
   }
+  if (data?.status === "FOUND" && data?.data && typeof data.data === "object") {
+    return { ...data.data, searchStatus: data.status };
+  }
   return data;
 }
 
