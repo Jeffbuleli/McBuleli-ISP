@@ -50,7 +50,7 @@ const PUBLIC_PLANS = [
 
 const SERVICES = [
   {
-    icon: "01",
+    icon: "billing",
     fr: {
       title: "Facturation FAI complète",
       text: "Plans, abonnements, factures, renouvellements, suspensions et relances depuis un seul tableau de bord."
@@ -61,7 +61,7 @@ const SERVICES = [
     }
   },
   {
-    icon: "02",
+    icon: "payments",
     fr: {
       title: "Mobile Money & TID",
       text: "Encaissements Pawapay, files TID, confirmations manuelles et callbacks pour activer le service sans délai."
@@ -72,7 +72,7 @@ const SERVICES = [
     }
   },
   {
-    icon: "03",
+    icon: "network",
     fr: {
       title: "MikroTik, Hotspot & PPPoE",
       text: "Provisioning réseau, bons d'accès, Wi-Fi invité, profils de débit et événements de synchronisation."
@@ -83,7 +83,7 @@ const SERVICES = [
     }
   },
   {
-    icon: "04",
+    icon: "portal",
     fr: {
       title: "Portail client professionnel",
       text: "Les abonnés consultent leurs factures, paient, envoient une TID et gardent leur service à jour."
@@ -94,7 +94,7 @@ const SERVICES = [
     }
   },
   {
-    icon: "05",
+    icon: "team",
     fr: {
       title: "Équipes, agents & rôles",
       text: "Accréditations, agents terrain, gestion d'équipe, import CSV, audit et suivi des commissions."
@@ -105,7 +105,7 @@ const SERVICES = [
     }
   },
   {
-    icon: "06",
+    icon: "brand",
     fr: {
       title: "Marque blanche & domaines",
       text: "Logo, couleurs, sous-domaines, portail Wi-Fi et espace client personnalisés pour chaque entreprise."
@@ -116,6 +116,57 @@ const SERVICES = [
     }
   }
 ];
+
+function ServiceIcon({ type }) {
+  const common = { width: "24", height: "24", viewBox: "0 0 24 24", fill: "none", "aria-hidden": "true" };
+  if (type === "payments") {
+    return (
+      <svg {...common}>
+        <rect x="3" y="5" width="18" height="14" rx="3" stroke="currentColor" strokeWidth="2" />
+        <path d="M3 10h18M8 15h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "network") {
+    return (
+      <svg {...common}>
+        <path d="M5 10a10 10 0 0 1 14 0M8 13a6 6 0 0 1 8 0M11 16a2 2 0 0 1 2 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <circle cx="12" cy="19" r="1.5" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (type === "portal") {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="8" r="3" stroke="currentColor" strokeWidth="2" />
+        <path d="M5 20a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "team") {
+    return (
+      <svg {...common}>
+        <circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="2" />
+        <circle cx="17" cy="10" r="2" stroke="currentColor" strokeWidth="2" />
+        <path d="M3 20a6 6 0 0 1 12 0M14 18a4 4 0 0 1 7 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "brand") {
+    return (
+      <svg {...common}>
+        <path d="M5 19h14M7 15l8-8 2 2-8 8H7v-2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M14 6l2-2 4 4-2 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <path d="M7 3h8l4 4v14H7V3Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M15 3v5h5M10 13h6M10 17h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 const WORKSPACES = [
   {
@@ -270,7 +321,7 @@ export default function PublicSite() {
       <section className="public-grid public-grid--services">
         {SERVICES.map((service) => (
           <article className="public-card public-card--service" key={service.icon}>
-            <span className="service-icon">{service.icon}</span>
+            <span className="service-icon"><ServiceIcon type={service.icon} /></span>
             <h3>{isEn ? service.en.title : service.fr.title}</h3>
             <p>{isEn ? service.en.text : service.fr.text}</p>
           </article>

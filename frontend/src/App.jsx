@@ -1908,25 +1908,58 @@ function App() {
 
   return (
     <main className="container app-shell">
-      <header className="app-header">
-        <div>
-          <h1>{resolvePublicBrandName(branding?.displayName || tenantContext?.displayName)}</h1>
-          <p className="app-meta">
-            {t("Connecté :", "Logged in as")} <strong>{user.fullName}</strong> ({user.role})
-          </p>
+      <header className="app-header app-header--dashboard">
+        <div className="dashboard-brandline">
+          <img className="dashboard-logo" src="/mcbuleli-logo.svg" alt="" />
+          <div>
+            <h1>{resolvePublicBrandName(branding?.displayName || tenantContext?.displayName)}</h1>
+            <p className="app-meta">
+              {t("Connecté :", "Logged in as")} <strong>{user.fullName}</strong> ({user.role})
+            </p>
+          </div>
         </div>
-        <div>
+        <div className="dashboard-toolbar">
           <button type="button" onClick={() => setUiLang("fr")} disabled={uiLang === "fr"}>
             FR
           </button>{" "}
           <button type="button" onClick={() => setUiLang("en")} disabled={uiLang === "en"}>
             EN
           </button>{" "}
-        <button type="button" className="btn-logout" onClick={onLogout}>
-          {t("Déconnexion", "Logout")}
-        </button>
+          <button type="button" className="btn-logout" onClick={onLogout}>
+            {t("Déconnexion", "Logout")}
+          </button>
         </div>
       </header>
+      <nav className="dashboard-subnav" aria-label="Navigation tableau de bord">
+        <a href="#dashboard-overview">{t("Vue d'ensemble", "Overview")}</a>
+        <a href="#workspace-settings">{t("Paramètres", "Settings")}</a>
+        <a href="#network-ops">{t("Réseau", "Network")}</a>
+        <a href="#billing-ops">{t("Facturation", "Billing")}</a>
+        <a href="#team-settings">{t("Utilisateurs", "Users")}</a>
+        <a href="#security-settings">{t("Sécurité", "Security")}</a>
+      </nav>
+      <section className="dashboard-quick-actions" aria-label="Raccourcis tableau de bord">
+        <a href="#workspace-settings">
+          <span>SET</span>
+          <strong>{t("Paramètres entreprise", "Company settings")}</strong>
+          <small>{t("Logo, couleurs, domaines, contacts", "Logo, colors, domains, contacts")}</small>
+        </a>
+        <a href="#billing-ops">
+          <span>PAY</span>
+          <strong>{t("Facturation & paiements", "Billing & payments")}</strong>
+          <small>{t("TID, Mobile Money, retraits", "TID, Mobile Money, withdrawals")}</small>
+        </a>
+        <a href="#team-settings">
+          <span>USR</span>
+          <strong>{t("Menus utilisateurs", "User menus")}</strong>
+          <small>{t("Agents, rôles, invitations", "Agents, roles, invites")}</small>
+        </a>
+        <a href="#network-ops">
+          <span>NET</span>
+          <strong>{t("Réseau", "Network")}</strong>
+          <small>{t("MikroTik, Hotspot, télémétrie", "MikroTik, Hotspot, telemetry")}</small>
+        </a>
+      </section>
       {loading && <p>{t("Chargement…", "Loading...")}</p>}
       {error && <p className="error">{isEn ? translateToEnglish(error) : error}</p>}
       {notice && <p>{isEn ? translateToEnglish(notice) : notice}</p>}
@@ -2031,7 +2064,7 @@ function App() {
         );
       })()}
 
-      <section className="grid metrics">
+      <section className="grid metrics dashboard-section-anchor" id="dashboard-overview">
         <Card title={t("FAI", "ISPs")} value={superDashboard?.totalIsps ?? 0} />
         <Card title={t("Clients (tous FAI)", "All Customers")} value={superDashboard?.totalCustomers ?? 0} />
         <Card
@@ -2132,7 +2165,7 @@ function App() {
         </section>
       )}
 
-      <section className="grid">
+      <section className="grid" id="tenant-workspace">
         {user.role === "super_admin" && (
           <form className="panel" onSubmit={onCreateIsp}>
             <h2>{t("Créer un FAI (locataire)", "Create ISP Tenant")}</h2>
@@ -2172,7 +2205,7 @@ function App() {
         </section>
       </section>
 
-      <section className="grid">
+      <section className="grid" id="workspace-settings">
         {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onSaveBranding}>
             <h2>Image de marque / marque blanche</h2>
@@ -2264,7 +2297,7 @@ function App() {
         )}
       </section>
 
-      <section className="grid">
+      <section className="grid" id="billing-ops">
         {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreatePaymentMethod}>
             <h2>Moyens de paiement FAI</h2>
@@ -2378,7 +2411,7 @@ function App() {
         )}
       </section>
 
-      <section className="grid">
+      <section className="grid" id="network-ops">
         {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreateNetworkNode}>
             <h2>Nœud réseau MikroTik</h2>
@@ -2536,7 +2569,7 @@ function App() {
         </section>
       </section>
 
-      <section className="grid">
+      <section className="grid" id="team-settings">
         {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onUpsertNotificationProvider}>
             <h2>Fournisseurs de notifications</h2>
@@ -3128,7 +3161,7 @@ function App() {
       </section>
 
       {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
-        <section className="panel">
+        <section className="panel" id="security-settings">
           <h2>Retrait Mobile Money sécurisé</h2>
           <p>
             Les retraits sont limités aux paiements Mobile Money confirmés via Pawapay. Les encaissements cash et TID

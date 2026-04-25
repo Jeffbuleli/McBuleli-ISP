@@ -152,9 +152,9 @@ export default function WifiPortal() {
           </p>
         </div>
         <div className="demo-board">
-          <div className="demo-board-row"><span>1</span><b>Choisir l'offre</b></div>
-          <div className="demo-board-row"><span>2</span><b>Valider Mobile Money</b></div>
-          <div className="demo-board-row"><span>3</span><b>Accès activé</b></div>
+          <div className="demo-board-row"><span>📶</span><b>Choisir l'offre</b></div>
+          <div className="demo-board-row"><span>💳</span><b>Valider Mobile Money</b></div>
+          <div className="demo-board-row"><span>⚡</span><b>Accès activé</b></div>
         </div>
       </section>
       <header className="app-header" style={{ alignItems: "center" }}>

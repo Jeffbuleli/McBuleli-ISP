@@ -269,7 +269,9 @@ export default function Portal() {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {brand?.logoUrl ? (
             <img src={publicAssetUrl(brand.logoUrl)} alt="" style={{ height: 48 }} />
-          ) : null}
+          ) : (
+            <img className="dashboard-logo" src="/mcbuleli-logo.svg" alt="" />
+          )}
           <div>
             <p className="eyebrow">Portail client</p>
             <h1 style={{ color: brand?.primaryColor || "#5d4037", margin: 0 }}>{portalBrandTitle(brand?.displayName)}</h1>
