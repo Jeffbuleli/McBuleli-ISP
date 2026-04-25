@@ -88,7 +88,7 @@ export async function processPawapayCallback(body) {
       await query(
         `UPDATE isp_withdrawal_requests
          SET status = 'completed', completed_at = NOW(), failure_message = NULL
-         WHERE payout_id = $1::uuid`,
+         WHERE payout_id = $1::uuid AND status = 'processing'`,
         [payoutId]
       );
     } else if (status === "FAILED") {
