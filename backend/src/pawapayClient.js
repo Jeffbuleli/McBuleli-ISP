@@ -48,3 +48,26 @@ export async function fetchPawapayDepositStatus(depositId) {
   }
   return data;
 }
+
+export async function initiatePawapayPayout(body) {
+  if (!PAWAPAY_API_TOKEN) {
+    throw new Error("PAWAPAY_API_TOKEN is not configured");
+  }
+  const response = await fetch(`${PAWAPAY_API_BASE}/v2/payouts`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${PAWAPAY_API_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const msg =
+      data?.failureReason?.failureMessage ||
+      data?.message ||
+      `Pawapay payout request failed (${response.status})`;
+    throw new Error(msg);
+  }
+  return data;
+}

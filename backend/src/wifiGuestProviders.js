@@ -8,6 +8,8 @@ export const WIFI_GUEST_NETWORK_OPTIONS = [
   { key: "mpesa", label: "M-Pesa (Vodacom)", pawapayProvider: "VODACOM_MOMO_COD" }
 ];
 
+export const PAWAPAY_NETWORK_OPTIONS = WIFI_GUEST_NETWORK_OPTIONS;
+
 export function resolveWifiGuestPawapayProvider(networkKey) {
   const k = String(networkKey || "").toLowerCase();
   const row = WIFI_GUEST_NETWORK_OPTIONS.find((o) => o.key === k);

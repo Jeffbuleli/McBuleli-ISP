@@ -73,8 +73,8 @@ export default function Signup() {
             <div className="login-poster-logo">McBuleli</div>
           <p className="login-poster-lead">
               {isEn
-                ? "Launch your operator workspace in minutes: 7-day free trial, then monthly billing via Mobile Money. McBuleli centralizes billing, payments, and operations for your ISP."
-                : "Ouvrez votre espace opérateur en quelques minutes : essai gratuit 7 jours, puis abonnement mensuel en francs congolais ou dollars via Mobile Money. McBuleli centralise la facturation, les paiements et le suivi pour votre FAI."}
+                ? "Launch your operator workspace in minutes: 1-month free trial, then monthly billing via Mobile Money. McBuleli centralizes billing, payments, and operations for your ISP."
+                : "Ouvrez votre espace opérateur en quelques minutes : essai gratuit 1 mois, puis abonnement mensuel en francs congolais ou dollars via Mobile Money. McBuleli centralise la facturation, les paiements et le suivi pour votre FAI."}
           </p>
         </section>
         <div className="login-stack">

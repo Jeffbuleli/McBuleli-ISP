@@ -60,6 +60,21 @@ export async function initDb() {
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS accreditation_level TEXT NOT NULL DEFAULT 'basic';");
 
   await query(`
+    CREATE TABLE IF NOT EXISTS user_mfa_challenges (
+      id UUID PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      purpose TEXT NOT NULL CHECK (purpose IN ('login', 'withdrawal')),
+      code_hash TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'expired')),
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      expires_at TIMESTAMP NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      verified_at TIMESTAMP NULL
+    );
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_user_mfa_challenges_user ON user_mfa_challenges (user_id, purpose, status, expires_at DESC);");
+
+  await query(`
     CREATE TABLE IF NOT EXISTS invite_tokens (
       id UUID PRIMARY KEY,
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -290,7 +305,31 @@ export async function initDb() {
       completed_at TIMESTAMP NULL
     );
   `);
+  await query(
+    "ALTER TABLE platform_saas_deposit_sessions ADD COLUMN IF NOT EXISTS target_package_id UUID NULL REFERENCES platform_packages(id) ON DELETE SET NULL;"
+  );
   await query("CREATE INDEX IF NOT EXISTS idx_platform_saas_deposits_isp ON platform_saas_deposit_sessions (isp_id);");
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS isp_withdrawal_requests (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      amount_usd NUMERIC(12,2) NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      phone_number TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'requested' CHECK (status IN ('requested', 'processing', 'completed', 'failed')),
+      payout_id UUID NULL UNIQUE,
+      pawapay_init_status TEXT NULL,
+      mobile_money_basis_usd NUMERIC(12,2) NOT NULL DEFAULT 0,
+      failure_message TEXT NULL,
+      requested_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      mfa_challenge_id UUID NULL REFERENCES user_mfa_challenges(id) ON DELETE SET NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMP NULL
+    );
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_isp_withdrawals_isp ON isp_withdrawal_requests (isp_id, created_at DESC);");
 
   await query(`
     CREATE TABLE IF NOT EXISTS isp_role_profiles (
