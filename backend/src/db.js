@@ -305,6 +305,9 @@ export async function initDb() {
       completed_at TIMESTAMP NULL
     );
   `);
+  await query(
+    "ALTER TABLE platform_saas_deposit_sessions ADD COLUMN IF NOT EXISTS target_package_id UUID NULL REFERENCES platform_packages(id) ON DELETE SET NULL;"
+  );
   await query("CREATE INDEX IF NOT EXISTS idx_platform_saas_deposits_isp ON platform_saas_deposit_sessions (isp_id);");
 
   await query(`

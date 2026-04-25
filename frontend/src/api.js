@@ -540,11 +540,6 @@ export const api = {
     }),
   getPlatformDepositStatus: (ispId, depositId) =>
     request(withIsp(`/platform/billing/deposit-status/${encodeURIComponent(depositId)}`, ispId)),
-  upgradePlatformPlan: (ispId, packageId) =>
-    request(withIsp("/platform/billing/upgrade-plan", ispId), {
-      method: "POST",
-      body: JSON.stringify({ packageId, ispId })
-    }),
   getWithdrawals: (ispId) => request(withIsp("/withdrawals", ispId)),
   requestWithdrawalMfa: (ispId, payload) =>
     request(withIsp("/withdrawals/mfa", ispId), {

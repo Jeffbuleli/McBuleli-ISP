@@ -87,7 +87,7 @@ export function isPlatformAccessAllowed(subscriptionRow) {
   return subscriptionRow.status === "trialing" || subscriptionRow.status === "active";
 }
 
-export async function extendPlatformSubscriptionAfterPayment(platformSubscriptionId) {
+export async function extendPlatformSubscriptionAfterPayment(platformSubscriptionId, packageId = null) {
   const subResult = await query(
     `SELECT id, ends_at, status FROM isp_platform_subscriptions WHERE id = $1`,
     [platformSubscriptionId]
@@ -101,10 +101,12 @@ export async function extendPlatformSubscriptionAfterPayment(platformSubscriptio
   anchor.setDate(anchor.getDate() + BILLING_PERIOD_DAYS);
   const updated = await query(
     `UPDATE isp_platform_subscriptions
-     SET status = 'active', ends_at = $1
+     SET status = 'active',
+         ends_at = $1,
+         package_id = COALESCE($3::uuid, package_id)
      WHERE id = $2
      RETURNING id, isp_id AS "ispId", package_id AS "packageId", status, starts_at AS "startsAt", ends_at AS "endsAt"`,
-    [anchor.toISOString(), platformSubscriptionId]
+    [anchor.toISOString(), platformSubscriptionId, packageId]
   );
   return updated.rows[0];
 }
@@ -117,7 +119,7 @@ export async function applySuccessfulSaasDeposit(depositId) {
     `UPDATE platform_saas_deposit_sessions
      SET status = 'completed', completed_at = NOW()
      WHERE deposit_id = $1::uuid AND status = 'initiated'
-     RETURNING id, platform_subscription_id AS "platformSubscriptionId", isp_id AS "ispId"`,
+     RETURNING id, platform_subscription_id AS "platformSubscriptionId", isp_id AS "ispId", target_package_id AS "targetPackageId"`,
     [depositId]
   );
   if (!updatedSession.rows[0]) {
@@ -130,8 +132,8 @@ export async function applySuccessfulSaasDeposit(depositId) {
     }
     return { ok: false, reason: "unknown_deposit" };
   }
-  const { platformSubscriptionId } = updatedSession.rows[0];
-  const subRow = await extendPlatformSubscriptionAfterPayment(platformSubscriptionId);
+  const { platformSubscriptionId, targetPackageId } = updatedSession.rows[0];
+  const subRow = await extendPlatformSubscriptionAfterPayment(platformSubscriptionId, targetPackageId);
   return { ok: true, duplicate: false, subscription: subRow };
 }
 

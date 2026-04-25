@@ -511,7 +511,8 @@ function App() {
   const [saasPayForm, setSaasPayForm] = useState({
     currency: "CDF",
     phoneNumber: "",
-    networkKey: "orange"
+    networkKey: "orange",
+    packageId: ""
   });
   const [saasDepositResult, setSaasDepositResult] = useState(null);
   const [pawapayNetworks, setPawapayNetworks] = useState([]);
@@ -1050,7 +1051,8 @@ function App() {
       const data = await api.initiatePlatformDeposit(selectedIspId, {
         currency: saasPayForm.currency,
         phoneNumber: saasPayForm.phoneNumber,
-        networkKey: saasPayForm.networkKey
+        networkKey: saasPayForm.networkKey,
+        packageId: saasPayForm.packageId || undefined
       });
       setSaasDepositResult(data);
       setNotice(data.message || "Dépôt initié.");
@@ -1117,21 +1119,9 @@ function App() {
     }
   }
 
-  async function onUpgradeTrialPlan(e) {
+  function onUpgradeTrialPlan(e) {
     e.preventDefault();
-    setError("");
-    setNotice("");
-    if (!selectedIspId || !upgradePackageId) {
-      setError("Choisissez une formule à laquelle basculer.");
-      return;
-    }
-    try {
-      await api.upgradePlatformPlan(selectedIspId, upgradePackageId);
-      setNotice("Formule mise à jour pour le reste de votre essai.");
-      await refresh();
-    } catch (err) {
-      setError(err.message || "Impossible de changer de formule.");
-    }
+    setError("Le changement de formule se fait maintenant par paiement Mobile Money dans le formulaire ci-dessus.");
   }
 
   async function onCreatePlan(e) {
@@ -1930,6 +1920,23 @@ function App() {
                 <h3>{t("Payer par Mobile Money", "Pay with Mobile Money")}</h3>
                 <form onSubmit={onInitiatePlatformDeposit}>
                   <select
+                    value={saasPayForm.packageId}
+                    onChange={(e) => setSaasPayForm({ ...saasPayForm, packageId: e.target.value })}
+                  >
+                    <option value="">
+                      {billing.package
+                        ? `${billing.package.name} (${billing.monthlyPriceUsd} $ / mois)`
+                        : t("Formule actuelle", "Current plan")}
+                    </option>
+                    {platformPackages
+                      .filter((p) => ["essential", "pro", "business"].includes(p.code))
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.monthlyPriceUsd}&nbsp;$ / mois)
+                        </option>
+                      ))}
+                  </select>
+                  <select
                     value={saasPayForm.currency}
                     onChange={(e) => setSaasPayForm({ ...saasPayForm, currency: e.target.value })}
                   >
@@ -1965,27 +1972,14 @@ function App() {
                 ) : null}
               </>
             )}
-            {billing.subscription?.status === "trialing" &&
-              (user.role === "super_admin" ||
-                user.role === "company_manager" ||
-                user.role === "isp_admin") && (
-                <form onSubmit={onUpgradeTrialPlan}>
-                  <h3>{t("Changer de formule pendant l'essai", "Change plan during trial")}</h3>
-                  <select value={upgradePackageId} onChange={(e) => setUpgradePackageId(e.target.value)}>
-                    <option value="">{t("Choisir une formule", "Select plan")}</option>
-                    {platformPackages
-                      .filter((p) => ["essential", "pro", "business"].includes(p.code))
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.monthlyPriceUsd}&nbsp;$ / mois)
-                        </option>
-                      ))}
-                  </select>
-                  <button type="submit" disabled={!selectedIspId || !upgradePackageId}>
-                    {t("Mettre à jour la formule d'essai", "Update trial plan")}
-                  </button>
-                </form>
-              )}
+            {billing.subscription?.status === "trialing" ? (
+              <p style={{ fontSize: "0.9rem", color: "var(--mb-muted)" }}>
+                {t(
+                  "Pour changer de formule, choisissez le nouveau plan dans le formulaire de paiement Mobile Money. La formule sera appliquée seulement après confirmation Pawapay.",
+                  "To change plan, select the new tier in the Mobile Money payment form. The tier is applied only after Pawapay confirms payment."
+                )}
+              </p>
+            ) : null}
           </section>
         );
       })()}

@@ -1339,7 +1339,7 @@ app.post(
   async (req, res) => {
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
-    const { currency, phoneNumber, networkKey, provider } = req.body;
+    const { currency, phoneNumber, networkKey, provider, packageId } = req.body;
     const pawapayProvider = provider ? String(provider).trim() : resolveWifiGuestPawapayProvider(networkKey);
     if (!currency || !phoneNumber || !pawapayProvider) {
       return res.status(400).json({ message: "currency, phoneNumber and networkKey are required" });
@@ -1350,9 +1350,12 @@ app.post(
     }
     const sub = await getLatestPlatformSubscription(ispId);
     if (!sub) return res.status(400).json({ message: "No platform subscription on file for this workspace" });
+    const targetPackageId = packageId || sub.packageId;
     const pkgRow = await query(
-      "SELECT monthly_price_usd AS \"monthlyPriceUsd\" FROM platform_packages WHERE id = $1",
-      [sub.packageId]
+      `SELECT id, code, monthly_price_usd AS "monthlyPriceUsd"
+       FROM platform_packages
+       WHERE id = $1 AND code = ANY($2::text[])`,
+      [targetPackageId, SAAS_PLAN_CODES]
     );
     const monthlyUsd = pkgRow.rows[0]?.monthlyPriceUsd;
     if (monthlyUsd == null) return res.status(400).json({ message: "Package not found" });
@@ -1370,7 +1373,7 @@ app.post(
           provider: pawapayProvider
         }
       },
-      clientReferenceId: `saas-${ispId}-${sub.id}`.slice(0, 200),
+      clientReferenceId: `saas-${ispId}-${sub.id}-${pkgRow.rows[0].code}`.slice(0, 200),
       customerMessage: "McBuleli plan"
     };
     try {
@@ -1384,10 +1387,10 @@ app.post(
       if (pw.status === "ACCEPTED" || pw.status === "DUPLICATE_IGNORED") {
         await query(
           `INSERT INTO platform_saas_deposit_sessions
-           (id, isp_id, platform_subscription_id, deposit_id, amount, currency, provider, phone_number, status, pawapay_init_status)
-           VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, $6, $7, 'initiated', $8)
+           (id, isp_id, platform_subscription_id, target_package_id, deposit_id, amount, currency, provider, phone_number, status, pawapay_init_status)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4::uuid, $5, $6, $7, $8, 'initiated', $9)
            ON CONFLICT (deposit_id) DO NOTHING`,
-          [ispId, sub.id, depositId, amount, cur, pawapayProvider, phone, pw.status || null]
+          [ispId, sub.id, targetPackageId, depositId, amount, cur, pawapayProvider, phone, pw.status || null]
         );
       }
       await logAudit({
@@ -1396,7 +1399,7 @@ app.post(
         action: "platform.billing.deposit_initiated",
         entityType: "platform_saas_deposit",
         entityId: depositId,
-        details: { currency: cur, amount, networkKey, provider: pawapayProvider }
+        details: { currency: cur, amount, networkKey, provider: pawapayProvider, targetPackageId }
       });
       return res.status(201).json({
         depositId,
@@ -1596,42 +1599,11 @@ app.post(
   "/api/platform/billing/upgrade-plan",
   authenticate,
   requireRoles("super_admin", "company_manager", "isp_admin"),
-  async (req, res) => {
-    const ispId = resolveIspId(req, res);
-    if (!ispId) return;
-    const { packageId } = req.body;
-    if (!packageId) return res.status(400).json({ message: "packageId is required" });
-    const allowed = await query("SELECT id FROM platform_packages WHERE id = $1 AND code = ANY($2::text[])", [
-      packageId,
-      SAAS_PLAN_CODES
-    ]);
-    if (!allowed.rows[0]) return res.status(400).json({ message: "Invalid package for self-serve plans" });
-    const updated = await query(
-      `UPDATE isp_platform_subscriptions s
-       SET package_id = $1
-       WHERE s.id = (
-         SELECT id FROM isp_platform_subscriptions WHERE isp_id = $2 ORDER BY ends_at DESC, created_at DESC LIMIT 1
-       )
-       AND s.isp_id = $2
-       AND s.status = 'trialing'
-       RETURNING s.id, s.package_id AS "packageId", s.status`,
-      [packageId, ispId]
-    );
-    if (!updated.rows[0]) {
-      return res.status(400).json({
-        message: "Plan can only be changed while you are still on the free trial. After paying, contact support to change tiers."
-      });
-    }
-    await logAudit({
-      ispId,
-      actorUserId: req.user.sub,
-      action: "platform.billing.plan_changed_trial",
-      entityType: "platform_subscription",
-      entityId: updated.rows[0].id,
-      details: { packageId }
-    });
-    return res.json(updated.rows[0]);
-  }
+  async (_req, res) =>
+    res.status(410).json({
+      message:
+        "Plan changes must be paid through Mobile Money. Call /api/platform/billing/initiate-deposit with packageId."
+    })
 );
 
 app.get("/api/payment-methods", authenticate, async (req, res) => {
