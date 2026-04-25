@@ -174,6 +174,19 @@ export async function initDb() {
   );
 
   await query(`
+    CREATE TABLE IF NOT EXISTS invoices (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+      customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      amount_usd NUMERIC(10,2) NOT NULL,
+      status TEXT NOT NULL,
+      due_date TIMESTAMP NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS portal_invoice_payment_sessions (
       id UUID PRIMARY KEY,
       isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
@@ -203,19 +216,6 @@ export async function initDb() {
     ALTER TABLE wifi_guest_purchases
     ADD CONSTRAINT wifi_guest_purchases_status_check
     CHECK (status IN ('pending', 'completed', 'failed'))
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS invoices (
-      id UUID PRIMARY KEY,
-      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
-      subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
-      customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-      amount_usd NUMERIC(10,2) NOT NULL,
-      status TEXT NOT NULL,
-      due_date TIMESTAMP NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
-    );
   `);
 
   await query(`
