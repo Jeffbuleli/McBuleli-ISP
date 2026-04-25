@@ -12,12 +12,12 @@ const PUBLIC_PLANS = [
     fr: {
       name: "Essential",
       price: "10 $/mois",
-      desc: "Idéal pour démarrer: jusqu'à 3 routeurs, gestion clients, factures, TID et portail."
+      desc: "Fonctions de base, facturation, clients, agents terrain et jusqu'à 10 routeurs/sites."
     },
     en: {
       name: "Essential",
       price: "$10/month",
-      desc: "Great to start: up to 3 routers, customer management, invoices, TID and portal."
+      desc: "Core billing, customers, field agents and up to 10 routers/sites."
     }
   },
   {
@@ -25,25 +25,25 @@ const PUBLIC_PLANS = [
     fr: {
       name: "Pro",
       price: "15 $/mois",
-      desc: "Plus d'utilisateurs, analyses avancées, supervision réseau et opérations fluides."
+      desc: "Tous les avantages Essential, domaine personnalisé, agrégateur propre et plus de routeurs."
     },
     en: {
       name: "Pro",
       price: "$15/month",
-      desc: "More users, advanced analytics, network monitoring and smoother operations."
+      desc: "Everything in Essential, custom domain, own gateway and more routers."
     }
   },
   {
-    code: "business",
+    code: "premium_custom",
     fr: {
-      name: "Business",
-      price: "20 $/mois",
-      desc: "Pour les ISP en croissance: limites élevées, domaine personnalisé, contrôle complet."
+      name: "Premium personnalisé",
+      price: "Sur devis",
+      desc: "Contrat sur mesure pour grands réseaux, intégrations et besoins spécifiques."
     },
     en: {
-      name: "Business",
-      price: "$20/month",
-      desc: "For growing ISPs: higher limits, custom domain and full control."
+      name: "Custom Premium",
+      price: "Custom quote",
+      desc: "Tailored contract for large networks, integrations and specific requirements."
     }
   }
 ];

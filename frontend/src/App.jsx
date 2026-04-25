@@ -488,7 +488,10 @@ function App() {
     email: "",
     password: "",
     role: "billing_agent",
-    accreditationLevel: "basic"
+    accreditationLevel: "basic",
+    phone: "",
+    address: "",
+    assignedSite: ""
   });
   const [tidForm, setTidForm] = useState({
     invoiceId: "",
@@ -1345,7 +1348,10 @@ function App() {
       email: "",
       password: "",
       role: "billing_agent",
-      accreditationLevel: "basic"
+      accreditationLevel: "basic",
+      phone: "",
+      address: "",
+      assignedSite: ""
     });
     refresh();
   }

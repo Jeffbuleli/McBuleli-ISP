@@ -374,7 +374,7 @@ app.get("/api/public/branding-logo/:ispId", rlPublicRead, async (req, res) => {
 });
 
 const TRIAL_DAYS = Math.min(Math.max(Number(process.env.PLATFORM_TRIAL_DAYS || 30), 1), 90);
-const SAAS_PLAN_CODES = ["essential", "pro", "business"];
+const SAAS_PLAN_CODES = ["essential", "pro"];
 const MFA_REQUIRED_ROLES = new Set(["super_admin", "company_manager", "isp_admin", "field_agent"]);
 const MFA_OTP_TTL_MINUTES = Math.min(Math.max(Number(process.env.MFA_OTP_TTL_MINUTES || 10), 1), 60);
 const MOBILE_MONEY_WITHDRAWAL_METHODS = ["pawapay"];
@@ -1374,6 +1374,12 @@ app.post(
   async (req, res) => {
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
+    const limits = await getPlatformFeatureLimits(ispId);
+    if ((customDomain || subdomain) && !limits?.customDomain) {
+      return res.status(403).json({
+        message: "Votre formule actuelle ne permet pas de domaine personnalisé. Passez à Pro ou Premium."
+      });
+    }
     const {
       displayName,
       logoUrl,
@@ -1818,6 +1824,13 @@ app.post(
     if (!PAYMENT_METHOD_TYPES.has(normalizedMethodType)) {
       return res.status(400).json({
         message: `Unsupported methodType. Allowed: ${Array.from(PAYMENT_METHOD_TYPES).join(", ")}`
+      });
+    }
+    const limits = await getPlatformFeatureLimits(ispId);
+    const customGatewayTypes = new Set(["pawapay", "onafriq", "paypal", "binance_pay", "crypto_wallet", "gateway"]);
+    if (customGatewayTypes.has(normalizedMethodType) && !limits?.customPaymentGateway) {
+      return res.status(403).json({
+        message: "Votre formule actuelle utilise le compte Pawapay McBuleli. Passez à Pro ou Premium pour ajouter votre propre agrégateur."
       });
     }
     const inserted = await query(
@@ -2628,7 +2641,7 @@ app.post(
   const targetIspId = resolveIspId(req, res);
   if (!targetIspId) return;
 
-  const { fullName, email, password, role, accreditationLevel = "basic" } = req.body;
+  const { fullName, email, password, role, accreditationLevel = "basic", phone, address, assignedSite } = req.body;
   if (!fullName || !email || !password || !role) {
     return res.status(400).json({ message: "fullName, email, password and role are required" });
   }
@@ -2666,8 +2679,23 @@ app.post(
     }
   }
   const inserted = await query(
-    "INSERT INTO users (id, isp_id, full_name, email, password_hash, role, accreditation_level, is_active, must_change_password) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, TRUE, TRUE) RETURNING id, isp_id AS \"ispId\", full_name AS \"fullName\", email, role, accreditation_level AS \"accreditationLevel\", is_active AS \"isActive\", must_change_password AS \"mustChangePassword\", created_at AS \"createdAt\"",
-    [targetIspId, fullName, email.toLowerCase(), hash, role, accreditationLevel]
+    `INSERT INTO users
+     (id, isp_id, full_name, email, password_hash, role, accreditation_level, phone, address, assigned_site, is_active, must_change_password)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, TRUE)
+     RETURNING id, isp_id AS "ispId", full_name AS "fullName", email, role,
+               accreditation_level AS "accreditationLevel", phone, address, assigned_site AS "assignedSite",
+               is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"`,
+    [
+      targetIspId,
+      fullName,
+      email.toLowerCase(),
+      hash,
+      role,
+      accreditationLevel,
+      phone || null,
+      address || null,
+      assignedSite || null
+    ]
   );
   await logAudit({
     ispId: targetIspId,
