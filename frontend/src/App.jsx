@@ -3106,7 +3106,7 @@ function App() {
               type="number"
               min="0"
               step="0.01"
-              placeholder="Montant à retirer (USD)"
+              placeholder={withdrawalForm.currency === "CDF" ? "Montant à retirer (CDF)" : "Montant à retirer (USD)"}
               value={withdrawalForm.amountUsd}
               onChange={(e) => setWithdrawalForm({ ...withdrawalForm, amountUsd: e.target.value })}
             />
@@ -3117,6 +3117,10 @@ function App() {
               <option value="USD">USD</option>
               <option value="CDF">CDF</option>
             </select>
+            <p style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+              Le solde retirable est suivi en USD. Si vous choisissez CDF, le montant est converti au taux plateforme
+              avant comparaison, puis envoyé à Pawapay en CDF.
+            </p>
             <input
               placeholder="Téléphone bénéficiaire"
               value={withdrawalForm.phoneNumber}

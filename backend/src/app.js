@@ -15,6 +15,7 @@ import {
   getPlatformBillingSnapshot,
   getPlatformFeatureLimits,
   markSaasDepositFailed,
+  usdAmountForCdf,
   usdAmountString
 } from "./platformBilling.js";
 import { fetchPawapayDepositStatus, initiatePawapayDeposit, initiatePawapayPayout } from "./pawapayClient.js";
@@ -1505,12 +1506,13 @@ app.post(
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
     const { amountUsd, currency = "USD", phoneNumber, networkKey, provider, mfaCode } = req.body;
-    const amount = Number(amountUsd);
-    if (!Number.isFinite(amount) || amount <= 0) {
+    const requestedAmount = Number(amountUsd);
+    if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
       return res.status(400).json({ message: "amountUsd must be a positive number" });
     }
     const cur = String(currency).toUpperCase();
     if (cur !== "USD" && cur !== "CDF") return res.status(400).json({ message: "currency must be USD or CDF" });
+    const amountUsdForBalance = cur === "CDF" ? usdAmountForCdf(requestedAmount) : requestedAmount;
     const pawapayProvider = provider ? String(provider).trim() : resolveWifiGuestPawapayProvider(networkKey);
     if (!phoneNumber || !pawapayProvider || !mfaCode) {
       return res.status(400).json({ message: "phoneNumber, networkKey and mfaCode are required" });
@@ -1518,15 +1520,19 @@ app.post(
     const mfa = await verifyTotpForUser(req.user.sub, mfaCode);
     if (!mfa.ok) return res.status(400).json({ message: mfa.message || "Invalid authenticator code" });
     const cashbox = await getCashboxSummary(ispId);
-    if (amount > cashbox.withdrawableMobileMoneyUsd) {
+    if (amountUsdForBalance > cashbox.withdrawableMobileMoneyUsd) {
       return res.status(400).json({
-        message: "Withdrawal amount exceeds confirmed Mobile Money balance. Cash and TID payments are not withdrawable.",
+        message:
+          "Withdrawal amount exceeds confirmed Mobile Money balance. Cash and TID payments are not withdrawable.",
+        requestedAmount,
+        requestedCurrency: cur,
+        requestedAmountUsd: amountUsdForBalance,
         cashbox
       });
     }
     const payoutId = uuidv4();
     const phone = String(phoneNumber).replace(/\s+/g, "").replace(/^\+/, "");
-    const payoutAmount = cur === "USD" ? usdAmountString(amount) : cdfAmountForUsd(amount);
+    const payoutAmount = cur === "USD" ? usdAmountString(requestedAmount) : String(Math.round(requestedAmount));
     let pawapay = null;
     let status = "requested";
     let failureMessage = null;
@@ -1565,7 +1571,7 @@ app.post(
                  created_at AS "createdAt"`,
       [
         ispId,
-        amount,
+        amountUsdForBalance,
         cur,
         phone,
         pawapayProvider,
@@ -1583,7 +1589,15 @@ app.post(
       action: "withdrawal.requested",
       entityType: "withdrawal",
       entityId: inserted.rows[0].id,
-      details: { amountUsd: amount, currency: cur, networkKey, provider: pawapayProvider, payoutId, status }
+      details: {
+        requestedAmount,
+        requestedCurrency: cur,
+        amountUsd: amountUsdForBalance,
+        networkKey,
+        provider: pawapayProvider,
+        payoutId,
+        status
+      }
     });
     return res.status(201).json({ withdrawal: inserted.rows[0], pawapay, cashbox: await getCashboxSummary(ispId) });
   }
