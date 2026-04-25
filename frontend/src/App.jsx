@@ -1772,9 +1772,15 @@ function App() {
           <section className="login-poster" aria-label="Présentation">
             <div className="login-poster-logo">McBuleli</div>
             <p className="login-poster-lead">
-              Facturation abonnés, factures, encaissements Mobile Money, portail client et suivi réseau — une
-              seule plateforme pour votre FAI. Connectez-vous ci-contre pour gérer votre espace.
+              {isEn
+                ? "Billing, Mobile Money collections, customer portal, agents, MikroTik and reporting in one professional ISP workspace."
+                : "Facturation, encaissements Mobile Money, portail client, agents, MikroTik et reporting dans un espace FAI professionnel."}
             </p>
+            <ul className="login-poster-list">
+              <li>{isEn ? "Company dashboard for leaders and managers" : "Tableau entreprise pour dirigeants et managers"}</li>
+              <li>{isEn ? "Agent access with roles, audit and field actions" : "Accès agents avec rôles, audit et actions terrain"}</li>
+              <li>{isEn ? "Invoices, subscriptions and customer payments" : "Factures, abonnements et paiements clients"}</li>
+            </ul>
           </section>
           <div className="login-stack">
             <header className="app-header app-header--login">
@@ -1826,6 +1832,11 @@ function App() {
             ) : (
               <form className="panel" onSubmit={onLogin}>
                 <h2>{isEn ? "Login" : "Connexion"}</h2>
+                <p className="app-meta">
+                  {isEn
+                    ? "Access the business interface, demo workspaces, billing, agents and customer operations."
+                    : "Accédez à l'interface entreprise, aux espaces démo, à la facturation, aux agents et aux opérations clients."}
+                </p>
                 <input
                   placeholder={isEn ? "Email address" : "Adresse e-mail"}
                   value={loginForm.email}

@@ -76,6 +76,11 @@ export default function Signup() {
                 ? "Launch your operator workspace in minutes: 1-month free trial, then monthly billing via Mobile Money. McBuleli centralizes billing, payments, and operations for your ISP."
                 : "Ouvrez votre espace opérateur en quelques minutes : essai gratuit 1 mois, puis abonnement mensuel en francs congolais ou dollars via Mobile Money. McBuleli centralise la facturation, les paiements et le suivi pour votre FAI."}
           </p>
+          <ul className="login-poster-list">
+            <li>{isEn ? "Professional company workspace" : "Interface entreprise professionnelle"}</li>
+            <li>{isEn ? "Customer portal, Wi-Fi passes and invoices" : "Portail client, pass Wi-Fi et factures"}</li>
+            <li>{isEn ? "MikroTik, agents and payment tracking" : "MikroTik, agents et suivi des paiements"}</li>
+          </ul>
         </section>
         <div className="login-stack">
           <header className="app-header app-header--login">

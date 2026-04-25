@@ -260,24 +260,29 @@ export default function Portal() {
 
   return (
     <main
-      className="container"
+      className="container portal-page"
       style={{
         color: brand?.secondaryColor || "#162030"
       }}
     >
-      <header style={{ marginBottom: 16 }}>
-        {brand?.logoUrl ? (
-          <img src={publicAssetUrl(brand.logoUrl)} alt="" style={{ height: 40, marginRight: 12 }} />
-        ) : null}
-        <h1 style={{ color: brand?.primaryColor || "#5d4037", margin: 0 }}>{portalBrandTitle(brand?.displayName)}</h1>
+      <header className="portal-hero">
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {brand?.logoUrl ? (
+            <img src={publicAssetUrl(brand.logoUrl)} alt="" style={{ height: 48 }} />
+          ) : null}
+          <div>
+            <p className="eyebrow">Portail client</p>
+            <h1 style={{ color: brand?.primaryColor || "#5d4037", margin: 0 }}>{portalBrandTitle(brand?.displayName)}</h1>
+          </div>
+        </div>
         <p>
-          Consultez l'état de votre service, vos factures et envoyez la référence Mobile Money (TID) à votre opérateur
-          via McBuleli.
+          Consultez votre service internet, payez vos factures par Mobile Money et envoyez votre référence TID dans un
+          espace simple, sécurisé et professionnel.
         </p>
       </header>
 
       {!session && (
-        <>
+        <section className="portal-login-grid">
           <form className="panel" onSubmit={onSubscriberLogin}>
             <h2>Connexion par téléphone</h2>
             <p>
@@ -339,7 +344,7 @@ export default function Portal() {
             />
             <button type="submit">Ouvrir avec le jeton</button>
           </form>
-        </>
+        </section>
       )}
 
       {session && (
@@ -355,39 +360,54 @@ export default function Portal() {
 
       {session && (
         <>
-          <section className="panel">
-            <h2>Bonjour, {session.customer.fullName}</h2>
-            <p>Téléphone enregistré : {session.customer.phone}</p>
-            {session.customer.email ? <p>E-mail enregistré : {session.customer.email}</p> : null}
+          <section className="public-section public-section--split">
+            <div>
+              <p className="eyebrow">Espace abonné</p>
+              <h2>Bonjour, {session.customer.fullName}</h2>
+              <p>Téléphone enregistré : {session.customer.phone}</p>
+              {session.customer.email ? <p>E-mail enregistré : {session.customer.email}</p> : null}
+            </div>
+            <div className="demo-board">
+              <div className="demo-board-row">
+                <span>Abonnements</span>
+                <b>{session.subscriptions.length}</b>
+              </div>
+              <div className="demo-board-row">
+                <span>Factures</span>
+                <b>{session.invoices.length}</b>
+              </div>
+            </div>
           </section>
 
-          <section className="panel">
-            <h2>Abonnements</h2>
-            {session.subscriptions.length === 0 ? (
-              <p>Aucun abonnement pour le moment.</p>
-            ) : (
-              session.subscriptions.map((s) => (
-                <p key={s.id}>
-                  {s.id.slice(0, 8)} — {s.status} ({s.accessType}) jusqu'au{" "}
-                  {new Date(s.endDate).toLocaleDateString("fr-FR")}
-                  {s.maxSimultaneousDevices != null ? ` — jusqu'à ${s.maxSimultaneousDevices} appareil(s)` : ""}
-                </p>
-              ))
-            )}
-          </section>
+          <section className="portal-login-grid">
+            <div className="panel">
+              <h2>Abonnements</h2>
+              {session.subscriptions.length === 0 ? (
+                <p>Aucun abonnement pour le moment.</p>
+              ) : (
+                session.subscriptions.map((s) => (
+                  <p key={s.id}>
+                    {s.id.slice(0, 8)} — {s.status} ({s.accessType}) jusqu'au{" "}
+                    {new Date(s.endDate).toLocaleDateString("fr-FR")}
+                    {s.maxSimultaneousDevices != null ? ` — jusqu'à ${s.maxSimultaneousDevices} appareil(s)` : ""}
+                  </p>
+                ))
+              )}
+            </div>
 
-          <section className="panel">
-            <h2>Factures</h2>
-            {session.invoices.length === 0 ? (
-              <p>Aucune facture.</p>
-            ) : (
-              session.invoices.map((inv) => (
-                <p key={inv.id}>
-                  {inv.id.slice(0, 8)} — {inv.amountUsd}&nbsp;$ — {inv.status} — échéance{" "}
-                  {new Date(inv.dueDate).toLocaleDateString("fr-FR")}
-                </p>
-              ))
-            )}
+            <div className="panel">
+              <h2>Factures</h2>
+              {session.invoices.length === 0 ? (
+                <p>Aucune facture.</p>
+              ) : (
+                session.invoices.map((inv) => (
+                  <p key={inv.id}>
+                    {inv.id.slice(0, 8)} — {inv.amountUsd}&nbsp;$ — {inv.status} — échéance{" "}
+                    {new Date(inv.dueDate).toLocaleDateString("fr-FR")}
+                  </p>
+                ))
+              )}
+            </div>
           </section>
 
           <form className="panel" onSubmit={onStartMobileMoneyPayment}>
