@@ -1098,7 +1098,11 @@ function App() {
         networkKey: withdrawalForm.networkKey
       });
       setWithdrawalMfa(data);
-        setNotice(data.code ? `Code MFA généré pour valider le retrait : ${data.code}` : "Code MFA généré pour valider le retrait.");
+      setNotice(
+        data.devCode
+          ? `Code MFA généré pour valider le retrait : ${data.devCode}`
+          : "Code MFA généré pour valider le retrait."
+      );
     } catch (err) {
       setError(err.message || "Impossible de générer le code MFA de retrait.");
     }
@@ -3101,7 +3105,7 @@ function App() {
           {withdrawalMfa ? (
             <form onSubmit={onCreateWithdrawal}>
               <p>
-                Code envoyé. {withdrawalMfa.code ? `Code test: ${withdrawalMfa.code}` : null}
+                Code envoyé. {withdrawalMfa.devCode ? `Code test: ${withdrawalMfa.devCode}` : null}
               </p>
               <input
                 placeholder="Code MFA"

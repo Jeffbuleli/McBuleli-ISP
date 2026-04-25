@@ -375,7 +375,7 @@ const TRIAL_DAYS = Math.min(Math.max(Number(process.env.PLATFORM_TRIAL_DAYS || 3
 const SAAS_PLAN_CODES = ["essential", "pro", "business"];
 const MFA_REQUIRED_ROLES = new Set(["super_admin", "company_manager", "isp_admin", "field_agent"]);
 const MFA_OTP_TTL_MINUTES = Math.min(Math.max(Number(process.env.MFA_OTP_TTL_MINUTES || 10), 1), 60);
-const MOBILE_MONEY_WITHDRAWAL_METHODS = ["pawapay", "mobile_money"];
+const MOBILE_MONEY_WITHDRAWAL_METHODS = ["pawapay"];
 
 function generateOtpCode() {
   return String(crypto.randomInt(100000, 1000000));
@@ -631,7 +631,7 @@ async function handleUnifiedPawapayWebhook(req, res) {
     return res.status(401).json({ message: "Invalid or missing callback secret" });
   }
   try {
-    const result = await processPawapayCallback(req.body || {}, { onPayout: reconcileWithdrawalPayout });
+    const result = await processPawapayCallback(req.body || {});
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -1527,9 +1527,13 @@ app.post(
         clientReferenceId: `withdrawal-${ispId}-${payoutId}`.slice(0, 200),
         customerMessage: "McBuleli withdrawal"
       });
-      status = pawapay.status === "ACCEPTED" || pawapay.status === "DUPLICATE_IGNORED" ? "processing" : "requested";
-      failureMessage = pawapay.status === "ACCEPTED" ? null : pawapay.failureReason?.failureMessage || null;
+      status = pawapay.status === "ACCEPTED" || pawapay.status === "DUPLICATE_IGNORED" ? "processing" : "failed";
+      failureMessage =
+        pawapay.status === "ACCEPTED" || pawapay.status === "DUPLICATE_IGNORED"
+          ? null
+          : pawapay.failureReason?.failureMessage || "Pawapay did not accept payout request";
     } catch (err) {
+      status = "failed";
       failureMessage = err.message || "Pawapay payout initiation failed";
     }
     const inserted = await query(
