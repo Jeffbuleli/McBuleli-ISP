@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_URL, api, publicAssetUrl } from "./api";
 
 const SUBSCRIBER_JWT_KEY = "subscriberJwt";
+const DEFAULT_PAWAPAY_NETWORKS = [
+  { key: "orange", label: "Orange Money" },
+  { key: "airtel", label: "Airtel Money" },
+  { key: "mpesa", label: "M-Pesa (Vodacom)" }
+];
 
 function portalBrandTitle(displayName) {
   const s = displayName != null ? String(displayName).trim() : "";
@@ -55,6 +60,14 @@ export default function Portal() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [tidForm, setTidForm] = useState({ invoiceId: "", tid: "", submittedByPhone: "", amountUsd: "" });
+  const [networks, setNetworks] = useState(DEFAULT_PAWAPAY_NETWORKS);
+  const [mobilePayForm, setMobilePayForm] = useState({
+    invoiceId: "",
+    currency: "CDF",
+    phoneNumber: "",
+    networkKey: "orange"
+  });
+  const [mobilePaySession, setMobilePaySession] = useState(null);
 
   const loadSession = useCallback(async (a) => {
     setError("");
@@ -86,6 +99,12 @@ export default function Portal() {
     if (auth.type === "subscriber" && !auth.jwt) return;
     loadSession(auth).catch((e) => setError(e.message));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- bootstrap from URL or stored subscriber JWT
+
+  useEffect(() => {
+    api.getPawapayNetworks().then((rows) => {
+      if (Array.isArray(rows) && rows.length > 0) setNetworks(rows);
+    }).catch(() => {});
+  }, []);
 
   async function onOpenPortal(e) {
     e.preventDefault();
@@ -176,6 +195,40 @@ export default function Portal() {
       await loadSession(auth);
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  async function onStartMobileMoneyPayment(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (!auth) return setError("Connectez-vous d'abord.");
+    try {
+      const res = await portalFetch("/portal/mobile-money/initiate", auth, {
+        method: "POST",
+        body: JSON.stringify(mobilePayForm)
+      });
+      setMobilePaySession(res);
+      setNotice(res.message || "Demande envoyée au téléphone. Validez le PIN.");
+    } catch (err) {
+      setError(err.message || "Impossible de démarrer le paiement Mobile Money.");
+    }
+  }
+
+  async function onCheckMobileMoneyPayment() {
+    setError("");
+    setNotice("");
+    if (!auth || !mobilePaySession?.depositId) return;
+    try {
+      const res = await portalFetch(`/portal/mobile-money/status/${encodeURIComponent(mobilePaySession.depositId)}`, auth);
+      setNotice(`Statut paiement : ${res.status}`);
+      if (res.status === "completed") {
+        setMobilePaySession(null);
+        setMobilePayForm({ invoiceId: "", currency: "CDF", phoneNumber: "", networkKey: "orange" });
+        await loadSession(auth);
+      }
+    } catch (err) {
+      setError(err.message || "Impossible de vérifier le paiement Mobile Money.");
     }
   }
 
@@ -322,6 +375,56 @@ export default function Portal() {
               ))
             )}
           </section>
+
+          <form className="panel" onSubmit={onStartMobileMoneyPayment}>
+            <h2>Payer cette facture par Mobile Money</h2>
+            <select
+              value={mobilePayForm.invoiceId}
+              onChange={(e) => setMobilePayForm({ ...mobilePayForm, invoiceId: e.target.value })}
+            >
+              <option value="">Choisir une facture ouverte</option>
+              {session.invoices
+                .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
+                .map((inv) => (
+                  <option key={inv.id} value={inv.id}>
+                    {inv.id.slice(0, 8)} — {inv.amountUsd}&nbsp;$ ({inv.status})
+                  </option>
+                ))}
+            </select>
+            <select
+              value={mobilePayForm.currency}
+              onChange={(e) => setMobilePayForm({ ...mobilePayForm, currency: e.target.value })}
+            >
+              <option value="CDF">CDF (franc congolais)</option>
+              <option value="USD">USD</option>
+            </select>
+            <input
+              placeholder="Téléphone payeur (ex. 243990000111)"
+              value={mobilePayForm.phoneNumber}
+              onChange={(e) => setMobilePayForm({ ...mobilePayForm, phoneNumber: e.target.value })}
+            />
+            <select
+              value={mobilePayForm.networkKey}
+              onChange={(e) => setMobilePayForm({ ...mobilePayForm, networkKey: e.target.value })}
+            >
+              {networks.map((network) => (
+                <option key={network.key} value={network.key}>
+                  {network.label}
+                </option>
+              ))}
+            </select>
+            <button type="submit" disabled={!mobilePayForm.invoiceId || !mobilePayForm.phoneNumber}>
+              Payer cette facture par Mobile Money
+            </button>
+            {mobilePaySession?.depositId ? (
+              <p>
+                Deposit ID: <code>{mobilePaySession.depositId}</code>{" "}
+                <button type="button" onClick={onCheckMobileMoneyPayment}>
+                  Vérifier le paiement
+                </button>
+              </p>
+            ) : null}
+          </form>
 
           <form className="panel" onSubmit={onSubmitTid}>
             <h2>Envoyer la référence Mobile Money (TID)</h2>

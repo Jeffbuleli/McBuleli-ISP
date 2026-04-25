@@ -649,13 +649,60 @@ async function handleUnifiedPawapayWebhook(req, res) {
     return res.status(401).json({ message: "Invalid or missing callback secret" });
   }
   try {
-    const result = await processPawapayCallback(req.body || {});
+    const body = req.body || {};
+    const result = await processPawapayCallback(body);
+    if (body?.depositId && body?.status === "COMPLETED") {
+      const portal = await completePortalInvoicePayment(String(body.depositId));
+      if (portal.ok) {
+        return res.status(200).json({ ok: true, kind: "deposit", status: body.status, result: portal, handled: "portal_invoice_deposit" });
+      }
+    }
+    if (body?.depositId && body?.status === "FAILED") {
+      await markPortalInvoicePaymentFailed(String(body.depositId));
+    }
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("pawapay webhook", err?.message || err);
     return res.status(500).json({ message: "Webhook handling failed" });
   }
+}
+
+async function completePortalInvoicePayment(depositId) {
+  const local = await query(
+    `SELECT id, isp_id, invoice_id, customer_id, subscription_id, status
+     FROM portal_invoice_payment_sessions
+     WHERE deposit_id = $1::uuid`,
+    [depositId]
+  );
+  const session = local.rows[0];
+  if (!session) return { ok: false, reason: "unknown_portal_invoice" };
+  if (session.status === "completed") return { ok: true, duplicate: true, invoiceId: session.invoice_id };
+  if (session.status !== "pending") return { ok: false, reason: "not_pending" };
+  const result = await applyInvoicePayment({
+    ispId: session.isp_id,
+    invoiceId: session.invoice_id,
+    providerRef: `pawapay-deposit-${depositId}`,
+    status: "confirmed",
+    methodType: "pawapay"
+  });
+  if (!result.ok) return result;
+  await query(
+    `UPDATE portal_invoice_payment_sessions
+     SET status = 'completed', completed_at = NOW()
+     WHERE id = $1`,
+    [session.id]
+  );
+  return { ok: true, invoiceId: session.invoice_id, payment: result.payment };
+}
+
+async function markPortalInvoicePaymentFailed(depositId) {
+  await query(
+    `UPDATE portal_invoice_payment_sessions
+     SET status = 'failed', completed_at = NOW()
+     WHERE deposit_id = $1::uuid AND status = 'pending'`,
+    [depositId]
+  );
 }
 
 app.get("/api/webhooks/pawapay", (_req, res) => {
@@ -980,6 +1027,104 @@ app.post("/api/portal/tid-submissions", authenticatePortal, async (req, res) => 
     details: { invoiceId: invoice.id, tid, source: "customer_portal" }
   });
   return res.status(201).json(inserted.rows[0]);
+});
+
+app.post("/api/portal/mobile-money/initiate", authenticatePortal, async (req, res) => {
+  const { ispId, customerId } = req.portal;
+  const { invoiceId, phoneNumber, networkKey, currency = "CDF" } = req.body || {};
+  if (!invoiceId || !phoneNumber || !networkKey) {
+    return res.status(400).json({ message: "invoiceId, phoneNumber and networkKey are required" });
+  }
+  const pawapayProvider = resolveWifiGuestPawapayProvider(networkKey);
+  if (!pawapayProvider) return res.status(400).json({ message: "networkKey must be one of: orange, airtel, mpesa" });
+  const cur = String(currency).toUpperCase();
+  if (cur !== "USD" && cur !== "CDF") return res.status(400).json({ message: "currency must be USD or CDF" });
+  const invoiceResult = await query(
+    `SELECT id, isp_id, customer_id, subscription_id, amount_usd, status
+     FROM invoices WHERE id = $1 AND isp_id = $2 AND customer_id = $3`,
+    [invoiceId, ispId, customerId]
+  );
+  const invoice = invoiceResult.rows[0];
+  if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+  if (!["unpaid", "overdue"].includes(invoice.status)) {
+    return res.status(400).json({ message: "This invoice is not open for Mobile Money payment" });
+  }
+  const depositId = uuidv4();
+  const phone = String(phoneNumber).replace(/\s+/g, "").replace(/^\+/, "");
+  const amount = cur === "USD" ? usdAmountString(invoice.amount_usd) : cdfAmountForUsd(invoice.amount_usd);
+  try {
+    await query(
+      `INSERT INTO portal_invoice_payment_sessions
+       (id, isp_id, customer_id, invoice_id, subscription_id, deposit_id, phone, pawapay_provider, currency, amount, status)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::uuid, $6, $7, $8, $9, 'pending')
+       ON CONFLICT (deposit_id) DO NOTHING`,
+      [ispId, customerId, invoice.id, invoice.subscription_id, depositId, phone, pawapayProvider, cur, amount]
+    );
+    const pw = await initiatePawapayDeposit({
+      depositId,
+      amount,
+      currency: cur,
+      payer: {
+        type: "MMO",
+        accountDetails: {
+          phoneNumber: phone,
+          provider: pawapayProvider
+        }
+      },
+      clientReferenceId: `portal-invoice-${invoiceId}-${depositId}`.slice(0, 200),
+      customerMessage: "McBuleli invoice"
+    });
+    if (pw.status !== "ACCEPTED" && pw.status !== "DUPLICATE_IGNORED") {
+      return res.status(400).json({
+        message: pw.failureReason?.failureMessage || "Pawapay did not accept this invoice payment",
+        pawapay: pw
+      });
+    }
+    await logAudit({
+      ispId,
+      action: "portal.invoice_mobile_money_initiated",
+      entityType: "invoice",
+      entityId: invoice.id,
+      details: { depositId, currency: cur, amount, networkKey, provider: pawapayProvider }
+    });
+    return res.status(201).json({
+      depositId,
+      amount,
+      currency: cur,
+      pawapay: pw,
+      message: "Demande envoyée au téléphone. Validez le PIN Mobile Money."
+    });
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "Pawapay initiation failed" });
+  }
+});
+
+app.get("/api/portal/mobile-money/status/:depositId", authenticatePortal, async (req, res) => {
+  const { ispId, customerId } = req.portal;
+  const { depositId } = req.params;
+  const local = await query(
+    `SELECT id, deposit_id AS "depositId", invoice_id AS "invoiceId", status, amount, currency
+     FROM portal_invoice_payment_sessions
+     WHERE deposit_id = $1::uuid AND isp_id = $2 AND customer_id = $3`,
+    [depositId, ispId, customerId]
+  );
+  const row = local.rows[0];
+  if (!row) return res.status(404).json({ message: "Payment session not found" });
+  if (row.status === "completed" || row.status === "failed") return res.json(row);
+  try {
+    const pw = await fetchPawapayDepositStatus(depositId);
+    if (pw.status === "COMPLETED") {
+      await completePortalInvoicePayment(depositId);
+      return res.json({ ...row, status: "completed", pawapay: pw });
+    }
+    if (pw.status === "FAILED") {
+      await markPortalInvoicePaymentFailed(depositId);
+      return res.json({ ...row, status: "failed", pawapay: pw });
+    }
+    return res.json({ ...row, status: "pending", pawapay: pw });
+  } catch (err) {
+    return res.json({ ...row, status: "pending", pawapayError: err.message });
+  }
 });
 
 app.post(
