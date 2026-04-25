@@ -14,6 +14,20 @@ function portalBrandTitle(displayName) {
   return `${displayName} — portail client`;
 }
 
+function money(value, currency = "USD") {
+  return Number(value || 0).toLocaleString("fr-FR", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2
+  });
+}
+
+function daysUntil(dateValue) {
+  const t = new Date(dateValue).getTime();
+  if (!Number.isFinite(t)) return "—";
+  return Math.max(0, Math.ceil((t - Date.now()) / 86400000));
+}
+
 async function portalFetch(path, auth, options = {}) {
   const headers = {
     "Content-Type": "application/json",
