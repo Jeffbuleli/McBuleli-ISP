@@ -46,6 +46,7 @@ import {
 import { WIFI_GUEST_NETWORK_OPTIONS, resolveWifiGuestPawapayProvider } from "./wifiGuestProviders.js";
 import { createPublicRateLimiter } from "./publicRateLimit.js";
 import { insertRadiusAccountingRecord } from "./radiusAccountingIngest.js";
+import { countOnlineSubscriberSessions, listOnlineSubscriberSessions } from "./networkOnlineSessions.js";
 import fs from "fs";
 import path from "path";
 import multer from "multer";
@@ -1910,6 +1911,24 @@ app.get(
   }
 );
 
+app.get(
+  "/api/network/online-sessions",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "noc_operator", "billing_agent", "field_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 500);
+    const windowMinutes = Math.min(Math.max(Number(req.query.windowMinutes) || 30, 1), 24 * 60);
+    const result = await listOnlineSubscriberSessions({
+      ispId,
+      limit,
+      windowMinutes
+    });
+    return res.json(result);
+  }
+);
+
 app.post(
   "/api/network/nodes/:nodeId/collect-telemetry",
   authenticate,
@@ -3271,21 +3290,24 @@ app.get("/api/network/stats", authenticate, async (req, res) => {
 app.get("/api/dashboard", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
-  const [customers, active, unpaid, revenue] = await Promise.all([
+  const sessionWindowMinutes = Math.min(Math.max(Number(req.query.sessionWindowMinutes) || 30, 1), 24 * 60);
+  const [customers, active, unpaid, revenue, sessionCount] = await Promise.all([
     query("SELECT COUNT(*)::int AS value FROM customers WHERE isp_id = $1", [ispId]),
     query("SELECT COUNT(*)::int AS value FROM subscriptions WHERE isp_id = $1 AND status = 'active'", [ispId]),
     query(
       "SELECT COUNT(*)::int AS value FROM invoices WHERE isp_id = $1 AND status IN ('unpaid', 'overdue')",
       [ispId]
     ),
-    query("SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE isp_id = $1 AND status = 'paid'", [ispId])
+    query("SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE isp_id = $1 AND status = 'paid'", [ispId]),
+    countOnlineSubscriberSessions({ ispId, windowMinutes: sessionWindowMinutes })
   ]);
   res.json({
     totalCustomers: customers.rows[0].value,
     activeSubscriptions: active.rows[0].value,
     unpaidInvoices: unpaid.rows[0].value,
     revenueUsd: revenue.rows[0].value,
-    networkSessions: 0
+    networkSessions: sessionCount.count,
+    networkSessionsWindowMinutes: sessionCount.windowMinutes
   });
 });
 
