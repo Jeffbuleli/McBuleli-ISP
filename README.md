@@ -78,6 +78,42 @@ npm run dev
 
 Web app: `http://localhost:5173`
 
+## Deploy to Vercel + Render
+
+The hosted setup is:
+
+- Frontend: Vercel project `mcbuleli-front.vercel.app`
+- Public app domain: `https://app.mcbuleli.live`
+- Backend: Render web service URL, for example `https://<your-render-service>.onrender.com`
+
+### Frontend environment variables on Vercel
+
+Set these in the Vercel project, then redeploy:
+
+```bash
+VITE_API_URL=https://<your-render-service>.onrender.com/api
+VITE_PUBLIC_API_ORIGIN=https://<your-render-service>.onrender.com
+```
+
+`VITE_API_URL` must include `/api`; `VITE_PUBLIC_API_ORIGIN` is the same Render origin without `/api`.
+
+### Backend environment variables on Render
+
+Use `backend/.env.render.example` as the checklist. At minimum set:
+
+```bash
+NODE_ENV=production
+TRUST_PROXY=true
+DATABASE_URL=<Render PostgreSQL external or internal database URL>
+JWT_SECRET=<strong random secret>
+NETWORK_NODE_SECRET_KEY=<unique 32+ character random secret>
+PLATFORM_PUBLIC_BASE_URL=https://app.mcbuleli.live
+PUBLIC_API_BASE_URL=https://<your-render-service>.onrender.com
+CORS_ORIGINS=https://app.mcbuleli.live,https://mcbuleli-front.vercel.app
+```
+
+Use Render build command `npm install` and start command `npm start` from the `backend` directory.
+
 ## White-label subdomains/custom domains
 
 The backend now supports host-based tenant resolution:

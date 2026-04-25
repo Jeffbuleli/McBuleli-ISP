@@ -70,6 +70,15 @@ function authenticate(req, res, next) {
 const app = express();
 app.set("trust proxy", process.env.TRUST_PROXY === "true" ? 1 : 0);
 
+function configuredCorsOrigins() {
+  return String(process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+}
+
+const corsOrigins = configuredCorsOrigins();
+
 function isUuidString(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     String(value || "")
@@ -269,6 +278,7 @@ const rlRadiusAcct = createPublicRateLimiter("radius_acct_webhook", {
 app.use(helmet());
 app.use(
   cors({
+    origin: corsOrigins.length > 0 ? corsOrigins : undefined,
     allowedHeaders: ["Content-Type", "Authorization", "X-Portal-Token"]
   })
 );
