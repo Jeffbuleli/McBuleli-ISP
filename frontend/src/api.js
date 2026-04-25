@@ -193,10 +193,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({})
     }),
+  startTotpSetup: () =>
+    request("/auth/mfa/totp/setup", {
+      method: "POST",
+      body: JSON.stringify({})
+    }),
   enableTotpMfa: (code) =>
     request("/auth/mfa/totp/enable", {
       method: "POST",
       body: JSON.stringify({ code })
+    }),
+  enableTotp: (payload) =>
+    request("/auth/mfa/totp/enable", {
+      method: "POST",
+      body: JSON.stringify({ code: payload?.code ?? payload })
     }),
   changePassword: (payload) =>
     request("/auth/change-password", {
