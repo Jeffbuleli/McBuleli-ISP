@@ -3104,7 +3104,7 @@ function App() {
           <form onSubmit={onCreateWithdrawal}>
             <input
               type="number"
-              min="0"
+              min={withdrawalForm.currency === "CDF" ? "1000" : "0.5"}
               step="0.01"
               placeholder={withdrawalForm.currency === "CDF" ? "Montant à retirer (CDF)" : "Montant à retirer (USD)"}
               value={withdrawalForm.amountUsd}

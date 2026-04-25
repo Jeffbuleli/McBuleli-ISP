@@ -1508,7 +1508,7 @@ app.post(
     const { amountUsd, currency = "USD", phoneNumber, networkKey, provider, mfaCode } = req.body;
     const requestedAmount = Number(amountUsd);
     if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
-      return res.status(400).json({ message: "amountUsd must be a positive number" });
+      return res.status(400).json({ message: "Withdrawal amount must be greater than 0. Test amounts like 0.50 USD or 1000 CDF are allowed." });
     }
     const cur = String(currency).toUpperCase();
     if (cur !== "USD" && cur !== "CDF") return res.status(400).json({ message: "currency must be USD or CDF" });
@@ -1523,7 +1523,7 @@ app.post(
     if (amountUsdForBalance > cashbox.withdrawableMobileMoneyUsd) {
       return res.status(400).json({
         message:
-          "Withdrawal amount exceeds confirmed Mobile Money balance. Cash and TID payments are not withdrawable.",
+          "Withdrawal amount exceeds confirmed Pawapay balance after currency conversion. Cash and TID payments are not withdrawable.",
         requestedAmount,
         requestedCurrency: cur,
         requestedAmountUsd: amountUsdForBalance,
