@@ -351,7 +351,7 @@ const LOAD_FAILURE_LABELS_FR = {
 function App() {
   const [user, setUser] = useState(null);
   const [tenantContext, setTenantContext] = useState(null);
-  const [loginForm, setLoginForm] = useState({ email: "admin@isp.local", password: "admin123" });
+  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [mfaLogin, setMfaLogin] = useState(null);
   const [mfaCode, setMfaCode] = useState("");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
@@ -831,7 +831,13 @@ function App() {
         // Ignore tenant-context bootstrap failures.
       }
       if (localStorage.getItem("token")) {
-        refresh();
+        try {
+          await refresh();
+        } catch (_err) {
+          setAuthToken("");
+          setUser(null);
+          localStorage.removeItem("token");
+        }
       }
     }
     bootstrap();
@@ -1829,9 +1835,6 @@ function App() {
                 <p>
                   <a href="/signup">{isEn ? "Create a McBuleli account" : "Créer un compte entreprise McBuleli"}</a>{" "}
                   ({isEn ? "1-month trial, Mobile Money billing" : "essai 1 mois, facturation Mobile Money"})
-                </p>
-                <p style={{ fontSize: "0.88rem", color: "var(--mb-muted)" }}>
-                  {isEn ? "Demo admin:" : "Démo admin :"} admin@isp.local / admin123
                 </p>
               </form>
             )}

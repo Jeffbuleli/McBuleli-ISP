@@ -1197,7 +1197,7 @@ app.post("/api/auth/login", async (req, res) => {
   }
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ message: "Invalid credentials" });
-  if (MFA_REQUIRED_ROLES.has(user.role)) {
+  if (MFA_REQUIRED_ROLES.has(user.role) && user.mfa_totp_enabled) {
     const challenge = await createMfaChallenge({ user, purpose: "login" });
     return res.status(202).json({
       mfaRequired: true,
