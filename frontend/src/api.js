@@ -188,6 +188,16 @@ export const api = {
       body: JSON.stringify(payload)
     }),
   me: () => request("/auth/me"),
+  setupTotpMfa: () =>
+    request("/auth/mfa/totp/setup", {
+      method: "POST",
+      body: JSON.stringify({})
+    }),
+  enableTotpMfa: (code) =>
+    request("/auth/mfa/totp/enable", {
+      method: "POST",
+      body: JSON.stringify({ code })
+    }),
   changePassword: (payload) =>
     request("/auth/change-password", {
       method: "POST",
@@ -541,11 +551,6 @@ export const api = {
   getPlatformDepositStatus: (ispId, depositId) =>
     request(withIsp(`/platform/billing/deposit-status/${encodeURIComponent(depositId)}`, ispId)),
   getWithdrawals: (ispId) => request(withIsp("/withdrawals", ispId)),
-  requestWithdrawalMfa: (ispId, payload) =>
-    request(withIsp("/withdrawals/mfa", ispId), {
-      method: "POST",
-      body: JSON.stringify({ ...payload, ispId })
-    }),
   createWithdrawal: (ispId, payload) =>
     request(withIsp("/withdrawals", ispId), {
       method: "POST",
