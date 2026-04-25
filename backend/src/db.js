@@ -46,6 +46,7 @@ export async function initDb() {
     CHECK (
       role IN (
         'system_owner',
+        'system_owner',
         'super_admin',
         'company_manager',
         'isp_admin',
@@ -62,6 +63,9 @@ export async function initDb() {
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS accreditation_level TEXT NOT NULL DEFAULT 'basic';");
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_totp_secret TEXT NULL;");
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_totp_enabled BOOLEAN NOT NULL DEFAULT FALSE;");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NULL;");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT NULL;");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_site TEXT NULL;");
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS seeded_account_key TEXT UNIQUE NULL;");
 
   await query(`
@@ -741,11 +745,11 @@ export async function initDb() {
   await query(`
     INSERT INTO platform_packages (id, code, name, monthly_price_usd, feature_flags) VALUES
       (gen_random_uuid(), 'essential', 'Essential', 10,
-        '{"maxUsers":5,"maxNetworkNodes":3,"advancedAnalytics":false,"customDomain":false}'::jsonb),
+        '{"maxUsers":25,"maxNetworkNodes":10,"advancedAnalytics":false,"customDomain":false,"customPaymentGateway":false,"fieldAgents":true,"roleProfiles":true,"expenseTracking":true,"customerPortal":true,"pawapayPlatformGateway":true}'::jsonb),
       (gen_random_uuid(), 'pro', 'Pro', 15,
-        '{"maxUsers":20,"maxNetworkNodes":3,"advancedAnalytics":true,"customDomain":false}'::jsonb),
-      (gen_random_uuid(), 'business', 'Business', 20,
-        '{"maxUsers":80,"maxNetworkNodes":10,"advancedAnalytics":true,"customDomain":true}'::jsonb)
+        '{"maxUsers":75,"maxNetworkNodes":50,"advancedAnalytics":true,"customDomain":true,"customPaymentGateway":true,"fieldAgents":true,"roleProfiles":true,"expenseTracking":true,"customerPortal":true,"pawapayPlatformGateway":true,"prioritySupport":true,"multiSiteAnalytics":true}'::jsonb),
+      (gen_random_uuid(), 'premium_custom', 'Premium personnalisé', 0,
+        '{"maxUsers":null,"maxNetworkNodes":null,"advancedAnalytics":true,"customDomain":true,"customPaymentGateway":true,"fieldAgents":true,"roleProfiles":true,"expenseTracking":true,"customerPortal":true,"pawapayPlatformGateway":true,"prioritySupport":true,"multiSiteAnalytics":true,"customContract":true}'::jsonb)
     ON CONFLICT (code) DO UPDATE SET
       name = EXCLUDED.name,
       monthly_price_usd = EXCLUDED.monthly_price_usd,
@@ -753,7 +757,7 @@ export async function initDb() {
   `);
   await query(`
     DELETE FROM platform_packages pp
-    WHERE pp.code IN ('starter', 'growth', 'enterprise')
+    WHERE pp.code IN ('starter', 'growth', 'enterprise', 'business')
       AND NOT EXISTS (SELECT 1 FROM isp_platform_subscriptions s WHERE s.package_id = pp.id)
   `);
 }

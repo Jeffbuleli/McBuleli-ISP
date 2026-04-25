@@ -83,8 +83,8 @@ export default function Signup() {
                 <h1>{isEn ? "Create your McBuleli workspace" : "Créer votre espace McBuleli"}</h1>
               <p className="app-meta">
                   {isEn
-                    ? "Plans: Essential ($10/mo), Pro ($15), Business ($20). Monthly billing through Mobile Money."
-                    : "Formules Essential (10 $/mois), Pro (15 $) ou Business (20 $). Paiement mensuel ensuite via Mobile Money."}
+                    ? "Plans: Essential ($10/month) or Pro ($15/month). Premium is customized by contract."
+                    : "Formules Essential (10 $/mois) ou Pro (15 $/mois). Premium est personnalisé sur contrat."}
               </p>
             </div>
               <div style={{ marginTop: 10 }}>
@@ -155,8 +155,8 @@ export default function Signup() {
             <p>
               <small>
                   {isEn
-                    ? "Essential: small teams. Pro: advanced analytics and more users. Business: custom domain and higher limits. You can switch during trial."
-                    : "Essential : petites équipes et un routeur. Pro : analyses et plus d'utilisateurs. Business : domaine personnalisé et plafonds plus élevés. Vous pouvez changer pendant l'essai depuis le tableau de bord."}
+                    ? "Essential: 10 routers, field agents, roles, customers and finance with McBuleli Pawapay. Pro adds custom domain, own gateway, higher router limits and richer analytics."
+                    : "Essential : 10 routeurs, agents terrain, rôles, clients et finances via Pawapay McBuleli. Pro ajoute domaine personnalisé, agrégateur propre, plus de routeurs et analyses avancées."}
               </small>
             </p>
               <button type="submit" disabled={!packages.length}>
