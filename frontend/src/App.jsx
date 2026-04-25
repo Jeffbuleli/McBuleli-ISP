@@ -14,6 +14,16 @@ function getStoredUiLang() {
   return saved === "en" ? "en" : "fr";
 }
 
+const DEFAULT_PAWAPAY_NETWORKS = [
+  { key: "orange", label: "Orange Money" },
+  { key: "airtel", label: "Airtel Money" },
+  { key: "mpesa", label: "M-Pesa (Vodacom)" }
+];
+
+function usablePawapayNetworks(networks) {
+  return Array.isArray(networks) && networks.length ? networks : DEFAULT_PAWAPAY_NETWORKS;
+}
+
 const EN_TEXT_MAP = {
   "Image de marque / marque blanche": "Tenant Branding / White-label",
   "Nom affiché": "Display name",
@@ -515,7 +525,7 @@ function App() {
     packageId: ""
   });
   const [saasDepositResult, setSaasDepositResult] = useState(null);
-  const [pawapayNetworks, setPawapayNetworks] = useState([]);
+  const [pawapayNetworks, setPawapayNetworks] = useState(DEFAULT_PAWAPAY_NETWORKS);
   const [withdrawals, setWithdrawals] = useState([]);
   const [withdrawalForm, setWithdrawalForm] = useState({
     amountUsd: "",
@@ -544,6 +554,7 @@ function App() {
     recipient: "",
     message: "Message de test McBuleli."
   });
+  const availablePawapayNetworks = pawapayNetworks.length ? pawapayNetworks : DEFAULT_PAWAPAY_NETWORKS;
 
   async function refresh(selectedTenantId = selectedIspId) {
     setLoading(true);
@@ -571,7 +582,7 @@ function App() {
           setPlatformPackages(packages);
           setPlatformSubscriptions(platformSubs);
           setPlatformBillingStatus(snap);
-          setPawapayNetworks(networks);
+          setPawapayNetworks(Array.isArray(networks) && networks.length ? networks : DEFAULT_PAWAPAY_NETWORKS);
           setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
         } catch (_e) {
           /* billing endpoints stay reachable */
@@ -594,7 +605,7 @@ function App() {
       const allIsps = take([allIspsResult], 0, [], "isps");
       const packages = take([packagesResult], 0, [], "platformPackages");
       const [networkOptionsResult] = await Promise.allSettled([api.getPawapayNetworks()]);
-      setPawapayNetworks(take([networkOptionsResult], 0, [], "pawapayNetworks"));
+      setPawapayNetworks(take([networkOptionsResult], 0, DEFAULT_PAWAPAY_NETWORKS, "pawapayNetworks"));
 
       const activeIspId =
         tenantContext?.ispId || selectedTenantId || currentUser.ispId || allIsps[0]?.id || "";
@@ -1952,7 +1963,7 @@ function App() {
                     value={saasPayForm.networkKey}
                     onChange={(e) => setSaasPayForm({ ...saasPayForm, networkKey: e.target.value })}
                   >
-                    {pawapayNetworks.map((network) => (
+                    {availablePawapayNetworks.map((network) => (
                       <option key={network.key} value={network.key}>
                         {network.label}
                       </option>
@@ -3077,7 +3088,7 @@ function App() {
               value={withdrawalForm.networkKey}
               onChange={(e) => setWithdrawalForm({ ...withdrawalForm, networkKey: e.target.value })}
             >
-              {pawapayNetworks.map((n) => (
+              {availablePawapayNetworks.map((n) => (
                 <option key={n.key} value={n.key}>
                   {n.label}
                 </option>
