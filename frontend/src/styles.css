@@ -378,7 +378,7 @@ button:disabled {
 .public-logo-img {
   object-fit: contain;
   background: #fff;
-  padding: 5px;
+  padding: 3px;
 }
 
 .public-nav {

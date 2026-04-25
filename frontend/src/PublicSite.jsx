@@ -152,11 +152,7 @@ const COMPANY_CONTACT = {
 };
 
 function PublicLogo() {
-  const configuredLogo = String(import.meta.env.VITE_PUBLIC_HOME_LOGO_URL || "").trim();
-  if (configuredLogo) {
-    return <img className="public-logo-img" src={configuredLogo} alt="McBuleli" />;
-  }
-  return <span className="public-logo-mark">MB</span>;
+  return <img className="public-logo-img" src="/mcbuleli-logo.svg" alt="McBuleli" />;
 }
 
 export default function PublicSite() {
