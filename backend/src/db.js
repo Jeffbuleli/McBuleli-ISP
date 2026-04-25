@@ -165,6 +165,27 @@ export async function initDb() {
   await query(
     "ALTER TABLE wifi_guest_purchases ADD COLUMN IF NOT EXISTS subscriber_setup_token TEXT NULL;"
   );
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS portal_invoice_payment_sessions (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+      subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+      deposit_id UUID NOT NULL UNIQUE,
+      phone TEXT NOT NULL,
+      pawapay_provider TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      amount TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMP NULL
+    );
+  `);
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_portal_invoice_payments_isp ON portal_invoice_payment_sessions (isp_id, created_at DESC);"
+  );
   await query(`
     DO $wgp$ BEGIN
       ALTER TABLE wifi_guest_purchases DROP CONSTRAINT IF EXISTS wifi_guest_purchases_status_check;
