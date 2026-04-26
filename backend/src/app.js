@@ -5,7 +5,7 @@ import morgan from "morgan";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
-import { query } from "./db.js";
+import { query, pool } from "./db.js";
 import { authenticate as authenticateJwt, requireRoles, resolveIspId, signToken } from "./auth.js";
 import { enforcePlatformAccess } from "./platformAccess.js";
 import {
@@ -23,10 +23,11 @@ import { provisionSubscriptionAccess } from "./networkProvisioning.js";
 import { collectAndStoreNetworkTelemetry } from "./networkTelemetry.js";
 import { encryptSecret } from "./secrets.js";
 import {
-  extendSubscriptionAfterPayment,
+  processExpiredSubscriptions,
   processOverdueInvoices,
   processRenewalInvoices
 } from "./billingJobs.js";
+import { applyInvoicePayment, applyInvoicePaymentTx } from "./invoicePayments.js";
 import { authenticatePortal } from "./portalAuth.js";
 import {
   normalizeSubscriberPhone,
@@ -95,15 +96,6 @@ function normalizeMethodType(value) {
     .toLowerCase();
 }
 
-function normalizeGatewayStatus(input) {
-  const status = String(input || "confirmed")
-    .trim()
-    .toLowerCase();
-  if (["confirmed", "completed", "success", "successful", "paid"].includes(status)) return "confirmed";
-  if (["failed", "error", "cancelled", "canceled", "rejected"].includes(status)) return "failed";
-  return "pending";
-}
-
 function resolvePublicApiBase(req) {
   const explicit = process.env.PUBLIC_API_BASE_URL || process.env.APP_PUBLIC_URL;
   if (explicit) return String(explicit).replace(/\/$/, "");
@@ -124,64 +116,6 @@ function resolveGatewayCallbackSecret(req) {
   )
     .toString()
     .trim();
-}
-
-async function applyInvoicePayment({
-  ispId,
-  invoiceId,
-  providerRef,
-  amountUsd,
-  status,
-  methodType
-}) {
-  const invResult = await query("SELECT * FROM invoices WHERE id = $1 AND isp_id = $2", [invoiceId, ispId]);
-  const invoice = invResult.rows[0];
-  if (!invoice) return { ok: false, code: 404, message: "Invoice not found" };
-
-  const normalizedStatus = normalizeGatewayStatus(status);
-  const normalizedProviderRef = String(providerRef || "n/a").slice(0, 255);
-  const existing = await query(
-    `SELECT id, isp_id AS "ispId", invoice_id AS "invoiceId", provider_ref AS "providerRef",
-            amount_usd AS "amountUsd", status, method, paid_at AS "paidAt"
-     FROM payments
-     WHERE isp_id = $1 AND invoice_id = $2 AND provider_ref = $3
-     ORDER BY paid_at DESC LIMIT 1`,
-    [ispId, invoiceId, normalizedProviderRef]
-  );
-  if (existing.rows[0]) {
-    return { ok: true, duplicate: true, payment: existing.rows[0], invoiceAlreadyPaid: invoice.status === "paid" };
-  }
-
-  const paymentInsert = await query(
-    "INSERT INTO payments (id, isp_id, invoice_id, provider_ref, amount_usd, status, method) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6) RETURNING id, isp_id AS \"ispId\", invoice_id AS \"invoiceId\", provider_ref AS \"providerRef\", amount_usd AS \"amountUsd\", status, method, paid_at AS \"paidAt\"",
-    [
-      ispId,
-      invoiceId,
-      normalizedProviderRef,
-      Number(amountUsd || invoice.amount_usd),
-      normalizedStatus,
-      normalizeMethodType(methodType) || "mobile_money"
-    ]
-  );
-
-  let activated = false;
-  if (normalizedStatus === "confirmed") {
-    await query("UPDATE invoices SET status = 'paid' WHERE id = $1", [invoiceId]);
-    await extendSubscriptionAfterPayment(ispId, invoice.subscription_id);
-    await provisionSubscriptionAccess({
-      ispId,
-      subscriptionId: invoice.subscription_id,
-      action: "activate"
-    });
-    activated = true;
-  }
-
-  return {
-    ok: true,
-    duplicate: false,
-    payment: paymentInsert.rows[0],
-    activated
-  };
 }
 
 /** Map CSV row keys (already lowercased / underscored headers) to customer fields. */
@@ -1944,6 +1878,7 @@ app.post(
   requireRoles("super_admin", "company_manager", "isp_admin", "noc_operator", "billing_agent"),
   async (req, res) => {
     const stats = await processOverdueInvoices();
+    const subscriptionExpiry = await processExpiredSubscriptions();
     const auditIspId =
       req.user.role === "super_admin"
         ? req.query.ispId || req.body.ispId || null
@@ -1954,9 +1889,9 @@ app.post(
       action: "billing.overdue_processed",
       entityType: "billing_job",
       entityId: null,
-      details: stats
+      details: { ...stats, subscriptionExpiry }
     });
-    return res.json(stats);
+    return res.json({ ...stats, subscriptionExpiry });
   }
 );
 
@@ -2672,25 +2607,31 @@ app.post("/api/subscriptions", authenticate, async (req, res) => {
   );
   if (!customer.rows[0] || !plan.rows[0]) return res.status(404).json({ message: "Customer or plan not found" });
 
+  const networkOnCreate =
+    String(process.env.SUBSCRIPTION_NETWORK_ACCESS_ON_CREATE ?? "true").toLowerCase() !== "false";
+  const initialStatus = networkOnCreate ? "active" : "suspended";
+
   const now = new Date();
   const endDate = new Date(now);
   endDate.setDate(endDate.getDate() + Number(plan.rows[0].duration_days));
   const maxDev = Math.max(1, Number(plan.rows[0].max_devices) || 1);
 
   const subInsert = await query(
-    "INSERT INTO subscriptions (id, isp_id, customer_id, plan_id, status, access_type, start_date, end_date, max_simultaneous_devices) VALUES (gen_random_uuid(), $1, $2, $3, 'active', $4, $5, $6, $7) RETURNING id, isp_id AS \"ispId\", customer_id AS \"customerId\", plan_id AS \"planId\", status, access_type AS \"accessType\", start_date AS \"startDate\", end_date AS \"endDate\"",
-    [ispId, customerId, planId, accessType, now.toISOString(), endDate.toISOString(), maxDev]
+    "INSERT INTO subscriptions (id, isp_id, customer_id, plan_id, status, access_type, start_date, end_date, max_simultaneous_devices) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, isp_id AS \"ispId\", customer_id AS \"customerId\", plan_id AS \"planId\", status, access_type AS \"accessType\", start_date AS \"startDate\", end_date AS \"endDate\"",
+    [ispId, customerId, planId, initialStatus, accessType, now.toISOString(), endDate.toISOString(), maxDev]
   );
   const subscription = subInsert.rows[0];
   const invoiceInsert = await query(
     "INSERT INTO invoices (id, isp_id, subscription_id, customer_id, amount_usd, status, due_date) VALUES (gen_random_uuid(), $1, $2, $3, $4, 'unpaid', $5) RETURNING id, isp_id AS \"ispId\", subscription_id AS \"subscriptionId\", customer_id AS \"customerId\", amount_usd AS \"amountUsd\", status, due_date AS \"dueDate\", created_at AS \"createdAt\"",
     [ispId, subscription.id, customerId, Number(plan.rows[0].price_usd), endDate.toISOString()]
   );
-  await provisionSubscriptionAccess({
-    ispId,
-    subscriptionId: subscription.id,
-    action: "activate"
-  });
+  if (networkOnCreate) {
+    await provisionSubscriptionAccess({
+      ispId,
+      subscriptionId: subscription.id,
+      action: "activate"
+    });
+  }
   res.status(201).json({ subscription, invoice: invoiceInsert.rows[0] });
 });
 
@@ -2941,38 +2882,96 @@ app.post(
     if (!["approved", "rejected"].includes(decision)) {
       return res.status(400).json({ message: "decision must be approved or rejected" });
     }
-    const submissionResult = await query(
-      "SELECT * FROM payment_tid_submissions WHERE id = $1 AND isp_id = $2",
-      [submissionId, ispId]
-    );
-    const submission = submissionResult.rows[0];
-    if (!submission) return res.status(404).json({ message: "Submission not found" });
-    await query(
-      "UPDATE payment_tid_submissions SET status = $1, reviewed_by = $2, reviewed_at = NOW(), review_note = $3 WHERE id = $4",
-      [decision, req.user.sub, note || null, submissionId]
-    );
-    if (decision === "approved") {
-      await query("UPDATE invoices SET status = 'paid' WHERE id = $1", [submission.invoice_id]);
-      await extendSubscriptionAfterPayment(ispId, submission.subscription_id);
-      await query(
-        "INSERT INTO payments (id, isp_id, invoice_id, provider_ref, amount_usd, status, method) VALUES (gen_random_uuid(), $1, $2, $3, $4, 'confirmed', 'manual_mobile_money')",
-        [ispId, submission.invoice_id, submission.tid, Number(submission.amount_usd || 0)]
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const submissionResult = await client.query(
+        "SELECT * FROM payment_tid_submissions WHERE id = $1 AND isp_id = $2 FOR UPDATE",
+        [submissionId, ispId]
       );
-      await provisionSubscriptionAccess({
+      const submission = submissionResult.rows[0];
+      if (!submission) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Submission not found" });
+      }
+      if (submission.status !== "pending") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Submission already reviewed" });
+      }
+
+      if (decision === "rejected") {
+        await client.query(
+          "UPDATE payment_tid_submissions SET status = $1, reviewed_by = $2, reviewed_at = NOW(), review_note = $3 WHERE id = $4",
+          ["rejected", req.user.sub, note || null, submissionId]
+        );
+        await client.query("COMMIT");
+        await logAudit({
+          ispId,
+          actorUserId: req.user.sub,
+          action: "payment.tid_rejected",
+          entityType: "payment_tid_submission",
+          entityId: submissionId,
+          details: { note: note || null }
+        });
+        return res.json({ message: "Submission rejected" });
+      }
+
+      const pay = await applyInvoicePaymentTx(client, {
         ispId,
-        subscriptionId: submission.subscription_id,
-        action: "activate"
+        invoiceId: submission.invoice_id,
+        providerRef: submission.tid,
+        amountUsd: submission.amount_usd,
+        status: "confirmed",
+        methodType: "manual_mobile_money"
       });
+      if (!pay.ok) {
+        await client.query("ROLLBACK");
+        return res.status(pay.code || 400).json({ message: pay.message || "Payment failed" });
+      }
+
+      await client.query(
+        "UPDATE payment_tid_submissions SET status = $1, reviewed_by = $2, reviewed_at = NOW(), review_note = $3 WHERE id = $4",
+        ["approved", req.user.sub, note || null, submissionId]
+      );
+      await client.query("COMMIT");
+
+      if (pay.activated) {
+        await provisionSubscriptionAccess({
+          ispId,
+          subscriptionId: submission.subscription_id,
+          action: "activate"
+        });
+      }
+
+      await logAudit({
+        ispId,
+        actorUserId: req.user.sub,
+        action: "payment.tid_approved",
+        entityType: "payment_tid_submission",
+        entityId: submissionId,
+        details: {
+          note: note || null,
+          duplicate: Boolean(pay.duplicate),
+          invoiceAlreadyPaid: Boolean(pay.invoiceAlreadyPaid),
+          activated: Boolean(pay.activated)
+        }
+      });
+      return res.json({
+        message: "Submission approved",
+        activated: Boolean(pay.activated),
+        duplicate: Boolean(pay.duplicate)
+      });
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_e) {
+        /* ignore */
+      }
+      throw err;
+    } finally {
+      client.release();
     }
-    await logAudit({
-      ispId,
-      actorUserId: req.user.sub,
-      action: `payment.tid_${decision}`,
-      entityType: "payment_tid_submission",
-      entityId: submissionId,
-      details: { note: note || null }
-    });
-    return res.json({ message: `Submission ${decision}` });
   }
 );
 

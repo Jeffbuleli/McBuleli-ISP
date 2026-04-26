@@ -126,6 +126,17 @@ export async function initDb() {
   await query(
     "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS max_simultaneous_devices INTEGER NULL;"
   );
+  await query(`
+    DO $subchk$ BEGIN
+      ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_status_check;
+    EXCEPTION WHEN undefined_object THEN NULL;
+    END $subchk$;
+  `);
+  await query(`
+    ALTER TABLE subscriptions
+    ADD CONSTRAINT subscriptions_status_check
+    CHECK (status IN ('active', 'suspended'))
+  `);
 
   await query(`
     CREATE TABLE IF NOT EXISTS wifi_guest_purchases (
@@ -172,6 +183,17 @@ export async function initDb() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
+  await query(`
+    DO $invchk$ BEGIN
+      ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_status_check;
+    EXCEPTION WHEN undefined_object THEN NULL;
+    END $invchk$;
+  `);
+  await query(`
+    ALTER TABLE invoices
+    ADD CONSTRAINT invoices_status_check
+    CHECK (status IN ('unpaid', 'overdue', 'paid'))
+  `);
 
   await query(`
     CREATE TABLE IF NOT EXISTS payments (
@@ -185,6 +207,9 @@ export async function initDb() {
       paid_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
+  await query(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_isp_invoice_provider_ref ON payments (isp_id, invoice_id, provider_ref);"
+  );
 
   await query(`
     CREATE TABLE IF NOT EXISTS isp_payment_methods (
