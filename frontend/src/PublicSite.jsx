@@ -322,7 +322,8 @@ const COMPANY_CONTACT = {
   address: "Av. des Ecuries, Jolis Parcs, Ngaliema Kinshasa",
   email: "mcbuleli@gmail.com",
   phone: "+243997366736",
-  whatsapp: "https://wa.me/mcbuleli"
+  whatsapp: "https://wa.me/mcbuleli",
+  rccm: "CD/KNG/RCCM/26-A-00382"
 };
 
 function PublicLogo() {
@@ -335,12 +336,23 @@ export default function PublicSite() {
   const t = (fr, en) => (isEn ? en : fr);
   const statRows = useMemo(
     () => [
-      { value: "24/7", label: t("Portails et paiements", "Portals and payments") },
-      { value: "10+", label: t("Modules ISP intégrés", "Integrated ISP modules") },
-      { value: "1", label: t("Plateforme pour toute l'équipe", "Platform for the whole team") }
+      {
+        value: "24/7",
+        label: t("Portail & paiements toujours accessibles", "Portal & payments always on")
+      },
+      {
+        value: "10+",
+        label: t("Modules métiers dans un seul produit", "Business modules in one product")
+      },
+      {
+        value: "1",
+        label: t("Une vision pour direction & terrain", "One view for leadership & field teams")
+      }
     ],
     [isEn]
   );
+
+  const year = useMemo(() => new Date().getFullYear(), []);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -368,22 +380,22 @@ export default function PublicSite() {
         </div>
         <div className="public-hero-grid">
           <section>
-            <p className="eyebrow">
+            <p className="eyebrow public-hero-eyebrow">
               {t(
-                "Facturation, réseau et encaissements pour opérateurs internet",
-                "Billing, network and collections for internet providers"
+                "Facturation · Réseau · Encaissements — conçu pour les FAI",
+                "Billing · Network · Collections — built for ISPs"
               )}
             </p>
-            <h1>
+            <h1 className="public-hero-title">
               {t(
-                "La plateforme professionnelle pour lancer, piloter et développer votre FAI.",
-                "The professional platform to launch, run and grow your ISP."
+                "Alignez abonnés, trésorerie et infrastructure réseau sur une seule plateforme.",
+                "Keep subscribers, cash flow and network infrastructure aligned on one platform."
               )}
             </h1>
             <p className="public-hero-lead">
               {t(
-                "McBuleli réunit facturation, Mobile Money, portail client, Wi‑Fi invité, agents terrain, MikroTik et reporting dans une interface claire — pour vos équipes comme pour vos abonnés.",
-                "McBuleli brings billing, Mobile Money, customer portal, guest Wi‑Fi, field agents, MikroTik and reporting together in one clear experience—for your teams and your subscribers."
+                "McBuleli centralise relances, Mobile Money, portail abonné, Wi‑Fi invité, équipes terrain et synchronisation MikroTik — avec la traçabilité attendue par les opérateurs sérieux.",
+                "McBuleli unifies dunning, Mobile Money, the subscriber portal, guest Wi‑Fi, field teams and MikroTik sync—with the traceability serious operators expect."
               )}
             </p>
             <div className="public-cta">
@@ -565,20 +577,46 @@ export default function PublicSite() {
       </section>
 
       <footer className="public-footer" id="contact">
-        <div>
-          <a className="public-brand public-brand--footer" href="/">
-            <PublicLogo />
-            <span>McBuleli</span>
-          </a>
-          <p>{t("Facturation et opérations professionnelles pour fournisseurs d'accès internet.", "Professional billing and operations for internet service providers.")}</p>
+        <div className="public-footer-main">
+          <div className="public-footer-intro">
+            <a className="public-brand public-brand--footer" href="/">
+              <PublicLogo />
+              <span>McBuleli</span>
+            </a>
+            <p className="public-footer-tagline">
+              {t(
+                "Suite d'exploitation pour FAI : facturation, encaissements, portail abonné et réseau.",
+                "Operations suite for ISPs: billing, collections, subscriber portal and network."
+              )}
+            </p>
+          </div>
+          <div className="public-footer-cards" role="group" aria-label={t("Coordonnées", "Contact details")}>
+            <a className="public-footer-card" href={`mailto:${COMPANY_CONTACT.email}`}>
+              <span className="public-footer-card-label">{t("Courriel", "Email")}</span>
+              <span className="public-footer-card-value">{COMPANY_CONTACT.email}</span>
+            </a>
+            <a className="public-footer-card" href={`tel:${COMPANY_CONTACT.phone.replace(/\s/g, "")}`}>
+              <span className="public-footer-card-label">{t("Téléphone", "Phone")}</span>
+              <span className="public-footer-card-value">{COMPANY_CONTACT.phone}</span>
+            </a>
+            <a className="public-footer-card" href={COMPANY_CONTACT.whatsapp} rel="noopener noreferrer">
+              <span className="public-footer-card-label">WhatsApp</span>
+              <span className="public-footer-card-value">{t("Écrire à McBuleli", "Message McBuleli")}</span>
+            </a>
+            <div className="public-footer-card public-footer-card--static">
+              <span className="public-footer-card-label">{t("Siège", "Head office")}</span>
+              <span className="public-footer-card-value">{COMPANY_CONTACT.address}</span>
+            </div>
+          </div>
         </div>
-        <address>
-          <strong>{t("Informations de l'entreprise", "Company information")}</strong>
-          <span>Adresse : {COMPANY_CONTACT.address}</span>
-          <a href={`mailto:${COMPANY_CONTACT.email}`}>Email : {COMPANY_CONTACT.email}</a>
-          <a href={`tel:${COMPANY_CONTACT.phone}`}>Tel : {COMPANY_CONTACT.phone}</a>
-          <a href={COMPANY_CONTACT.whatsapp}>WhatsApp : {COMPANY_CONTACT.whatsapp}</a>
-        </address>
+        <div className="public-footer-legal">
+          <p className="public-footer-copy">
+            © {year} McBuleli — {t("Tous droits réservés.", "All rights reserved.")}
+          </p>
+          <p className="public-footer-rccm">
+            RCCM : <span className="public-footer-rccm-id">{COMPANY_CONTACT.rccm}</span>
+          </p>
+        </div>
       </footer>
     </main>
   );
