@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, publicAssetUrl, setAuthToken } from "./api";
+import LangSwitch from "./LangSwitch.jsx";
+import { IconAntenna, IconPeople, IconSliders, IconWallet } from "./icons.jsx";
 
 /** Replace placeholder tenant names (e.g. "AA") with McBuleli for public-facing titles. */
 function resolvePublicBrandName(displayName) {
@@ -1796,13 +1798,8 @@ function App() {
                       : "Espace équipe McBuleli — saisissez vos identifiants ci-dessous."}
                 </p>
               </div>
-              <div style={{ marginTop: 10 }}>
-                <button type="button" onClick={() => setUiLang("fr")} disabled={uiLang === "fr"}>
-                  FR
-                </button>{" "}
-                <button type="button" onClick={() => setUiLang("en")} disabled={uiLang === "en"}>
-                  EN
-                </button>
+              <div className="login-lang">
+                <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="login" />
               </div>
             </header>
             {error && <p className="error">{error}</p>}
@@ -1874,13 +1871,8 @@ function App() {
               )}
             </p>
           </div>
-          <div style={{ marginTop: 10 }}>
-            <button type="button" onClick={() => setUiLang("fr")} disabled={uiLang === "fr"}>
-              FR
-            </button>{" "}
-            <button type="button" onClick={() => setUiLang("en")} disabled={uiLang === "en"}>
-              EN
-            </button>
+          <div className="login-lang">
+            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="pwd" />
           </div>
         </header>
         {error && <p className="error">{error}</p>}
@@ -1919,12 +1911,7 @@ function App() {
           </div>
         </div>
         <div className="dashboard-toolbar">
-          <button type="button" onClick={() => setUiLang("fr")} disabled={uiLang === "fr"}>
-            FR
-          </button>{" "}
-          <button type="button" onClick={() => setUiLang("en")} disabled={uiLang === "en"}>
-            EN
-          </button>{" "}
+          <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash" />
           <button type="button" className="btn-logout" onClick={onLogout}>
             {t("Déconnexion", "Logout")}
           </button>
@@ -1940,22 +1927,30 @@ function App() {
       </nav>
       <section className="dashboard-quick-actions" aria-label="Raccourcis tableau de bord">
         <a href="#workspace-settings">
-          <span>SET</span>
+          <span className="dashboard-quick-icon" aria-hidden="true">
+            <IconSliders />
+          </span>
           <strong>{t("Paramètres entreprise", "Company settings")}</strong>
           <small>{t("Logo, couleurs, domaines, contacts", "Logo, colors, domains, contacts")}</small>
         </a>
         <a href="#billing-ops">
-          <span>PAY</span>
+          <span className="dashboard-quick-icon" aria-hidden="true">
+            <IconWallet />
+          </span>
           <strong>{t("Facturation & paiements", "Billing & payments")}</strong>
           <small>{t("TID, Mobile Money, retraits", "TID, Mobile Money, withdrawals")}</small>
         </a>
         <a href="#team-settings">
-          <span>USR</span>
+          <span className="dashboard-quick-icon" aria-hidden="true">
+            <IconPeople />
+          </span>
           <strong>{t("Menus utilisateurs", "User menus")}</strong>
           <small>{t("Agents, rôles, invitations", "Agents, roles, invites")}</small>
         </a>
         <a href="#network-ops">
-          <span>NET</span>
+          <span className="dashboard-quick-icon" aria-hidden="true">
+            <IconAntenna />
+          </span>
           <strong>{t("Réseau", "Network")}</strong>
           <small>{t("MikroTik, Hotspot, télémétrie", "MikroTik, Hotspot, telemetry")}</small>
         </a>

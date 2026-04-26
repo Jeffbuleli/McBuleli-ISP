@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_URL, api, publicAssetUrl } from "./api";
+import LangSwitch from "./LangSwitch.jsx";
+import { portalBrandTitle, portalT } from "./portalCopy.js";
 
 const SUBSCRIBER_JWT_KEY = "subscriberJwt";
 const DEFAULT_PAWAPAY_NETWORKS = [
@@ -8,14 +10,13 @@ const DEFAULT_PAWAPAY_NETWORKS = [
   { key: "mpesa", label: "M-Pesa (Vodacom)" }
 ];
 
-function portalBrandTitle(displayName) {
-  const s = displayName != null ? String(displayName).trim() : "";
-  if (!s || s === "AA") return "McBuleli — portail client";
-  return `${displayName} — portail client`;
+function getStoredUiLang() {
+  if (typeof window === "undefined") return "fr";
+  return window.localStorage.getItem("ui_lang") === "en" ? "en" : "fr";
 }
 
-function money(value, currency = "USD") {
-  return Number(value || 0).toLocaleString("fr-FR", {
+function money(value, currency = "USD", lang = "fr") {
+  return Number(value || 0).toLocaleString(lang === "en" ? "en-GB" : "fr-FR", {
     style: "currency",
     currency,
     maximumFractionDigits: 2
@@ -82,30 +83,39 @@ export default function Portal() {
     networkKey: "orange"
   });
   const [mobilePaySession, setMobilePaySession] = useState(null);
+  const [uiLang, setUiLang] = useState(getStoredUiLang);
+  const t = useCallback((key) => portalT(uiLang, key), [uiLang]);
 
-  const loadSession = useCallback(async (a) => {
-    setError("");
-    setNotice("");
-    if (!a || (a.type === "opaque" && (!a.token || a.token.length < 16))) {
-      setSession(null);
-      setError(
-        "Connectez-vous avec le téléphone et le mot de passe, collez un jeton de portail, ou terminez la création du mot de passe."
-      );
-      return;
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("ui_lang", uiLang);
     }
-    if (a.type === "subscriber" && !a.jwt) {
-      setSession(null);
-      setError("Session abonné introuvable.");
-      return;
-    }
-    const data = await portalFetch("/portal/session", a);
-    setSession(data);
-    if (a.type === "opaque" && a.token) {
-      const url = new URL(window.location.href);
-      url.searchParams.set("token", a.token);
-      window.history.replaceState({}, "", url.toString());
-    }
-  }, []);
+  }, [uiLang]);
+
+  const loadSession = useCallback(
+    async (a) => {
+      setError("");
+      setNotice("");
+      if (!a || (a.type === "opaque" && (!a.token || a.token.length < 16))) {
+        setSession(null);
+        setError(portalT(uiLang, "errBootstrap"));
+        return;
+      }
+      if (a.type === "subscriber" && !a.jwt) {
+        setSession(null);
+        setError(portalT(uiLang, "errNoSession"));
+        return;
+      }
+      const data = await portalFetch("/portal/session", a);
+      setSession(data);
+      if (a.type === "opaque" && a.token) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("token", a.token);
+        window.history.replaceState({}, "", url.toString());
+      }
+    },
+    [uiLang]
+  );
 
   useEffect(() => {
     if (!auth) return;
@@ -131,7 +141,7 @@ export default function Portal() {
       setAuth(next);
       if (!next) {
         setSession(null);
-        setError("Collez un jeton de portail valide (au moins 16 caractères).");
+        setError(t("errTokenShort"));
         return;
       }
       await loadSession(next);
@@ -157,7 +167,7 @@ export default function Portal() {
       setPasswordInput("");
       await loadSession(next);
       if (res.mustSetPassword) {
-        setNotice("Connecté. Contactez votre opérateur si vous devez encore mettre à jour votre mot de passe.");
+        setNotice(t("noticeMustPwd"));
       }
     } catch (err) {
       setError(err.message);
@@ -179,7 +189,7 @@ export default function Portal() {
       setAuth(next);
       setSetupTokenInput("");
       setSetupPasswordInput("");
-      setNotice("Mot de passe enregistré. Vous êtes connecté.");
+      setNotice(t("noticePwdSaved"));
       await loadSession(next);
     } catch (err) {
       setError(err.message);
@@ -191,7 +201,7 @@ export default function Portal() {
     setError("");
     setNotice("");
     if (!auth) {
-      setError("Connectez-vous d'abord.");
+      setError(t("errNeedLogin"));
       return;
     }
     try {
@@ -204,7 +214,7 @@ export default function Portal() {
           amountUsd: tidForm.amountUsd || undefined
         })
       });
-      setNotice("Référence de transaction envoyée. Votre opérateur la vérifiera sous peu.");
+      setNotice(t("noticeTidSent"));
       setTidForm({ invoiceId: "", tid: "", submittedByPhone: "", amountUsd: "" });
       await loadSession(auth);
     } catch (err) {
@@ -216,16 +226,16 @@ export default function Portal() {
     e.preventDefault();
     setError("");
     setNotice("");
-    if (!auth) return setError("Connectez-vous d'abord.");
+    if (!auth) return setError(t("errNeedLogin"));
     try {
       const res = await portalFetch("/portal/mobile-money/initiate", auth, {
         method: "POST",
         body: JSON.stringify(mobilePayForm)
       });
       setMobilePaySession(res);
-      setNotice(res.message || "Demande envoyée au téléphone. Validez le PIN.");
+      setNotice(res.message || t("noticeMobileSent"));
     } catch (err) {
-      setError(err.message || "Impossible de démarrer le paiement Mobile Money.");
+      setError(err.message || t("errMobileStart"));
     }
   }
 
@@ -235,14 +245,14 @@ export default function Portal() {
     if (!auth || !mobilePaySession?.depositId) return;
     try {
       const res = await portalFetch(`/portal/mobile-money/status/${encodeURIComponent(mobilePaySession.depositId)}`, auth);
-      setNotice(`Statut paiement : ${res.status}`);
+      setNotice(`${t("paymentStatus")}: ${res.status}`);
       if (res.status === "completed") {
         setMobilePaySession(null);
         setMobilePayForm({ invoiceId: "", currency: "CDF", phoneNumber: "", networkKey: "orange" });
         await loadSession(auth);
       }
     } catch (err) {
-      setError(err.message || "Impossible de vérifier le paiement Mobile Money.");
+      setError(err.message || t("errMobileCheck"));
     }
   }
 
@@ -266,85 +276,89 @@ export default function Portal() {
       }}
     >
       <header className="portal-hero">
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {brand?.logoUrl ? (
-            <img src={publicAssetUrl(brand.logoUrl)} alt="" style={{ height: 48 }} />
-          ) : (
-            <img className="dashboard-logo" src="/mcbuleli-logo.svg" alt="" />
-          )}
-          <div>
-            <p className="eyebrow">Portail client</p>
-            <h1 style={{ color: brand?.primaryColor || "#5d4037", margin: 0 }}>{portalBrandTitle(brand?.displayName)}</h1>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {brand?.logoUrl ? (
+              <img src={publicAssetUrl(brand.logoUrl)} alt="" style={{ height: 48 }} />
+            ) : (
+              <img className="dashboard-logo" src="/mcbuleli-logo.svg" alt="" />
+            )}
+            <div>
+              <p className="eyebrow">{t("eyebrow")}</p>
+              <h1 style={{ color: brand?.primaryColor || "#5d4037", margin: 0 }}>
+                {portalBrandTitle(brand?.displayName, uiLang)}
+              </h1>
+            </div>
           </div>
+          <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="portal" />
         </div>
-        <p>
-          Consultez votre service internet, payez vos factures par Mobile Money et envoyez votre référence TID dans un
-          espace simple, sécurisé et professionnel.
-        </p>
+        <p>{t("heroLead")}</p>
       </header>
 
       {!session && (
         <section className="portal-login-grid">
           <form className="panel" onSubmit={onSubscriberLogin}>
-            <h2>Connexion par téléphone</h2>
-            <p>
-              Indiquez l'identifiant FAI communiqué par votre opérateur, votre numéro enregistré (chiffres, indicatif
-              pays) et votre mot de passe.
-            </p>
+            <h2>{t("loginPhoneTitle")}</h2>
+            <p>{t("loginPhoneHelp")}</p>
             <input
-              placeholder="Identifiant FAI (UUID)"
+              placeholder={t("ispPlaceholder")}
               value={ispIdInput}
               onChange={(e) => setIspIdInput(e.target.value)}
               style={{ width: "100%", maxWidth: 560 }}
             />
             <input
-              placeholder="Téléphone (ex. 243990000111)"
+              placeholder={t("phonePlaceholder")}
               value={phoneInput}
               onChange={(e) => setPhoneInput(e.target.value)}
               style={{ width: "100%", maxWidth: 560 }}
             />
             <input
               type="password"
-              placeholder="Mot de passe"
+              placeholder={t("passwordPlaceholder")}
               value={passwordInput}
               onChange={(e) => setPasswordInput(e.target.value)}
               style={{ width: "100%", maxWidth: 560 }}
             />
-            <button type="submit">Se connecter</button>
+            <button type="submit">{t("signIn")}</button>
           </form>
 
           <form className="panel" onSubmit={onSetupPassword}>
-            <h2>Première connexion (achat Wi‑Fi ou bon)</h2>
-            <p>
-              Collez le jeton reçu après paiement ou indiqué sur votre bon, puis choisissez un mot de passe pour accéder
-              au portail.
-            </p>
+            <h2>{t("firstSetupTitle")}</h2>
+            <p>{t("firstSetupHelp")}</p>
             <input
-              placeholder="Jeton de configuration"
+              placeholder={t("setupTokenPh")}
               value={setupTokenInput}
               onChange={(e) => setSetupTokenInput(e.target.value)}
               style={{ width: "100%", maxWidth: 560 }}
             />
             <input
               type="password"
-              placeholder="Nouveau mot de passe (min. 6 caractères)"
+              placeholder={t("newPasswordPh")}
               value={setupPasswordInput}
               onChange={(e) => setSetupPasswordInput(e.target.value)}
               style={{ width: "100%", maxWidth: 560 }}
             />
-            <button type="submit">Enregistrer le mot de passe et se connecter</button>
+            <button type="submit">{t("savePasswordSignIn")}</button>
           </form>
 
           <form className="panel" onSubmit={onOpenPortal}>
-            <h2>Lien de portail</h2>
-            <p>Collez le lien envoyé par votre opérateur, ou uniquement la partie jeton.</p>
+            <h2>{t("linkTitle")}</h2>
+            <p>{t("linkHelp")}</p>
             <input
-              placeholder="Jeton de portail"
+              placeholder={t("tokenPh")}
               value={tokenInput}
               onChange={(e) => setTokenInput(e.target.value)}
               style={{ width: "100%", maxWidth: 560 }}
             />
-            <button type="submit">Ouvrir avec le jeton</button>
+            <button type="submit">{t("openWithToken")}</button>
           </form>
         </section>
       )}
@@ -352,7 +366,7 @@ export default function Portal() {
       {session && (
         <p style={{ marginBottom: 12 }}>
           <button type="button" onClick={onSignOut}>
-            Déconnexion
+            {t("signOut")}
           </button>
         </p>
       )}
@@ -364,18 +378,26 @@ export default function Portal() {
         <>
           <section className="public-section public-section--split">
             <div>
-              <p className="eyebrow">Espace abonné</p>
-              <h2>Bonjour, {session.customer.fullName}</h2>
-              <p>Téléphone enregistré : {session.customer.phone}</p>
-              {session.customer.email ? <p>E-mail enregistré : {session.customer.email}</p> : null}
+              <p className="eyebrow">{t("subscriberSpace")}</p>
+              <h2>
+                {t("hello")}, {session.customer.fullName}
+              </h2>
+              <p>
+                {t("phoneRegistered")} : {session.customer.phone}
+              </p>
+              {session.customer.email ? (
+                <p>
+                  {t("emailRegistered")} : {session.customer.email}
+                </p>
+              ) : null}
             </div>
             <div className="demo-board">
               <div className="demo-board-row">
-                <span>Abonnements</span>
+                <span>{t("subscriptions")}</span>
                 <b>{session.subscriptions.length}</b>
               </div>
               <div className="demo-board-row">
-                <span>Factures</span>
+                <span>{t("invoices")}</span>
                 <b>{session.invoices.length}</b>
               </div>
             </div>
@@ -383,29 +405,31 @@ export default function Portal() {
 
           <section className="portal-login-grid">
             <div className="panel">
-              <h2>Abonnements</h2>
+              <h2>{t("subscriptions")}</h2>
               {session.subscriptions.length === 0 ? (
-                <p>Aucun abonnement pour le moment.</p>
+                <p>{t("noSubscriptions")}</p>
               ) : (
                 session.subscriptions.map((s) => (
                   <p key={s.id}>
-                    {s.id.slice(0, 8)} — {s.status} ({s.accessType}) jusqu'au{" "}
-                    {new Date(s.endDate).toLocaleDateString("fr-FR")}
-                    {s.maxSimultaneousDevices != null ? ` — jusqu'à ${s.maxSimultaneousDevices} appareil(s)` : ""}
+                    {s.id.slice(0, 8)} — {s.status} ({s.accessType}) {t("until")}{" "}
+                    {new Date(s.endDate).toLocaleDateString(uiLang === "en" ? "en-GB" : "fr-FR")}
+                    {s.maxSimultaneousDevices != null
+                      ? ` — ${t("devicesUpTo")} ${s.maxSimultaneousDevices} ${t("devicesSuffix")}`
+                      : ""}
                   </p>
                 ))
               )}
             </div>
 
             <div className="panel">
-              <h2>Factures</h2>
+              <h2>{t("invoices")}</h2>
               {session.invoices.length === 0 ? (
-                <p>Aucune facture.</p>
+                <p>{t("noInvoices")}</p>
               ) : (
                 session.invoices.map((inv) => (
                   <p key={inv.id}>
-                    {inv.id.slice(0, 8)} — {inv.amountUsd}&nbsp;$ — {inv.status} — échéance{" "}
-                    {new Date(inv.dueDate).toLocaleDateString("fr-FR")}
+                    {inv.id.slice(0, 8)} — {money(inv.amountUsd, "USD", uiLang)} — {inv.status} — {t("due")}{" "}
+                    {new Date(inv.dueDate).toLocaleDateString(uiLang === "en" ? "en-GB" : "fr-FR")}
                   </p>
                 ))
               )}
@@ -413,12 +437,12 @@ export default function Portal() {
           </section>
 
           <form className="panel" onSubmit={onStartMobileMoneyPayment}>
-            <h2>Payer cette facture par Mobile Money</h2>
+            <h2>{t("payMobileTitle")}</h2>
             <select
               value={mobilePayForm.invoiceId}
               onChange={(e) => setMobilePayForm({ ...mobilePayForm, invoiceId: e.target.value })}
             >
-              <option value="">Choisir une facture ouverte</option>
+              <option value="">{t("chooseOpenInvoice")}</option>
               {session.invoices
                 .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
                 .map((inv) => (
@@ -435,7 +459,7 @@ export default function Portal() {
               <option value="USD">USD</option>
             </select>
             <input
-              placeholder="Téléphone payeur (ex. 243990000111)"
+              placeholder={t("payerPhonePh")}
               value={mobilePayForm.phoneNumber}
               onChange={(e) => setMobilePayForm({ ...mobilePayForm, phoneNumber: e.target.value })}
             />
@@ -450,25 +474,25 @@ export default function Portal() {
               ))}
             </select>
             <button type="submit" disabled={!mobilePayForm.invoiceId || !mobilePayForm.phoneNumber}>
-              Payer cette facture par Mobile Money
+              {t("payInvoiceBtn")}
             </button>
             {mobilePaySession?.depositId ? (
               <p>
                 Deposit ID: <code>{mobilePaySession.depositId}</code>{" "}
                 <button type="button" onClick={onCheckMobileMoneyPayment}>
-                  Vérifier le paiement
+                  {t("checkPayment")}
                 </button>
               </p>
             ) : null}
           </form>
 
           <form className="panel" onSubmit={onSubmitTid}>
-            <h2>Envoyer la référence Mobile Money (TID)</h2>
+            <h2>{t("tidTitle")}</h2>
             <select
               value={tidForm.invoiceId}
               onChange={(e) => setTidForm({ ...tidForm, invoiceId: e.target.value })}
             >
-              <option value="">Choisir une facture ouverte</option>
+              <option value="">{t("chooseOpenInvoice")}</option>
               {session.invoices
                 .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
                 .map((inv) => (
@@ -478,22 +502,22 @@ export default function Portal() {
                 ))}
             </select>
             <input
-              placeholder="Référence de transaction (TID)"
+              placeholder={t("tidPh")}
               value={tidForm.tid}
               onChange={(e) => setTidForm({ ...tidForm, tid: e.target.value })}
             />
             <input
-              placeholder="Votre téléphone (facultatif)"
+              placeholder={t("yourPhoneOpt")}
               value={tidForm.submittedByPhone}
               onChange={(e) => setTidForm({ ...tidForm, submittedByPhone: e.target.value })}
             />
             <input
-              placeholder="Montant USD (facultatif)"
+              placeholder={t("amountUsdOpt")}
               value={tidForm.amountUsd}
               onChange={(e) => setTidForm({ ...tidForm, amountUsd: e.target.value })}
             />
             <button type="submit" disabled={!tidForm.invoiceId || !tidForm.tid}>
-              Envoyer la TID
+              {t("sendTid")}
             </button>
           </form>
         </>

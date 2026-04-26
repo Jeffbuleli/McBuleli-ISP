@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, setAuthToken } from "./api";
+import LangSwitch from "./LangSwitch.jsx";
 
 function getStoredUiLang() {
   if (typeof window === "undefined") return "fr";
@@ -92,13 +93,8 @@ export default function Signup() {
                     : "Formules Essential (10 $/mois) ou Pro (15 $/mois). Premium est personnalisé sur contrat."}
               </p>
             </div>
-              <div style={{ marginTop: 10 }}>
-                <button type="button" onClick={() => setUiLang("fr")} disabled={uiLang === "fr"}>
-                  FR
-                </button>{" "}
-                <button type="button" onClick={() => setUiLang("en")} disabled={uiLang === "en"}>
-                  EN
-                </button>
+              <div className="login-lang">
+                <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="signup" />
               </div>
           </header>
           {error && <p className="error">{error}</p>}

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import LangSwitch from "./LangSwitch.jsx";
+import { IconBuilding, IconPresentation, IconReceipt, IconUserCheck } from "./icons.jsx";
 
 function getStoredUiLang() {
   if (typeof window === "undefined") return "fr";
@@ -170,28 +172,149 @@ function ServiceIcon({ type }) {
 
 const WORKSPACES = [
   {
-    fr: "Interface entreprise",
+    icon: "building",
+    fr: "Espace entreprise",
     en: "Company workspace",
-    bodyFr: "Vue dirigeant pour suivre revenus, clients, abonnements, dépenses, sites et performance.",
-    bodyEn: "Executive view for revenue, customers, subscriptions, expenses, sites and performance."
+    bodyFr:
+      "Vue dirigeante : revenus, clients, abonnements, dépenses, sites et indicateurs clés — au même endroit.",
+    bodyEn: "Executive view: revenue, customers, subscriptions, expenses, sites and KPIs in one place."
   },
   {
-    fr: "Interface agents",
-    en: "Agent workspace",
-    bodyFr: "Accès terrain avec rôles, clients assignés, validations et actions quotidiennes.",
-    bodyEn: "Field access with roles, assigned customers, validations and daily actions."
+    icon: "agents",
+    fr: "Espace agents",
+    en: "Field & agents",
+    bodyFr: "Rôles, clients assignés, validations terrain et actions du quotidien, sans friction.",
+    bodyEn: "Roles, assigned customers, field validations and day-to-day actions—without friction."
   },
   {
-    fr: "Mode démo",
+    icon: "demo",
+    fr: "Mode démonstration",
     en: "Demo mode",
-    bodyFr: "Présentation claire des modules pour vendre, former et embarquer rapidement une équipe.",
-    bodyEn: "Clear module presentation for sales, training and quick team onboarding."
+    bodyFr: "Présentation claire des modules pour vendre, former et embarquer une équipe rapidement.",
+    bodyEn: "Clear walkthrough of modules for sales, training and fast team onboarding."
   },
   {
-    fr: "Facturation",
-    en: "Billing",
-    bodyFr: "Impayés, paiements confirmés, Mobile Money, TID, dépôts SaaS et relances automatisées.",
-    bodyEn: "Outstanding invoices, confirmed payments, Mobile Money, TID, SaaS deposits and reminders."
+    icon: "billing",
+    fr: "Facturation & encaissements",
+    en: "Billing & collections",
+    bodyFr: "Impayés, paiements confirmés, Mobile Money, files TID, abonnement plateforme et relances.",
+    bodyEn: "Outstanding invoices, confirmed payments, Mobile Money, TID queue, platform billing and reminders."
+  }
+];
+
+function WorkspaceIcon({ type }) {
+  const s = { width: 26, height: 26 };
+  if (type === "agents") return <IconUserCheck {...s} />;
+  if (type === "demo") return <IconPresentation {...s} />;
+  if (type === "billing") return <IconReceipt {...s} />;
+  return <IconBuilding {...s} />;
+}
+
+const TESTIMONIALS = [
+  {
+    fr: {
+      quote:
+        "La facturation et les suspensions automatiques nous ont fait gagner un temps précieux. L'équipe voit enfin la même vérité sur les impayés.",
+      name: "Claire M.",
+      role: "Directrice opérations, FAI urbain"
+    },
+    en: {
+      quote:
+        "Automated billing and suspensions saved us countless hours. Everyone finally sees the same picture on overdue accounts.",
+      name: "Claire M.",
+      role: "COO, urban ISP"
+    }
+  },
+  {
+    fr: {
+      quote:
+        "Le portail client et les paiements Mobile Money réduisent les appels « ma facture ». Les TID sont traitées sans doublon.",
+      name: "Josué K.",
+      role: "Responsable support"
+    },
+    en: {
+      quote:
+        "The customer portal and Mobile Money cut down 'where is my invoice?' calls. TIDs are handled without duplicates.",
+      name: "Josué K.",
+      role: "Support lead"
+    }
+  },
+  {
+    fr: {
+      quote:
+        "MikroTik et le suivi des événements de provisioning nous permettent de réactiver un abonné payé en quelques clics.",
+      name: "Patrick N.",
+      role: "Ingénieur réseau"
+    },
+    en: {
+      quote:
+        "MikroTik plus provisioning events let us turn a paid subscription back on in just a few clicks.",
+      name: "Patrick N.",
+      role: "Network engineer"
+    }
+  }
+];
+
+const FAQ_ITEMS = [
+  {
+    fr: {
+      q: "Proposez-vous un essai ?",
+      a: "Oui : les nouveaux espaces entreprise bénéficient d'une période d'essai (selon la configuration de la plateforme). Vous pouvez créer un compte et explorer le tableau de bord avant de souscrire."
+    },
+    en: {
+      q: "Do you offer a trial?",
+      a: "Yes—new workspaces get a trial period (per platform settings). Create an account and explore the dashboard before subscribing."
+    }
+  },
+  {
+    fr: {
+      q: "Quels moyens de paiement sont pris en charge ?",
+      a: "Mobile Money via Pawapay (selon réseaux configurés), virement, espèces, passerelles personnalisées avec callback, et file de vérification manuelle des TID."
+    },
+    en: {
+      q: "Which payment methods are supported?",
+      a: "Mobile Money via Pawapay (per configured networks), bank transfer, cash, custom gateways with callbacks, and a manual TID verification queue."
+    }
+  },
+  {
+    fr: {
+      q: "McBuleli fonctionne-t-il avec MikroTik ?",
+      a: "Oui : provisioning PPPoE et Hotspot via l'API REST, journal des événements, synchronisation optionnelle FreeRADIUS sur la même base PostgreSQL."
+    },
+    en: {
+      q: "Does McBuleli work with MikroTik?",
+      a: "Yes—PPPoE and Hotspot provisioning via REST API, event logs, and optional FreeRADIUS sync on the same PostgreSQL database."
+    }
+  },
+  {
+    fr: {
+      q: "Les abonnés ont-ils un portail dédié ?",
+      a: "Oui : factures, abonnements, paiement Mobile Money, envoi de TID et connexion par téléphone / jeton selon la configuration de votre FAI."
+    },
+    en: {
+      q: "Is there a subscriber portal?",
+      a: "Yes—invoices, subscriptions, Mobile Money checkout, TID submission, and phone or token-based login per your ISP setup."
+    }
+  },
+  {
+    fr: {
+      q: "Plusieurs utilisateurs et rôles sont-ils possibles ?",
+      a: "Oui : super-admin plateforme, gestionnaire, admin FAI, facturation, NOC, agents terrain, avec profils d'accréditation configurables."
+    },
+    en: {
+      q: "Can we have multiple users and roles?",
+      a: "Yes—platform super-admin, company manager, ISP admin, billing, NOC, field agents, with configurable accreditation profiles."
+    }
+  },
+  {
+    fr: {
+      q: "Où sont hébergées les données ?",
+      a: "Vous déployez le backend (par ex. Render, VPS) et la base PostgreSQL où vous le souhaitez. McBuleli est conçu pour rester sous votre contrôle opérationnel."
+    },
+    en: {
+      q: "Where is data hosted?",
+      a: "You run the backend (e.g. Render, VPS) and PostgreSQL where you choose. McBuleli is built to stay under your operational control."
+    }
   }
 ];
 
@@ -237,25 +360,30 @@ export default function PublicSite() {
             <a href="#services">{t("Services", "Services")}</a>
             <a href="#interfaces">{t("Interfaces", "Workspaces")}</a>
             <a href="#pricing">{t("Tarifs", "Pricing")}</a>
+            <a href="#testimonials">{t("Témoignages", "Testimonials")}</a>
+            <a href="#faq">{t("FAQ", "FAQ")}</a>
             <a href="#contact">Contact</a>
           </nav>
-          <div className="lang-switch">
-            <button type="button" onClick={() => setUiLang("fr")} disabled={uiLang === "fr"}>
-              FR
-            </button>{" "}
-            <button type="button" onClick={() => setUiLang("en")} disabled={uiLang === "en"}>
-              EN
-            </button>
-          </div>
+          <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="public" />
         </div>
         <div className="public-hero-grid">
           <section>
-            <p className="eyebrow">{t("Billing, réseau et encaissements pour FAI", "Billing, network and collections for ISPs")}</p>
-            <h1>{t("La plateforme professionnelle pour lancer, gérer et développer votre FAI.", "The professional platform to launch, manage and grow your ISP.")}</h1>
+            <p className="eyebrow">
+              {t(
+                "Facturation, réseau et encaissements pour opérateurs internet",
+                "Billing, network and collections for internet providers"
+              )}
+            </p>
+            <h1>
+              {t(
+                "La plateforme professionnelle pour lancer, piloter et développer votre FAI.",
+                "The professional platform to launch, run and grow your ISP."
+              )}
+            </h1>
             <p className="public-hero-lead">
               {t(
-                "McBuleli réunit facturation, Mobile Money, portail client, Wi-Fi invité, agents terrain, MikroTik et reporting financier dans une interface claire pour les entreprises internet.",
-                "McBuleli brings billing, Mobile Money, customer portal, guest Wi-Fi, field agents, MikroTik and financial reporting into one clear workspace for internet companies."
+                "McBuleli réunit facturation, Mobile Money, portail client, Wi‑Fi invité, agents terrain, MikroTik et reporting dans une interface claire — pour vos équipes comme pour vos abonnés.",
+                "McBuleli brings billing, Mobile Money, customer portal, guest Wi‑Fi, field agents, MikroTik and reporting together in one clear experience—for your teams and your subscribers."
               )}
             </p>
             <div className="public-cta">
@@ -312,8 +440,8 @@ export default function PublicSite() {
         </div>
         <p>
           {t(
-            "Inspiré des meilleures plateformes ISP internationales, McBuleli met l'accent sur la simplicité, l'automatisation et une présentation professionnelle pour vos clients comme pour vos équipes.",
-            "Inspired by leading ISP platforms, McBuleli focuses on simplicity, automation and a professional experience for both customers and teams."
+            "Comme les plateformes FAI les plus abouties, McBuleli privilégie la simplicité, l'automatisation et une expérience digne d'une marque professionnelle — côté client et côté équipe.",
+            "Like leading ISP platforms, McBuleli emphasizes simplicity, automation and a polished, professional experience—on the customer side and inside your team."
           )}
         </p>
       </section>
@@ -333,7 +461,10 @@ export default function PublicSite() {
         <h2>{t("Des interfaces propres pour chaque usage.", "Clean workspaces for every use case.")}</h2>
         <div className="public-grid">
           {WORKSPACES.map((item) => (
-            <article className="public-card" key={item.fr}>
+            <article className="public-card public-card--workspace" key={item.fr}>
+              <span className="workspace-icon" aria-hidden>
+                <WorkspaceIcon type={item.icon} />
+              </span>
               <h3>{isEn ? item.en : item.fr}</h3>
               <p>{isEn ? item.bodyEn : item.bodyFr}</p>
             </article>
@@ -363,6 +494,12 @@ export default function PublicSite() {
       <section className="public-section" id="pricing">
         <p className="eyebrow">{t("Tarification transparente", "Transparent pricing")}</p>
         <h2>{t("Plans adaptés aux opérateurs en croissance.", "Plans built for growing operators.")}</h2>
+        <p className="public-section-lead">
+          {t(
+            "Trois offres claires côte à côte : démarrez petit, passez au niveau supérieur quand votre parc réseau grandit.",
+            "Three clear plans side by side—start small and move up as your network footprint grows."
+          )}
+        </p>
         <div className="public-grid public-grid--pricing">
           {PUBLIC_PLANS.map((plan, index) => (
             <article className={`public-card pricing-card ${index === 1 ? "pricing-card--featured" : ""}`} key={plan.code}>
@@ -383,8 +520,48 @@ export default function PublicSite() {
         <ul>
           <li>{t("Moins de pertes de revenus grâce au suivi des paiements, TID et suspensions.", "Reduce revenue leakage with payment, TID and suspension tracking.")}</li>
           <li>{t("Équipe plus productive grâce à un tableau de bord unique pour dirigeants, agents et support.", "Make teams more productive with one dashboard for leaders, agents and support.")}</li>
-          <li>{t("Image professionnelle dès l'ouverture de app.mcbuleli.live.", "A professional image as soon as users open app.mcbuleli.live.")}</li>
+          <li>
+            {t(
+              "Image professionnelle dès la première visite sur votre domaine ou sous-domaine.",
+              "A professional first impression on your own domain or subdomain."
+            )}
+          </li>
         </ul>
+      </section>
+
+      <section className="public-section" id="testimonials">
+        <p className="eyebrow">{t("Ils utilisent McBuleli", "Teams using McBuleli")}</p>
+        <h2>{t("Ce que disent les opérateurs", "What operators say")}</h2>
+        <p className="public-section-lead">
+          {t(
+            "Des retours concrets sur la facturation, le portail client et le réseau — pas seulement des promesses marketing.",
+            "Real feedback on billing, the customer portal and the network—not just marketing claims."
+          )}
+        </p>
+        <div className="public-testimonials">
+          {TESTIMONIALS.map((item, i) => (
+            <blockquote className="public-quote-card" key={i}>
+              <p className="public-quote-text">&ldquo;{isEn ? item.en.quote : item.fr.quote}&rdquo;</p>
+              <footer>
+                <strong>{isEn ? item.en.name : item.fr.name}</strong>
+                <span>{isEn ? item.en.role : item.fr.role}</span>
+              </footer>
+            </blockquote>
+          ))}
+        </div>
+      </section>
+
+      <section className="public-section public-section--faq" id="faq">
+        <p className="eyebrow">{t("Questions fréquentes", "Frequently asked questions")}</p>
+        <h2>{t("Réponses courtes, sans jargon inutile", "Straight answers, minimal jargon")}</h2>
+        <div className="public-faq">
+          {FAQ_ITEMS.map((item, i) => (
+            <details className="public-faq-item" key={i}>
+              <summary>{isEn ? item.en.q : item.fr.q}</summary>
+              <p>{isEn ? item.en.a : item.fr.a}</p>
+            </details>
+          ))}
+        </div>
       </section>
 
       <footer className="public-footer" id="contact">

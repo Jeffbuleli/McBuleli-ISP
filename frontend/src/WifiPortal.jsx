@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_URL, publicAssetUrl, publicRequest } from "./api";
+import LangSwitch from "./LangSwitch.jsx";
+import { IconAntenna, IconWallet, IconZap } from "./icons.jsx";
+import { wifiT } from "./wifiCopy.js";
 
-function wifiDisplayName(name) {
+function getStoredUiLang() {
+  if (typeof window === "undefined") return "fr";
+  return window.localStorage.getItem("ui_lang") === "en" ? "en" : "fr";
+}
+
+function wifiDisplayName(name, lang) {
   const s = name != null ? String(name).trim() : "";
-  if (!s || s === "AA") return "McBuleli — Wi‑Fi invité";
+  if (!s || s === "AA") return lang === "en" ? "McBuleli — guest Wi‑Fi" : "McBuleli — Wi‑Fi invité";
   return s;
 }
 
@@ -29,6 +37,14 @@ export default function WifiPortal() {
   const [redirectUrl, setRedirectUrl] = useState(null);
   const [polling, setPolling] = useState(false);
   const [postPaySetup, setPostPaySetup] = useState(null);
+  const [uiLang, setUiLang] = useState(getStoredUiLang);
+  const t = (key) => wifiT(uiLang, key);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("ui_lang", uiLang);
+    }
+  }, [uiLang]);
 
   const loadCatalog = useCallback(async (isp) => {
     setError("");
@@ -72,7 +88,7 @@ export default function WifiPortal() {
     if (!selectedPlan || !activeIspId) return;
     const phone = checkout.phone.replace(/\s+/g, "").replace(/^\+/, "");
     if (phone.length < 9) {
-      setError("Indiquez un numéro mobile valide (indicatif pays, chiffres uniquement).");
+      setError(t("errPhone"));
       return;
     }
     try {
@@ -87,10 +103,10 @@ export default function WifiPortal() {
       });
       setDepositId(res.depositId);
       setRedirectUrl(res.redirectUrlAfterPayment || "https://www.google.com");
-      setNotice(res.message || "Vérifiez votre téléphone : une demande de validation peut apparaître.");
+      setNotice(res.message || t("noticePhone"));
       setPolling(true);
     } catch (err) {
-      setError(err.message || "Impossible de démarrer le paiement.");
+      setError(err.message || t("errPayStart"));
     }
   }
 
@@ -98,10 +114,10 @@ export default function WifiPortal() {
     if (!polling || !depositId) return;
     let cancelled = false;
     let ticks = 0;
-    const t = setInterval(async () => {
+    const pollTimer = setInterval(async () => {
       ticks += 1;
       if (ticks > 120) {
-        clearInterval(t);
+        clearInterval(pollTimer);
         if (!cancelled) setPolling(false);
         return;
       }
@@ -110,25 +126,23 @@ export default function WifiPortal() {
           `/public/wifi-purchase/status/${encodeURIComponent(depositId)}`
         );
         if (st.status === "completed") {
-          clearInterval(t);
+          clearInterval(pollTimer);
           if (!cancelled) {
             setPolling(false);
             const nextUrl = st.redirectUrl || redirectUrl || "https://www.google.com";
             if (st.setupToken) {
               setPostPaySetup({ setupToken: st.setupToken, redirectUrl: nextUrl });
-              setNotice(
-                "Paiement confirmé. Copiez le jeton ci-dessous, ouvrez le portail client de votre opérateur et définissez un mot de passe avant de quitter cette page."
-              );
+              setNotice(wifiT(uiLang, "noticePostPay"));
             } else {
               window.location.href = nextUrl;
             }
           }
         }
         if (st.status === "failed") {
-          clearInterval(t);
+          clearInterval(pollTimer);
           if (!cancelled) {
             setPolling(false);
-            setError("Paiement refusé ou annulé. Vous pouvez réessayer.");
+            setError(wifiT(uiLang, "errPayFailed"));
           }
         }
       } catch (_e) {
@@ -137,24 +151,40 @@ export default function WifiPortal() {
     }, 3500);
     return () => {
       cancelled = true;
-      clearInterval(t);
+      clearInterval(pollTimer);
     };
-  }, [polling, depositId, redirectUrl]);
+  }, [polling, depositId, redirectUrl, uiLang]);
 
   return (
     <main className="container">
-      <section className="wifi-hero" aria-label="Présentation Wi-Fi">
-        <div>
-          <p className="eyebrow">Wi‑Fi public McBuleli</p>
-          <h1>Achetez un pass internet en quelques secondes.</h1>
-          <p className="wifi-lead">
-            Choisissez une offre, payez par Mobile Money, puis profitez de l'accès Hotspot ou PPPoE de votre opérateur.
-          </p>
+      <section className="wifi-hero" aria-label={uiLang === "en" ? "Wi‑Fi guest overview" : "Présentation Wi‑Fi"}>
+        <div className="wifi-hero-top">
+          <div>
+            <p className="eyebrow">{t("eyebrow")}</p>
+            <h1>{t("heroTitle")}</h1>
+            <p className="wifi-lead">{t("heroLead")}</p>
+          </div>
+          <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="wifi" />
         </div>
         <div className="demo-board">
-          <div className="demo-board-row"><span>📶</span><b>Choisir l'offre</b></div>
-          <div className="demo-board-row"><span>💳</span><b>Valider Mobile Money</b></div>
-          <div className="demo-board-row"><span>⚡</span><b>Accès activé</b></div>
+          <div className="demo-board-row">
+            <span className="wifi-step-icon" aria-hidden="true">
+              <IconAntenna width={22} height={22} />
+            </span>
+            <b>{t("stepPick")}</b>
+          </div>
+          <div className="demo-board-row">
+            <span className="wifi-step-icon" aria-hidden="true">
+              <IconWallet width={22} height={22} />
+            </span>
+            <b>{t("stepPay")}</b>
+          </div>
+          <div className="demo-board-row">
+            <span className="wifi-step-icon" aria-hidden="true">
+              <IconZap width={22} height={22} />
+            </span>
+            <b>{t("stepOn")}</b>
+          </div>
         </div>
       </section>
       <header className="app-header" style={{ alignItems: "center" }}>
@@ -162,24 +192,22 @@ export default function WifiPortal() {
           <img src={publicAssetUrl(branding.logoUrl)} alt="" style={{ height: 40 }} />
         ) : null}
         <div>
-          <h1 style={{ margin: 0 }}>{wifiDisplayName(branding?.displayName)}</h1>
-          <p className="app-meta">Catalogue Wi‑Fi invité, paiement Mobile Money et redirection automatique.</p>
+          <h1 style={{ margin: 0 }}>{wifiDisplayName(branding?.displayName, uiLang)}</h1>
+          <p className="app-meta">{t("catalogLead")}</p>
         </div>
       </header>
 
       {!activeIspId && (
         <form className="panel" onSubmit={onOpenCatalog}>
-          <h2>Accéder à votre FAI</h2>
-          <p className="wifi-lead">
-            Wi‑Fi invité McBuleli — saisissez l'identifiant FAI (UUID) communiqué par votre opérateur.
-          </p>
+          <h2>{t("accessTitle")}</h2>
+          <p className="wifi-lead">{t("accessLead")}</p>
           <input
-            placeholder="Identifiant FAI (UUID fourni par l'opérateur)"
+            placeholder={t("ispPh")}
             value={ispIdInput}
             onChange={(e) => setIspIdInput(e.target.value)}
             style={{ width: "100%", maxWidth: 400 }}
           />
-          <button type="submit">Afficher les offres</button>
+          <button type="submit">{t("showPlans")}</button>
         </form>
       )}
 
@@ -188,11 +216,8 @@ export default function WifiPortal() {
 
       {postPaySetup && (
         <section className="panel" style={{ marginTop: 16 }}>
-          <h2>Créer votre mot de passe portail</h2>
-          <p>
-            Sur la page portail client, utilisez <strong>Première connexion</strong>, collez ce jeton, puis définissez
-            un mot de passe pour vous connecter plus tard avec votre téléphone.
-          </p>
+          <h2>{t("postPayTitle")}</h2>
+          <p>{t("postPayHelp")}</p>
           <textarea
             readOnly
             rows={3}
@@ -201,7 +226,7 @@ export default function WifiPortal() {
           />
           <p>
             <button type="button" onClick={() => window.open("/portal", "_blank", "noopener,noreferrer")}>
-              Ouvrir le portail client
+              {t("openPortal")}
             </button>{" "}
             <button
               type="button"
@@ -209,15 +234,13 @@ export default function WifiPortal() {
                 window.location.href = postPaySetup.redirectUrl;
               }}
             >
-              Continuer vers le Wi‑Fi / redirection
+              {t("continueWifi")}
             </button>
           </p>
         </section>
       )}
 
-      {activeIspId && plans.length === 0 && !error && (
-        <p>Aucune offre publique pour le moment. Demandez à l'opérateur de publier une formule.</p>
-      )}
+      {activeIspId && plans.length === 0 && !error && <p>{t("noPlans")}</p>}
 
       <section className="grid">
         {plans.map((plan) => (
@@ -235,11 +258,12 @@ export default function WifiPortal() {
           >
             <h2>{plan.name}</h2>
             <p>
-              <strong>{plan.priceUsd}&nbsp;$</strong> — {plan.durationDays} jour(s)
+              <strong>{plan.priceUsd}&nbsp;$</strong> — {plan.durationDays}{" "}
+              {plan.durationDays === 1 ? t("daySingular") : t("dayPlural")}
             </p>
             <p>
-              Débit : {plan.speedLabel || plan.rateLimit} · Type : {plan.defaultAccessType} · Appareils :{" "}
-              {plan.maxDevices}
+              {t("speed")} : {plan.speedLabel || plan.rateLimit} · {t("type")} : {plan.defaultAccessType} ·{" "}
+              {t("devices")} : {plan.maxDevices}
             </p>
           </button>
         ))}
@@ -274,21 +298,22 @@ export default function WifiPortal() {
         >
           <h2>{selectedPlan.name}</h2>
           <p>
-            {selectedPlan.priceUsd}&nbsp;$ · {selectedPlan.durationDays} jour(s)
+            {selectedPlan.priceUsd}&nbsp;$ · {selectedPlan.durationDays}{" "}
+            {selectedPlan.durationDays === 1 ? t("daySingular") : t("dayPlural")}
           </p>
           <button type="button" onClick={() => setSelectedPlan(null)}>
-            Fermer
+            {t("close")}
           </button>
 
-          <h3>Payer par Mobile Money</h3>
+          <h3>{t("payMobileTitle")}</h3>
           <form onSubmit={onStartPayment}>
-            <p>📱 Numéro de téléphone (chiffres, indicatif pays, sans +)</p>
+            <p>{t("phoneLabel")}</p>
             <input
-              placeholder="243…"
+              placeholder={t("phonePh")}
               value={checkout.phone}
               onChange={(e) => setCheckout({ ...checkout, phone: e.target.value })}
             />
-            <p>Réseau</p>
+            <p>{t("network")}</p>
             <select
               value={checkout.networkKey}
               onChange={(e) => setCheckout({ ...checkout, networkKey: e.target.value })}
@@ -300,14 +325,11 @@ export default function WifiPortal() {
               ))}
             </select>
             <button type="submit" disabled={polling || !checkout.phone}>
-              {polling ? "En attente du paiement…" : "Payer et valider"}
+              {polling ? t("paying") : t("paySubmit")}
             </button>
           </form>
           <p>
-            <small>
-              Après validation vous serez redirigé (par défaut vers Google). Votre FAI peut définir un lien personnalisé
-              dans McBuleli ou par formule.
-            </small>
+            <small>{t("payFoot")}</small>
           </p>
           {import.meta.env.DEV ? (
             <p>
