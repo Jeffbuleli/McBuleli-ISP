@@ -14,7 +14,50 @@ function defaultBrowserApiUrl() {
   return "/api";
 }
 
-export const API_URL = import.meta.env.VITE_API_URL || defaultBrowserApiUrl();
+/**
+ * Prefer same-origin `/api` on HTTPS production hosts so Vercel/nginx can proxy to Render.
+ * Calling Render directly from the browser often fails (CORS, ad blockers, cold start) even though the API is up.
+ * Set `VITE_API_URL` only for a dedicated API hostname you control (and configure CORS_ORIGINS on the backend).
+ */
+function resolveApiBaseUrl() {
+  const fromEnv = import.meta.env.VITE_API_URL;
+  const trimmed = fromEnv != null && String(fromEnv).trim() ? String(fromEnv).trim().replace(/\/$/, "") : "";
+
+  if (typeof window === "undefined") {
+    return trimmed || "/api";
+  }
+  if (import.meta.env.DEV) {
+    return trimmed || "/api";
+  }
+
+  const host = window.location.hostname;
+  const isPrivateIpv4 =
+    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
+    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(host);
+  const isLocalLike = host.endsWith(".local") || host.endsWith(".lan");
+  const isLocal =
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "[::1]" ||
+    isPrivateIpv4 ||
+    isLocalLike;
+
+  if (!isLocal && window.location.protocol === "https:") {
+    if (!trimmed) return "/api";
+    if (trimmed.includes("onrender.com")) return "/api";
+    try {
+      const apiOrigin = new URL(trimmed.includes("/api") ? trimmed : `${trimmed}/api`).origin;
+      if (apiOrigin === window.location.origin) return "/api";
+    } catch {
+      /* ignore bad VITE_API_URL */
+    }
+  }
+
+  return trimmed || defaultBrowserApiUrl();
+}
+
+export const API_URL = resolveApiBaseUrl();
 
 /** Resolve hosted logo paths for `<img src>` when API is on another origin (set VITE_PUBLIC_API_ORIGIN). */
 export function publicAssetUrl(pathOrUrl) {
@@ -60,7 +103,7 @@ async function request(path, options) {
     const reason = String(err?.message || "").toLowerCase();
     if (reason.includes("failed to fetch") || reason.includes("networkerror")) {
       throw new Error(
-        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est joignable ; en production, utilisez de préférence l’URL same-origin « /api » (proxy Vercel) plutôt qu’un appel direct à Render depuis le navigateur.`
       );
     }
     throw new Error(err?.message || "Erreur réseau lors de l'appel API.");
@@ -90,7 +133,7 @@ export async function publicRequest(path, options = {}) {
     const reason = String(err?.message || "").toLowerCase();
     if (reason.includes("failed to fetch") || reason.includes("networkerror")) {
       throw new Error(
-        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est joignable ; en production, utilisez de préférence l’URL same-origin « /api » (proxy Vercel) plutôt qu’un appel direct à Render depuis le navigateur.`
       );
     }
     throw new Error(err?.message || "Erreur réseau lors de l'appel API.");

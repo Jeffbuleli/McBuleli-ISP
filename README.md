@@ -46,11 +46,33 @@ Multi-tenant ISP billing and operations: many ISPs, one platform (DRC-ready work
 
 ## Run locally
 
-### 1) Start PostgreSQL
+### 1) PostgreSQL
+
+**Option A — Docker**
 
 ```bash
 docker compose up -d
 ```
+
+Then in `backend/.env` use for example:
+
+`DATABASE_URL=postgresql://postgres:postgres@localhost:5432/isp_billing`
+
+**Option B — Postgres installé sur la machine (sans Docker)**
+
+Exemple avec Homebrew :
+
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+createdb isp_billing
+```
+
+Puis dans `backend/.env` :
+
+`DATABASE_URL=postgresql://127.0.0.1:5432/isp_billing`
+
+(adaptez utilisateur/mot de passe si votre Postgres est configuré autrement.)
 
 ### 2) Backend
 
@@ -58,6 +80,7 @@ docker compose up -d
 cd backend
 npm install
 cp .env.example .env
+# Éditez .env (DATABASE_URL, JWT_SECRET, etc.)
 npm run dev
 ```
 
@@ -73,10 +96,24 @@ Default super admin login:
 ```bash
 cd frontend
 npm install
+```
+
+Si le front appelle l’API directement sur votre machine (pas de proxy), créez `frontend/.env` :
+
+```env
+VITE_API_URL=http://localhost:4000/api
+VITE_PUBLIC_API_ORIGIN=http://localhost:4000
+```
+
+Puis :
+
+```bash
 npm run dev
 ```
 
-Web app: `http://localhost:5173`
+Web app: `http://localhost:5173` (ou un autre port si 5173 est pris)
+
+**Site marketing quand vous êtes connecté** : ouvrir `http://localhost:5173/?site=public` (le tableau de bord utilise aussi un lien « Site public » vers cette URL).
 
 ## Deploy to Vercel + Render
 

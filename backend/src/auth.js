@@ -64,7 +64,14 @@ export function requireMfaCompleted(req, res, next) {
 
 export function requireRoles(...allowedRoles) {
   return (req, res, next) => {
-    if (!req.user || !allowedRoles.includes(req.user.role)) {
+    if (!req.user) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    /** Global platform owner: same access as role-gated tenant routes when `ispId` is supplied. */
+    if (req.user.role === "system_owner") {
+      return next();
+    }
+    if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ message: "Forbidden" });
     }
     return next();

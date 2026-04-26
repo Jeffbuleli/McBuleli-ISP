@@ -374,6 +374,7 @@ export default function PublicSite() {
             <a href="#pricing">{t("Tarifs", "Pricing")}</a>
             <a href="#testimonials">{t("Témoignages", "Testimonials")}</a>
             <a href="#faq">{t("FAQ", "FAQ")}</a>
+            <a href="/wifi">{t("Wi‑Fi invité", "Guest Wi‑Fi")}</a>
             <a href="#contact">Contact</a>
           </nav>
           <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="public" />
@@ -407,6 +408,9 @@ export default function PublicSite() {
               </a>
               <a className="btn-secondary" href="/portal">
                 {t("Portail client", "Customer portal")}
+              </a>
+              <a className="btn-secondary" href="/wifi">
+                {t("Achat pass Wi‑Fi", "Buy Wi‑Fi pass")}
               </a>
             </div>
             <div className="public-stats">

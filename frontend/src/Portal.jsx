@@ -29,6 +29,13 @@ function daysUntil(dateValue) {
   return Math.max(0, Math.ceil((t - Date.now()) / 86400000));
 }
 
+function formatPortalClientRef(customerId, prefix) {
+  const p = prefix != null ? String(prefix).trim() : "";
+  const compact = String(customerId || "").replace(/-/g, "");
+  const core = (compact.slice(-10) || compact).toUpperCase();
+  return `${p}${core}`;
+}
+
 async function portalFetch(path, auth, options = {}) {
   const headers = {
     "Content-Type": "application/json",
@@ -390,6 +397,10 @@ export default function Portal() {
                   {t("emailRegistered")} : {session.customer.email}
                 </p>
               ) : null}
+              <p className="portal-client-ref">
+                {t("clientRef")} :{" "}
+                {formatPortalClientRef(session.customer.id, brand?.portalClientRefPrefix)}
+              </p>
             </div>
             <div className="demo-board">
               <div className="demo-board-row">
@@ -522,6 +533,9 @@ export default function Portal() {
           </form>
         </>
       )}
+      {brand?.portalFooterText ? (
+        <footer className="portal-tenant-footer">{brand.portalFooterText}</footer>
+      ) : null}
     </main>
   );
 }

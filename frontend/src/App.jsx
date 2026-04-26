@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { api, publicAssetUrl, setAuthToken } from "./api";
 import LangSwitch from "./LangSwitch.jsx";
+import DashboardHistograms from "./DashboardHistograms.jsx";
+import GuestWifiShare from "./GuestWifiShare.jsx";
 import { IconAntenna, IconPeople, IconSliders, IconWallet } from "./icons.jsx";
+
+function isPlatformSuperRole(role) {
+  return role === "super_admin" || role === "system_owner";
+}
 
 /** Replace placeholder tenant names (e.g. "AA") with McBuleli for public-facing titles. */
 function resolvePublicBrandName(displayName) {
@@ -406,7 +412,13 @@ function App() {
   const isEn = uiLang === "en";
   const t = (fr, en) => (isEn ? en : fr);
 
-  const [customerForm, setCustomerForm] = useState({ fullName: "", phone: "", email: "", initialPassword: "" });
+  const [customerForm, setCustomerForm] = useState({
+    fullName: "",
+    phone: "",
+    email: "",
+    initialPassword: "",
+    fieldAgentId: ""
+  });
   const [planForm, setPlanForm] = useState({
     name: "",
     priceUsd: "",
@@ -483,7 +495,9 @@ function App() {
     contactPhone: "",
     customDomain: "",
     subdomain: "",
-    wifiPortalRedirectUrl: ""
+    wifiPortalRedirectUrl: "",
+    portalFooterText: "",
+    portalClientRefPrefix: ""
   });
   const [userForm, setUserForm] = useState({
     fullName: "",
@@ -514,7 +528,11 @@ function App() {
     newPassword: ""
   });
   const [portalTokenForm, setPortalTokenForm] = useState({ customerId: "", expiresDays: 30 });
-  const [customerEmailForm, setCustomerEmailForm] = useState({ customerId: "", email: "" });
+  const [customerEmailForm, setCustomerEmailForm] = useState({
+    customerId: "",
+    email: "",
+    fieldAgentId: ""
+  });
   const customerCsvInputRef = useRef(null);
   const teamCsvInputRef = useRef(null);
   const [customerImportPassword, setCustomerImportPassword] = useState("");
@@ -570,7 +588,7 @@ function App() {
       const currentUser = await api.me();
       setUser(currentUser);
       const blocked =
-        currentUser.role !== "super_admin" &&
+        !isPlatformSuperRole(currentUser.role) &&
         currentUser.ispId &&
         currentUser.platformBilling &&
         currentUser.platformBilling.accessAllowed === false;
@@ -618,7 +636,7 @@ function App() {
         tenantContext?.ispId || selectedTenantId || currentUser.ispId || allIsps[0]?.id || "";
 
       let superDash;
-      if (currentUser.role === "system_owner" || currentUser.role === "super_admin") {
+      if (isPlatformSuperRole(currentUser.role)) {
         const [sd] = await Promise.allSettled([api.getSuperDashboard()]);
         superDash = take([sd], 0, {
           totalIsps: allIsps.length,
@@ -660,61 +678,79 @@ function App() {
       let withdrawalData = { items: [] };
 
       if (activeIspId) {
-        const settled = await Promise.allSettled([
-          api.getDashboard(activeIspId),
-          api.getCustomers(activeIspId),
-          api.getUsers(activeIspId),
-          api.getPlans(activeIspId),
-          api.getSubscriptions(activeIspId),
-          api.getInvoices(activeIspId),
-          api.getPaymentMethods(activeIspId),
-          api.getNotificationProviders(activeIspId),
-          api.getNetworkNodes(activeIspId),
-          api.getProvisioningEvents(activeIspId),
-          api.getFreeRadiusSyncEvents(activeIspId),
-          api.getRoleProfiles(activeIspId),
-          api.getPlatformSubscriptions(activeIspId),
-          api.getAuditLogs(activeIspId),
-          api.getNotificationOutbox(activeIspId),
-          api.getBranding(activeIspId),
-          api.getNetworkStats(activeIspId, statsPeriod.from, statsPeriod.to),
-          api.getTidSubmissions(activeIspId),
-          api.getTidConflicts(activeIspId),
-          api.getVouchers(activeIspId),
-          api.getTelemetrySnapshots(activeIspId),
-          api.getRadiusAccountingIngest(activeIspId, 80),
-          api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to),
-          api.getWithdrawals(activeIspId)
-        ]);
-        dash = take(settled, 0, {}, "dashboard");
-        c = take(settled, 1, [], "customers");
-        u = take(settled, 2, [], "users");
-        p = take(settled, 3, [], "plans");
-        s = take(settled, 4, [], "subscriptions");
-        i = take(settled, 5, [], "invoices");
-        payMethods = take(settled, 6, [], "paymentMethods");
-        notifProviders = take(settled, 7, [], "notificationProviders");
-        nodes = take(settled, 8, [], "networkNodes");
-        provEvents = take(settled, 9, [], "provisioningEvents");
-        radiusEvents = take(settled, 10, [], "radiusSyncEvents");
-        roles = take(settled, 11, [], "roleProfiles");
-        platformSubs = take(settled, 12, [], "platformSubscriptions");
-        logs = take(settled, 13, [], "auditLogs");
-        outbox = take(settled, 14, [], "notificationOutbox");
-        brand = take(settled, 15, null, "branding");
-        stats = take(settled, 16, null, "networkStats");
-        tids = take(settled, 17, [], "tidSubmissions");
-        conflicts = take(settled, 18, [], "tidConflicts");
-        vchs = take(settled, 19, [], "vouchers");
-        telemetry = take(settled, 20, [], "telemetry");
-        radiusAcct = take(settled, 21, [], "radiusAccounting");
-        const expData = take(settled, 22, { items: [], summary: null }, "expenses");
-        withdrawalData = take(settled, 23, { cashbox: null, items: [] }, "withdrawals");
-        setExpenses(Array.isArray(expData?.items) ? expData.items : []);
-        setExpenseSummary(expData?.summary || null);
-        setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
-        if (withdrawalData?.cashbox) {
-          dash = { ...dash, cashbox: withdrawalData.cashbox };
+        if (currentUser.role === "field_agent") {
+          const settled = await Promise.allSettled([
+            api.getDashboard(activeIspId),
+            api.getCustomers(activeIspId),
+            api.getPlans(activeIspId),
+            api.getSubscriptions(activeIspId),
+            api.getInvoices(activeIspId)
+          ]);
+          dash = take(settled, 0, {}, "dashboard");
+          c = take(settled, 1, [], "customers");
+          p = take(settled, 2, [], "plans");
+          s = take(settled, 3, [], "subscriptions");
+          i = take(settled, 4, [], "invoices");
+          setExpenses([]);
+          setExpenseSummary(null);
+          setWithdrawals([]);
+        } else {
+          const settled = await Promise.allSettled([
+            api.getDashboard(activeIspId),
+            api.getCustomers(activeIspId),
+            api.getUsers(activeIspId),
+            api.getPlans(activeIspId),
+            api.getSubscriptions(activeIspId),
+            api.getInvoices(activeIspId),
+            api.getPaymentMethods(activeIspId),
+            api.getNotificationProviders(activeIspId),
+            api.getNetworkNodes(activeIspId),
+            api.getProvisioningEvents(activeIspId),
+            api.getFreeRadiusSyncEvents(activeIspId),
+            api.getRoleProfiles(activeIspId),
+            api.getPlatformSubscriptions(activeIspId),
+            api.getAuditLogs(activeIspId),
+            api.getNotificationOutbox(activeIspId),
+            api.getBranding(activeIspId),
+            api.getNetworkStats(activeIspId, statsPeriod.from, statsPeriod.to),
+            api.getTidSubmissions(activeIspId),
+            api.getTidConflicts(activeIspId),
+            api.getVouchers(activeIspId),
+            api.getTelemetrySnapshots(activeIspId),
+            api.getRadiusAccountingIngest(activeIspId, 80),
+            api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to),
+            api.getWithdrawals(activeIspId)
+          ]);
+          dash = take(settled, 0, {}, "dashboard");
+          c = take(settled, 1, [], "customers");
+          u = take(settled, 2, [], "users");
+          p = take(settled, 3, [], "plans");
+          s = take(settled, 4, [], "subscriptions");
+          i = take(settled, 5, [], "invoices");
+          payMethods = take(settled, 6, [], "paymentMethods");
+          notifProviders = take(settled, 7, [], "notificationProviders");
+          nodes = take(settled, 8, [], "networkNodes");
+          provEvents = take(settled, 9, [], "provisioningEvents");
+          radiusEvents = take(settled, 10, [], "radiusSyncEvents");
+          roles = take(settled, 11, [], "roleProfiles");
+          platformSubs = take(settled, 12, [], "platformSubscriptions");
+          logs = take(settled, 13, [], "auditLogs");
+          outbox = take(settled, 14, [], "notificationOutbox");
+          brand = take(settled, 15, null, "branding");
+          stats = take(settled, 16, null, "networkStats");
+          tids = take(settled, 17, [], "tidSubmissions");
+          conflicts = take(settled, 18, [], "tidConflicts");
+          vchs = take(settled, 19, [], "vouchers");
+          telemetry = take(settled, 20, [], "telemetry");
+          radiusAcct = take(settled, 21, [], "radiusAccounting");
+          const expData = take(settled, 22, { items: [], summary: null }, "expenses");
+          withdrawalData = take(settled, 23, { cashbox: null, items: [] }, "withdrawals");
+          setExpenses(Array.isArray(expData?.items) ? expData.items : []);
+          setExpenseSummary(expData?.summary || null);
+          setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
+          if (withdrawalData?.cashbox) {
+            dash = { ...dash, cashbox: withdrawalData.cashbox };
+          }
         }
       } else {
         setExpenses([]);
@@ -780,7 +816,9 @@ function App() {
           contactPhone: brand.contactPhone || "",
           customDomain: brand.customDomain || "",
           subdomain: brand.subdomain || "",
-          wifiPortalRedirectUrl: brand.wifiPortalRedirectUrl || ""
+          wifiPortalRedirectUrl: brand.wifiPortalRedirectUrl || "",
+          portalFooterText: brand.portalFooterText || "",
+          portalClientRefPrefix: brand.portalClientRefPrefix || ""
         });
       }
     } catch (err) {
@@ -797,7 +835,7 @@ function App() {
   }, [uiLang]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !user || !isEn) return;
+    if (typeof window === "undefined" || !user || !isEn || loading) return;
     const root = document.querySelector("main.container.app-shell");
     if (!root) return;
 
@@ -953,13 +991,17 @@ function App() {
       return;
     }
     try {
-      await api.createCustomer(selectedIspId, {
+      const body = {
         fullName,
         phone,
         email: email || undefined,
         initialPassword: initialPassword || undefined
-      });
-      setCustomerForm({ fullName: "", phone: "", email: "", initialPassword: "" });
+      };
+      if (customerForm.fieldAgentId) {
+        body.fieldAgentId = customerForm.fieldAgentId;
+      }
+      await api.createCustomer(selectedIspId, body);
+      setCustomerForm({ fullName: "", phone: "", email: "", initialPassword: "", fieldAgentId: "" });
       setNotice("Client enregistré.");
       refresh();
     } catch (err) {
@@ -1225,9 +1267,35 @@ function App() {
 
   async function onSaveBranding(e) {
     e.preventDefault();
-    await api.updateBranding(selectedIspId, brandingForm);
-    setNotice("Image de marque enregistrée.");
-    refresh();
+    if (!selectedIspId) return;
+    setError("");
+    setNotice("");
+    try {
+      const saved = await api.updateBranding(selectedIspId, brandingForm);
+      setBranding(saved);
+      if (saved) {
+        setBrandingForm((prev) => ({
+          ...prev,
+          displayName: saved.displayName || "",
+          logoUrl: saved.logoUrl || "",
+          primaryColor: saved.primaryColor || "#1565d8",
+          secondaryColor: saved.secondaryColor || "#162030",
+          invoiceFooter: saved.invoiceFooter || "",
+          address: saved.address || "",
+          contactEmail: saved.contactEmail || "",
+          contactPhone: saved.contactPhone || "",
+          customDomain: saved.customDomain || "",
+          subdomain: saved.subdomain || "",
+          wifiPortalRedirectUrl: saved.wifiPortalRedirectUrl || "",
+          portalFooterText: saved.portalFooterText || "",
+          portalClientRefPrefix: saved.portalClientRefPrefix || ""
+        }));
+      }
+      setNotice(t("Image de marque enregistrée.", "Branding saved."));
+      refresh();
+    } catch (err) {
+      setError(err.message || t("Échec de l'enregistrement.", "Save failed."));
+    }
   }
 
   async function onBrandingLogoFile(e) {
@@ -1497,11 +1565,19 @@ function App() {
     e.preventDefault();
     setError("");
     try {
-      await api.patchCustomer(selectedIspId, customerEmailForm.customerId, {
-        email: customerEmailForm.email.trim() || null
-      });
+      const patch = { email: customerEmailForm.email.trim() || null };
+      if (
+        user.role !== "field_agent" &&
+        (isPlatformSuperRole(user.role) ||
+          user.role === "company_manager" ||
+          user.role === "isp_admin" ||
+          user.role === "billing_agent")
+      ) {
+        patch.fieldAgentId = customerEmailForm.fieldAgentId || null;
+      }
+      await api.patchCustomer(selectedIspId, customerEmailForm.customerId, patch);
       setNotice("E-mail client mis à jour.");
-      setCustomerEmailForm({ customerId: "", email: "" });
+      setCustomerEmailForm({ customerId: "", email: "", fieldAgentId: "" });
       refresh();
     } catch (err) {
       setError(err.message);
@@ -1898,33 +1974,50 @@ function App() {
     );
   }
 
+  const workspaceBillingForDomain = platformBillingStatus || user.platformBilling;
+  const canPrivateCustomDomain = Boolean(workspaceBillingForDomain?.package?.featureFlags?.customDomain);
+  const isFieldAgent = user.role === "field_agent";
+  const fieldTeamUsers = users.filter((u) => u.role === "field_agent");
+
   return (
     <main className="container app-shell">
-      <header className="app-header app-header--dashboard">
-        <div className="dashboard-brandline">
-          <img className="dashboard-logo" src="/mcbuleli-logo.svg" alt="" />
-          <div>
-            <h1>{resolvePublicBrandName(branding?.displayName || tenantContext?.displayName)}</h1>
-            <p className="app-meta">
-              {t("Connecté :", "Logged in as")} <strong>{user.fullName}</strong> ({user.role})
-            </p>
+      <div className="dashboard-sticky-stack">
+        <header className="app-header app-header--dashboard">
+          <div className="dashboard-brandline">
+            <img className="dashboard-logo" src="/mcbuleli-logo.svg" alt="" />
+            <div>
+              <h1>{resolvePublicBrandName(branding?.displayName || tenantContext?.displayName)}</h1>
+              <p className="app-meta">
+                {t("Connecté :", "Logged in as")} <strong>{user.fullName}</strong> ({user.role})
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="dashboard-toolbar">
-          <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash" />
-          <button type="button" className="btn-logout" onClick={onLogout}>
-            {t("Déconnexion", "Logout")}
-          </button>
-        </div>
-      </header>
-      <nav className="dashboard-subnav" aria-label="Navigation tableau de bord">
-        <a href="#dashboard-overview">{t("Vue d'ensemble", "Overview")}</a>
-        <a href="#workspace-settings">{t("Paramètres", "Settings")}</a>
-        <a href="#network-ops">{t("Réseau", "Network")}</a>
-        <a href="#billing-ops">{t("Facturation", "Billing")}</a>
-        <a href="#team-settings">{t("Utilisateurs", "Users")}</a>
-        <a href="#security-settings">{t("Sécurité", "Security")}</a>
-      </nav>
+          <div className="dashboard-toolbar">
+            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash" />
+            <a className="btn-home-public" href="/?site=public">
+              {t("Site public", "Public site")}
+            </a>
+            <button type="button" className="btn-logout" onClick={onLogout}>
+              {t("Déconnexion", "Logout")}
+            </button>
+          </div>
+        </header>
+        <nav className="dashboard-subnav" aria-label="Navigation tableau de bord">
+          <a href="#dashboard-overview">{t("Vue d'ensemble", "Overview")}</a>
+          {!isFieldAgent ? (
+            <>
+              <a href="#workspace-settings">{t("Paramètres", "Settings")}</a>
+              <a href="#network-ops">{t("Réseau", "Network")}</a>
+              <a href="#billing-ops">{t("Facturation", "Billing")}</a>
+              <a href="#team-settings">{t("Utilisateurs", "Users")}</a>
+              <a href="#security-settings">{t("Sécurité", "Security")}</a>
+            </>
+          ) : (
+            <a href="#field-clients">{t("Clients & portail", "Clients & portal")}</a>
+          )}
+        </nav>
+      </div>
+      {!isFieldAgent ? (
       <section className="dashboard-quick-actions" aria-label="Raccourcis tableau de bord">
         <a href="#workspace-settings">
           <span className="dashboard-quick-icon" aria-hidden="true">
@@ -1955,12 +2048,13 @@ function App() {
           <small>{t("MikroTik, Hotspot, télémétrie", "MikroTik, Hotspot, telemetry")}</small>
         </a>
       </section>
+      ) : null}
       {loading && <p>{t("Chargement…", "Loading...")}</p>}
       {error && <p className="error">{isEn ? translateToEnglish(error) : error}</p>}
       {notice && <p>{isEn ? translateToEnglish(notice) : notice}</p>}
 
       {(() => {
-        const billing = user.role === "super_admin" ? platformBillingStatus : user.platformBilling;
+        const billing = isPlatformSuperRole(user.role) ? platformBillingStatus : user.platformBilling;
         if (!selectedIspId || !billing || billing.legacyWorkspace) return null;
         const locked = billing.accessAllowed === false;
         return (
@@ -1988,7 +2082,7 @@ function App() {
                 {new Date(billing.subscription.endsAt).toLocaleString("fr-FR")}.
               </p>
             ) : null}
-            {(user.role === "super_admin" ||
+            {(isPlatformSuperRole(user.role) ||
               user.role === "company_manager" ||
               user.role === "isp_admin") && (
               <>
@@ -2059,6 +2153,7 @@ function App() {
         );
       })()}
 
+      {!isFieldAgent ? (
       <section className="grid metrics dashboard-section-anchor" id="dashboard-overview">
         <Card title={t("FAI", "ISPs")} value={superDashboard?.totalIsps ?? 0} />
         <Card title={t("Clients (tous FAI)", "All Customers")} value={superDashboard?.totalCustomers ?? 0} />
@@ -2068,6 +2163,19 @@ function App() {
         />
         <Card title={t("Chiffre d'affaires global (USD)", "Global Revenue (USD)")} value={superDashboard?.totalRevenueUsd ?? 0} />
       </section>
+      ) : null}
+
+      {!isFieldAgent && !loading && selectedIspId ? (
+        <DashboardHistograms
+          t={t}
+          globalSummary={user.role === "system_owner" ? superDashboard : null}
+          tenantDashboard={dashboard}
+          networkStats={networkStats}
+          users={users}
+          invoices={invoices}
+          telemetrySnapshots={telemetrySnapshots}
+        />
+      ) : null}
 
       {user.role === "system_owner" && superDashboard?.tenants ? (
         <section className="panel">
@@ -2104,6 +2212,8 @@ function App() {
         </section>
       ) : null}
 
+      {!isFieldAgent ? (
+        <>
       <section className="grid metrics">
         <Card title={t("Utilisateurs hotspot", "Hotspot Users")} value={networkStats?.hotspotUsers ?? 0} />
         <Card title={t("Utilisateurs PPPoE", "PPPoE Users")} value={networkStats?.pppoeUsers ?? 0} />
@@ -2137,12 +2247,15 @@ function App() {
           </button>
         </form>
       </section>
+        </>
+      ) : null}
 
-      {(user.role === "super_admin" ||
+      {(isPlatformSuperRole(user.role) ||
         user.role === "company_manager" ||
         user.role === "isp_admin" ||
         user.role === "noc_operator" ||
-        user.role === "billing_agent") && (
+        user.role === "billing_agent") &&
+        !isFieldAgent && (
         <section className="panel">
           <h2>{t("Facturation en retard", "Overdue billing")}</h2>
           <p>
@@ -2161,7 +2274,7 @@ function App() {
       )}
 
       <section className="grid" id="tenant-workspace">
-        {user.role === "super_admin" && (
+        {isPlatformSuperRole(user.role) && (
           <form className="panel" onSubmit={onCreateIsp}>
             <h2>{t("Créer un FAI (locataire)", "Create ISP Tenant")}</h2>
             <input
@@ -2188,7 +2301,7 @@ function App() {
           <select
             value={selectedIspId}
             onChange={(e) => refresh(e.target.value)}
-            disabled={user.role !== "super_admin" || Boolean(tenantContext?.ispId)}
+            disabled={!isPlatformSuperRole(user.role) || Boolean(tenantContext?.ispId)}
           >
             <option value="">{t("Choisir un FAI", "Select ISP")}</option>
             {isps.map((isp) => (
@@ -2200,8 +2313,12 @@ function App() {
         </section>
       </section>
 
+      {!isFieldAgent && (
+        <>
       <section className="grid" id="workspace-settings">
-        {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+        {(isPlatformSuperRole(user.role) ||
+          user.role === "company_manager" ||
+          user.role === "isp_admin") && (
           <form className="panel" onSubmit={onSaveBranding}>
             <h2>Image de marque / marque blanche</h2>
             <input
@@ -2209,16 +2326,42 @@ function App() {
               value={brandingForm.displayName}
               onChange={(e) => setBrandingForm({ ...brandingForm, displayName: e.target.value })}
             />
+            <p className="app-meta" style={{ margin: "4px 0 10px", maxWidth: "52ch" }}>
+              {t(
+                "Identifiant technique de votre espace (souvent *.tenant.local à la création). Sert au routage « marque blanche » si vous accédez au tableau de bord via ce nom d’hôte ; ce n’est pas un domaine public DNS tant que vous n’avez pas souscrit au Premium sur mesure.",
+                "Technical hostname for your workspace (often *.tenant.local at signup). Used for white-label routing when you open the dashboard via that host; it is not public DNS until you use Premium custom domain."
+              )}
+            </p>
             <input
-              placeholder="Sous-domaine (ex. admin1.votredomaine.com)"
+              placeholder={t(
+                "Sous-domaine technique (ex. mon-isp.tenant.local)",
+                "Technical subdomain (e.g. my-isp.tenant.local)"
+              )}
               value={brandingForm.subdomain}
               onChange={(e) => setBrandingForm({ ...brandingForm, subdomain: e.target.value })}
             />
             <input
-              placeholder="Domaine personnalisé (facultatif)"
+              placeholder={t("Domaine DNS privé (Premium sur mesure)", "Private DNS domain (Premium custom)")}
               value={brandingForm.customDomain}
               onChange={(e) => setBrandingForm({ ...brandingForm, customDomain: e.target.value })}
+              disabled={!canPrivateCustomDomain}
+              title={
+                canPrivateCustomDomain
+                  ? undefined
+                  : t(
+                      "Réservé au forfait Premium sur mesure (domaine sur votre marque).",
+                      "Reserved for Premium custom (on-demand) — your own brand domain."
+                    )
+              }
             />
+            {!canPrivateCustomDomain ? (
+              <p className="app-meta" style={{ margin: "4px 0 0", fontSize: "0.88rem" }}>
+                {t(
+                  "Le domaine DNS personnalisé (ex. admin.votredomaine.com) est activé uniquement sur le forfait Premium sur mesure. Les formules Essential et Pro conservent le sous-domaine technique ou l’accès via l’app McBuleli.",
+                  "A custom DNS domain (e.g. admin.yourbrand.com) is only available on the Premium custom (on-demand) plan. Essential and Pro keep the technical subdomain or access via the hosted McBuleli app."
+                )}
+              </p>
+            ) : null}
             <label style={{ display: "block", marginTop: 8 }}>
               Logo entreprise (depuis votre appareil)
               <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={onBrandingLogoFile} />
@@ -2285,6 +2428,27 @@ function App() {
                 setBrandingForm({ ...brandingForm, wifiPortalRedirectUrl: e.target.value })
               }
             />
+            <textarea
+              placeholder={t(
+                "Texte de pied de page portail client (RCCM, mentions légales…)",
+                "Customer portal footer text (company reg., legal line…)"
+              )}
+              rows={3}
+              value={brandingForm.portalFooterText}
+              onChange={(e) =>
+                setBrandingForm({ ...brandingForm, portalFooterText: e.target.value })
+              }
+            />
+            <input
+              placeholder={t(
+                "Préfixe n° client portail (ex. CLI-)",
+                "Portal client ID prefix (e.g. CLI-)"
+              )}
+              value={brandingForm.portalClientRefPrefix}
+              onChange={(e) =>
+                setBrandingForm({ ...brandingForm, portalClientRefPrefix: e.target.value })
+              }
+            />
             <button type="submit" disabled={!selectedIspId}>
               Enregistrer l'image de marque
             </button>
@@ -2293,7 +2457,7 @@ function App() {
       </section>
 
       <section className="grid" id="billing-ops">
-        {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreatePaymentMethod}>
             <h2>Moyens de paiement FAI</h2>
             <select
@@ -2367,7 +2531,7 @@ function App() {
           </form>
         )}
 
-        {(user.role === "super_admin" || user.role === "company_manager") && (
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager") && (
           <form className="panel" onSubmit={onUpsertRoleProfile}>
             <h2>Profils d'habilitation</h2>
             <input
@@ -2407,7 +2571,7 @@ function App() {
       </section>
 
       <section className="grid" id="network-ops">
-        {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreateNetworkNode}>
             <h2>Nœud réseau MikroTik</h2>
             <input
@@ -2484,7 +2648,7 @@ function App() {
                     Par défaut
                   </button>
                 )}{" "}
-                {(user.role === "super_admin" ||
+                {(isPlatformSuperRole(user.role) ||
                   user.role === "company_manager" ||
                   user.role === "isp_admin" ||
                   user.role === "noc_operator") && (
@@ -2565,7 +2729,7 @@ function App() {
       </section>
 
       <section className="grid" id="team-settings">
-        {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onUpsertNotificationProvider}>
             <h2>Fournisseurs de notifications</h2>
             <select
@@ -2789,7 +2953,7 @@ function App() {
           {tidSubmissions.map((row) => (
             <p key={row.id}>
               {row.tid} — {row.status} — facture {row.invoiceId?.slice(0, 8)}{" "}
-              {(user.role === "super_admin" ||
+              {(isPlatformSuperRole(user.role) ||
                 user.role === "company_manager" ||
                 user.role === "isp_admin" ||
                 user.role === "billing_agent") &&
@@ -2936,7 +3100,7 @@ function App() {
                 setPlatformSubForm({ ...platformSubForm, durationDays: e.target.value })
               }
             />
-            <button type="submit" disabled={!selectedIspId || user.role !== "super_admin"}>
+            <button type="submit" disabled={!selectedIspId || !isPlatformSuperRole(user.role)}>
               Attribuer la formule
             </button>
           </form>
@@ -2949,7 +3113,7 @@ function App() {
       </section>
 
       <section className="grid">
-        {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreateUser}>
             <h2>Créer un utilisateur équipe</h2>
             <input
@@ -2972,7 +3136,7 @@ function App() {
               value={userForm.role}
               onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
             >
-              {user.role === "super_admin" && (
+              {isPlatformSuperRole(user.role) && (
                 <option value="company_manager">Dirigeant entreprise (company_manager)</option>
               )}
               <option value="isp_admin">Administrateur FAI (isp_admin)</option>
@@ -2999,7 +3163,7 @@ function App() {
 
         <section className="panel">
           <h2>Équipe du FAI</h2>
-          {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+          {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
             <div style={{ marginBottom: 16 }}>
               <h3>Import / export équipe (CSV)</h3>
               <p>
@@ -3027,7 +3191,7 @@ function App() {
                   onChange={(e) => setTeamImportPassword(e.target.value)}
                 />
                 <select value={teamImportRole} onChange={(e) => setTeamImportRole(e.target.value)}>
-                  {user.role === "super_admin" && (
+                  {isPlatformSuperRole(user.role) && (
                     <option value="company_manager">Dirigeant entreprise (company_manager)</option>
                   )}
                   <option value="isp_admin">Administrateur FAI (isp_admin)</option>
@@ -3064,7 +3228,7 @@ function App() {
             <p key={item.id}>
               {item.fullName} ({item.role}) — {item.email} [{item.isActive ? "actif" : "inactif"}]{" "}
               {item.accreditationLevel ? `(${item.accreditationLevel})` : ""}{" "}
-              {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+              {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
                 <>
                   <button onClick={() => onResetPassword(item.id)}>Réinitialiser le mot de passe</button>{" "}
                   <button onClick={() => onCreateInvite(item.id)}>Créer une invitation</button>{" "}
@@ -3141,6 +3305,9 @@ function App() {
         </form>
       </section>
 
+        </>
+      )}
+
       <section className="grid metrics">
         <Card title="Clients" value={dashboard?.totalCustomers ?? 0} />
         <Card title="Abonnements actifs" value={dashboard?.activeSubscriptions ?? 0} />
@@ -3155,7 +3322,7 @@ function App() {
         <Card title="Retirable Mobile Money (USD)" value={dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0} />
       </section>
 
-      {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+      {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
         <section className="panel" id="security-settings">
           <h2>Retrait Mobile Money sécurisé</h2>
           <p>
@@ -3238,11 +3405,12 @@ function App() {
         </section>
       )}
 
-      {(user.role === "super_admin" ||
-        user.role === "company_manager" ||
-        user.role === "isp_admin" ||
-        user.role === "billing_agent" ||
-        user.role === "noc_operator") && (
+      {!isFieldAgent &&
+        (isPlatformSuperRole(user.role) ||
+          user.role === "company_manager" ||
+          user.role === "isp_admin" ||
+          user.role === "billing_agent" ||
+          user.role === "noc_operator") && (
         <section className="expenses-section">
           <h2>Dépenses &amp; suivi des fonds</h2>
           <p className="expenses-lead">
@@ -3304,7 +3472,7 @@ function App() {
             </div>
           ) : null}
           <div className="expenses-layout">
-            {(user.role === "super_admin" ||
+            {(isPlatformSuperRole(user.role) ||
               user.role === "company_manager" ||
               user.role === "isp_admin") && (
               <form className="panel expenses-form" onSubmit={onCreateExpense}>
@@ -3454,7 +3622,7 @@ function App() {
                         : ""}
                       {ex.createdByName ? ` · Saisi par ${ex.createdByName}` : ""}
                     </div>
-                    {(user.role === "super_admin" ||
+                    {(isPlatformSuperRole(user.role) ||
                       user.role === "company_manager" ||
                       user.role === "isp_admin") && (
                       <button
@@ -3474,7 +3642,9 @@ function App() {
         </section>
       )}
 
-      <section className="grid">
+      <section className="grid" id="field-clients">
+        {!isFieldAgent ? (
+          <>
         <form className="panel" onSubmit={onCreateCustomer}>
           <h2>Créer un client</h2>
           <input
@@ -3498,6 +3668,21 @@ function App() {
             value={customerForm.initialPassword}
             onChange={(e) => setCustomerForm({ ...customerForm, initialPassword: e.target.value })}
           />
+          <label className="app-meta" style={{ display: "block", marginBottom: 8 }}>
+            Agent terrain (facultatif)
+            <select
+              value={customerForm.fieldAgentId}
+              onChange={(e) => setCustomerForm({ ...customerForm, fieldAgentId: e.target.value })}
+              style={{ display: "block", width: "100%", marginTop: 4 }}
+            >
+              <option value="">— Aucun —</option>
+              {fieldTeamUsers.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.fullName}
+                </option>
+              ))}
+            </select>
+          </label>
           <button type="submit" disabled={!selectedIspId}>
             Enregistrer le client
           </button>
@@ -3545,13 +3730,27 @@ function App() {
             />
           ) : null}
         </div>
+          </>
+        ) : null}
 
         <form className="panel" onSubmit={onPatchCustomerEmail}>
-          <h2>Mettre à jour l'e-mail client</h2>
-          <p>Pour les e-mails de facturation de renouvellement lorsque le canal utilise SMTP.</p>
+          <h2>{isFieldAgent ? "E-mail client (clients assignés)" : "E-mail et agent terrain"}</h2>
+          <p>
+            {isFieldAgent
+              ? "Vous pouvez mettre à jour l’adresse e-mail des abonnés qui vous sont assignés."
+              : "E-mail pour les renouvellements (SMTP) et attribution d’un agent terrain pour le suivi sur le terrain."}
+          </p>
           <select
             value={customerEmailForm.customerId}
-            onChange={(e) => setCustomerEmailForm({ ...customerEmailForm, customerId: e.target.value })}
+            onChange={(e) => {
+              const id = e.target.value;
+              const cst = customers.find((c) => c.id === id);
+              setCustomerEmailForm({
+                customerId: id,
+                email: cst?.email || "",
+                fieldAgentId: cst?.fieldAgentId || ""
+              });
+            }}
           >
             <option value="">Choisir un client</option>
             {customers.map((cst) => (
@@ -3566,12 +3765,35 @@ function App() {
             value={customerEmailForm.email}
             onChange={(e) => setCustomerEmailForm({ ...customerEmailForm, email: e.target.value })}
           />
+          {!isFieldAgent &&
+          (isPlatformSuperRole(user.role) ||
+            user.role === "company_manager" ||
+            user.role === "isp_admin" ||
+            user.role === "billing_agent") ? (
+            <label className="app-meta" style={{ display: "block", marginBottom: 8 }}>
+              Agent terrain
+              <select
+                value={customerEmailForm.fieldAgentId || ""}
+                onChange={(e) =>
+                  setCustomerEmailForm({ ...customerEmailForm, fieldAgentId: e.target.value })
+                }
+                style={{ display: "block", width: "100%", marginTop: 4 }}
+              >
+                <option value="">— Aucun —</option>
+                {fieldTeamUsers.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.fullName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <button type="submit" disabled={!selectedIspId || !customerEmailForm.customerId}>
-            Enregistrer l'e-mail
+            {isFieldAgent ? "Enregistrer l'e-mail" : "Enregistrer e-mail et agent"}
           </button>
         </form>
 
-        {(user.role === "super_admin" ||
+        {(isPlatformSuperRole(user.role) ||
           user.role === "company_manager" ||
           user.role === "isp_admin" ||
           user.role === "billing_agent" ||
@@ -3623,6 +3845,8 @@ function App() {
           </form>
         )}
 
+        {!isFieldAgent ? (
+          <>
         <form className="panel" onSubmit={onCreatePlan}>
           <h2>Créer une formule Wi‑Fi / accès</h2>
           <input
@@ -3689,18 +3913,6 @@ function App() {
           <button type="submit" disabled={!selectedIspId}>
             Enregistrer la formule
           </button>
-          {selectedIspId && (
-            <p>
-              <small>
-                Lien invité :{" "}
-                <code>
-                  {typeof window !== "undefined"
-                    ? `${window.location.origin}/wifi?ispId=${selectedIspId}`
-                    : "/wifi?ispId=…"}
-                </code>
-              </small>
-            </p>
-          )}
         </form>
 
         <form className="panel" onSubmit={onSavePlanPatch}>
@@ -3802,6 +4014,19 @@ function App() {
           </button>
         </form>
 
+        {selectedIspId ? (
+          <div className="panel">
+            <h2>{t("Page d’achat Wi‑Fi invité", "Guest Wi‑Fi purchase page")}</h2>
+            <p className="app-meta" style={{ marginTop: 0 }}>
+              {t(
+                "Même lien pour toutes les formules publiées : partagez-le ou le QR code près du point d’accès.",
+                "Same link for all published plans—share it or the QR code near the access point."
+              )}
+            </p>
+            <GuestWifiShare ispId={selectedIspId} caption={t("Lien invité Wi‑Fi", "Wi‑Fi guest link")} />
+          </div>
+        ) : null}
+
         <form className="panel" onSubmit={onCreateSubscription}>
           <h2>Créer un abonnement</h2>
           <select
@@ -3837,6 +4062,8 @@ function App() {
             Activer l'abonnement
           </button>
         </form>
+          </>
+        ) : null}
       </section>
 
       <section className="panel">
@@ -3855,7 +4082,11 @@ function App() {
               <span>{invoice.status}</span>
               <span>
                 {invoice.status === "unpaid" || invoice.status === "overdue" ? (
-                  <button onClick={() => onMarkPaid(invoice.id, invoice.amountUsd)}>Marquer payée</button>
+                  !isFieldAgent ? (
+                    <button onClick={() => onMarkPaid(invoice.id, invoice.amountUsd)}>Marquer payée</button>
+                  ) : (
+                    "—"
+                  )
                 ) : (
                   "Payée"
                 )}
@@ -3873,17 +4104,21 @@ function App() {
             {subscription.maxSimultaneousDevices != null
               ? ` — appareils ${subscription.maxSimultaneousDevices}`
               : ""}{" "}
-            {subscription.status !== "suspended" ? (
-              <button onClick={() => onSuspendSubscription(subscription.id)}>Suspendre</button>
-            ) : (
-              <button onClick={() => onReactivateSubscription(subscription.id)}>Réactiver</button>
-            )}{" "}
-            <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "activate")}>
-              Sync activer
-            </button>{" "}
-            <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "suspend")}>
-              Sync suspendre
-            </button>
+            {!isFieldAgent ? (
+              <>
+                {subscription.status !== "suspended" ? (
+                  <button onClick={() => onSuspendSubscription(subscription.id)}>Suspendre</button>
+                ) : (
+                  <button onClick={() => onReactivateSubscription(subscription.id)}>Réactiver</button>
+                )}{" "}
+                <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "activate")}>
+                  Sync activer
+                </button>{" "}
+                <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "suspend")}>
+                  Sync suspendre
+                </button>
+              </>
+            ) : null}
           </p>
         ))}
       </section>

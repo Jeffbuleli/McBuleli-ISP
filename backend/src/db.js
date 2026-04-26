@@ -110,6 +110,12 @@ export async function initDb() {
     "ALTER TABLE customers ADD COLUMN IF NOT EXISTS must_set_password BOOLEAN NOT NULL DEFAULT FALSE;"
   );
   await query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS email TEXT NULL;");
+  await query(
+    "ALTER TABLE customers ADD COLUMN IF NOT EXISTS field_agent_id UUID NULL REFERENCES users(id) ON DELETE SET NULL;"
+  );
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_customers_isp_field_agent ON customers (isp_id, field_agent_id);"
+  );
 
   await query(`
     CREATE TABLE IF NOT EXISTS plans (
@@ -417,6 +423,10 @@ export async function initDb() {
   `);
   await query("ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS wifi_portal_redirect_url TEXT NULL;");
   await query("ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS logo_object_key TEXT NULL;");
+  await query("ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS portal_footer_text TEXT NULL;");
+  await query(
+    "ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS portal_client_ref_prefix TEXT NULL;"
+  );
 
   await query(`
     CREATE TABLE IF NOT EXISTS isp_expenses (
@@ -772,7 +782,7 @@ export async function initDb() {
       (gen_random_uuid(), 'essential', 'Essential', 10,
         '{"maxUsers":25,"maxNetworkNodes":10,"advancedAnalytics":false,"customDomain":false,"customPaymentGateway":false,"fieldAgents":true,"roleProfiles":true,"expenseTracking":true,"customerPortal":true,"pawapayPlatformGateway":true}'::jsonb),
       (gen_random_uuid(), 'pro', 'Pro', 15,
-        '{"maxUsers":75,"maxNetworkNodes":50,"advancedAnalytics":true,"customDomain":true,"customPaymentGateway":true,"fieldAgents":true,"roleProfiles":true,"expenseTracking":true,"customerPortal":true,"pawapayPlatformGateway":true,"prioritySupport":true,"multiSiteAnalytics":true}'::jsonb),
+        '{"maxUsers":75,"maxNetworkNodes":50,"advancedAnalytics":true,"customDomain":false,"customPaymentGateway":true,"fieldAgents":true,"roleProfiles":true,"expenseTracking":true,"customerPortal":true,"pawapayPlatformGateway":true,"prioritySupport":true,"multiSiteAnalytics":true}'::jsonb),
       (gen_random_uuid(), 'premium_custom', 'Premium personnalisé', 0,
         '{"maxUsers":null,"maxNetworkNodes":null,"advancedAnalytics":true,"customDomain":true,"customPaymentGateway":true,"fieldAgents":true,"roleProfiles":true,"expenseTracking":true,"customerPortal":true,"pawapayPlatformGateway":true,"prioritySupport":true,"multiSiteAnalytics":true,"customContract":true}'::jsonb)
     ON CONFLICT (code) DO UPDATE SET

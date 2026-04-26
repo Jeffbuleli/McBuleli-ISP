@@ -9,9 +9,13 @@ import "./styles.css";
 
 function Root() {
   const path = typeof window !== "undefined" ? window.location.pathname : "";
+  const search = typeof window !== "undefined" ? window.location.search || "" : "";
+  const forcePublic =
+    typeof window !== "undefined" &&
+    new URLSearchParams(search).get("site") === "public";
   const hasToken = typeof window !== "undefined" && Boolean(window.localStorage.getItem("token"));
   if (path === "/" || path === "") {
-    return hasToken ? <App /> : <PublicSite />;
+    return hasToken && !forcePublic ? <App /> : <PublicSite />;
   }
   if (path === "/login" || path.startsWith("/login/")) {
     return <App />;

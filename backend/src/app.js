@@ -214,8 +214,9 @@ const rlRadiusAcct = createPublicRateLimiter("radius_acct_webhook", {
 app.use(helmet());
 app.use(
   cors({
-    origin: corsOrigins.length > 0 ? corsOrigins : undefined,
-    allowedHeaders: ["Content-Type", "Authorization", "X-Portal-Token"]
+    /** When CORS_ORIGINS is unset, reflect the request Origin so SPA ↔ API on different hosts works (e.g. direct Render URL). */
+    origin: corsOrigins.length > 0 ? corsOrigins : true,
+    allowedHeaders: ["Content-Type", "Authorization", "X-Portal-Token", "X-ISP-ID", "x-isp-id"]
   })
 );
 app.use(express.json());
@@ -429,14 +430,33 @@ function normalizeRevenueMethod(method) {
   return "other";
 }
 
-async function getCashboxSummary(ispId, from = "1970-01-01", to = new Date().toISOString().slice(0, 10)) {
-  const rows = await query(
-    `SELECT method, COALESCE(SUM(amount_usd), 0)::float AS total
-     FROM payments
-     WHERE isp_id = $1 AND status = 'confirmed' AND paid_at::date BETWEEN $2::date AND $3::date
-     GROUP BY method`,
-    [ispId, from, to]
-  );
+async function getCashboxSummary(
+  ispId,
+  from = "1970-01-01",
+  to = new Date().toISOString().slice(0, 10),
+  fieldAgentUserId = null
+) {
+  let rows;
+  if (fieldAgentUserId) {
+    rows = await query(
+      `SELECT p.method, COALESCE(SUM(p.amount_usd), 0)::float AS total
+       FROM payments p
+       INNER JOIN invoices i ON i.id = p.invoice_id AND i.isp_id = p.isp_id
+       INNER JOIN customers c ON c.id = i.customer_id AND c.isp_id = i.isp_id
+       WHERE p.isp_id = $1 AND p.status = 'confirmed' AND p.paid_at::date BETWEEN $2::date AND $3::date
+         AND c.field_agent_id = $4
+       GROUP BY p.method`,
+      [ispId, from, to, fieldAgentUserId]
+    );
+  } else {
+    rows = await query(
+      `SELECT method, COALESCE(SUM(amount_usd), 0)::float AS total
+       FROM payments
+       WHERE isp_id = $1 AND status = 'confirmed' AND paid_at::date BETWEEN $2::date AND $3::date
+       GROUP BY method`,
+      [ispId, from, to]
+    );
+  }
   const breakdown = {
     cashUsd: 0,
     tidUsd: 0,
@@ -452,6 +472,13 @@ async function getCashboxSummary(ispId, from = "1970-01-01", to = new Date().toI
     else if (bucket === "tid") breakdown.tidUsd += amount;
     else if (bucket === "mobileMoney") breakdown.mobileMoneyUsd += amount;
     else breakdown.otherUsd += amount;
+  }
+  if (fieldAgentUserId) {
+    return {
+      ...breakdown,
+      withdrawnMobileMoneyUsd: 0,
+      withdrawableMobileMoneyUsd: 0
+    };
   }
   const withdrawals = await query(
     `SELECT COALESCE(SUM(amount_usd), 0)::float AS total
@@ -910,7 +937,10 @@ app.get("/api/portal/session", authenticatePortal, async (req, res) => {
       [ispId, customerId]
     ),
     query(
-      "SELECT display_name AS \"displayName\", logo_url AS \"logoUrl\", primary_color AS \"primaryColor\", secondary_color AS \"secondaryColor\" FROM isp_branding WHERE isp_id = $1",
+      `SELECT display_name AS "displayName", logo_url AS "logoUrl", primary_color AS "primaryColor",
+              secondary_color AS "secondaryColor", portal_footer_text AS "portalFooterText",
+              portal_client_ref_prefix AS "portalClientRefPrefix"
+       FROM isp_branding WHERE isp_id = $1`,
       [ispId]
     )
   ]);
@@ -1295,7 +1325,7 @@ app.get("/api/branding", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const result = await query(
-    "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+    "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
     [ispId]
   );
   res.json(result.rows[0] || null);
@@ -1308,12 +1338,6 @@ app.post(
   async (req, res) => {
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
-    const limits = await getPlatformFeatureLimits(ispId);
-    if ((customDomain || subdomain) && !limits?.customDomain) {
-      return res.status(403).json({
-        message: "Votre formule actuelle ne permet pas de domaine personnalisé. Passez à Pro ou Premium."
-      });
-    }
     const {
       displayName,
       logoUrl,
@@ -1325,32 +1349,86 @@ app.post(
       contactPhone,
       customDomain,
       subdomain,
-      wifiPortalRedirectUrl
+      wifiPortalRedirectUrl,
+      portalFooterText,
+      portalClientRefPrefix
     } = req.body;
+    const limits = await getPlatformFeatureLimits(ispId);
+    const allowsPrivateCustomDomain = Boolean(limits?.customDomain);
+
+    const prevBrandingRow = await query("SELECT custom_domain FROM isp_branding WHERE isp_id = $1", [ispId]);
+    const prevCustomDomain = (prevBrandingRow.rows[0]?.custom_domain || "").trim();
+
+    if (!allowsPrivateCustomDomain && customDomain !== undefined) {
+      const requested = String(customDomain || "").trim();
+      if (
+        requested &&
+        requested.toLowerCase() !== prevCustomDomain.toLowerCase()
+      ) {
+        return res.status(403).json({
+          message:
+            "Le domaine DNS privé (marque blanche sur votre propre nom de domaine) est réservé au forfait Premium sur mesure. Les formules Essential et Pro utilisent le sous-domaine technique fourni par la plateforme (ex. *.tenant.local) ou l’accès via l’application hébergée."
+        });
+      }
+    }
+
+    let customDomainForSql = prevCustomDomain || null;
+    if (allowsPrivateCustomDomain && customDomain !== undefined) {
+      const t = String(customDomain || "").trim();
+      customDomainForSql = t.length ? t : null;
+    }
+    const trimmedLogo =
+      logoUrl !== undefined && logoUrl !== null ? String(logoUrl).trim() : null;
+    /** Only purge hosted files when replacing with a non-empty logo that is not the hosted path. */
     const clearsStoredLogo =
-      logoUrl !== undefined &&
-      (!logoUrl || !String(logoUrl).trim().startsWith("/api/public/branding-logo/"));
+      trimmedLogo !== null &&
+      trimmedLogo.length > 0 &&
+      !trimmedLogo.startsWith("/api/public/branding-logo/");
     if (clearsStoredLogo) {
       await purgeHostedBrandingAssets(ispId);
     }
+    const logoSqlValue = trimmedLogo === null ? null : trimmedLogo || null;
     const updated = await query(
-      "UPDATE isp_branding SET display_name = COALESCE($1, display_name), logo_url = $2, primary_color = COALESCE($3, primary_color), secondary_color = COALESCE($4, secondary_color), invoice_footer = $5, address = $6, contact_email = $7, contact_phone = $8, custom_domain = $9, wifi_portal_redirect_url = COALESCE($10, wifi_portal_redirect_url), updated_at = NOW() WHERE isp_id = $11 RETURNING id",
+      `UPDATE isp_branding SET display_name = COALESCE($1, display_name),
+        logo_url = COALESCE($2, logo_url),
+        primary_color = COALESCE($3, primary_color), secondary_color = COALESCE($4, secondary_color),
+        invoice_footer = $5, address = $6, contact_email = $7, contact_phone = $8, custom_domain = $9,
+        wifi_portal_redirect_url = COALESCE($10, wifi_portal_redirect_url),
+        portal_footer_text = $11, portal_client_ref_prefix = $12, updated_at = NOW() WHERE isp_id = $13 RETURNING id`,
       [
         displayName || null,
-        logoUrl || null,
+        logoSqlValue,
         primaryColor || null,
         secondaryColor || null,
         invoiceFooter || null,
         address || null,
         contactEmail || null,
         contactPhone || null,
-        customDomain || null,
+        customDomainForSql,
         wifiPortalRedirectUrl !== undefined ? wifiPortalRedirectUrl || null : null,
+        portalFooterText || null,
+        portalClientRefPrefix || null,
         ispId
       ]
     );
-    if (subdomain) {
-      await query("UPDATE isps SET subdomain = $1 WHERE id = $2", [subdomain, ispId]);
+    if (subdomain !== undefined && subdomain !== null) {
+      const sd = String(subdomain).trim().toLowerCase();
+      if (sd) {
+        if (sd.length > 190 || !/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(sd)) {
+          return res.status(400).json({
+            message:
+              "Sous-domaine technique invalide : lettres minuscules, chiffres, points et tirets uniquement (ex. mon-isp.tenant.local)."
+          });
+        }
+        const clash = await query(
+          "SELECT id FROM isps WHERE LOWER(subdomain) = LOWER($1) AND id <> $2 LIMIT 1",
+          [sd, ispId]
+        );
+        if (clash.rows[0]) {
+          return res.status(409).json({ message: "Ce sous-domaine technique est déjà utilisé par un autre espace." });
+        }
+        await query("UPDATE isps SET subdomain = $1 WHERE id = $2", [sd, ispId]);
+      }
     }
     await logAudit({
       ispId,
@@ -1360,7 +1438,7 @@ app.post(
       entityId: updated.rows[0]?.id || null
     });
     const finalResult = await query(
-      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
       [ispId]
     );
     return res.json(finalResult.rows[0]);
@@ -1424,7 +1502,7 @@ app.post(
       details: { mime: req.file.mimetype }
     });
     const finalResult = await query(
-      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
       [ispId]
     );
     return res.json(finalResult.rows[0]);
@@ -2775,23 +2853,39 @@ app.post(
 app.get("/api/customers", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
-  const result = await query(
-    `SELECT id, isp_id AS "ispId", full_name AS "fullName", phone, email, status, created_at AS "createdAt"
-     FROM customers WHERE isp_id = $1 ORDER BY created_at DESC`,
-    [ispId]
-  );
+  const faId = req.user.role === "field_agent" ? req.user.sub : null;
+  const result = faId
+    ? await query(
+        `SELECT id, isp_id AS "ispId", full_name AS "fullName", phone, email, status,
+                field_agent_id AS "fieldAgentId", created_at AS "createdAt"
+         FROM customers WHERE isp_id = $1 AND field_agent_id = $2 ORDER BY created_at DESC`,
+        [ispId, faId]
+      )
+    : await query(
+        `SELECT id, isp_id AS "ispId", full_name AS "fullName", phone, email, status,
+                field_agent_id AS "fieldAgentId", created_at AS "createdAt"
+         FROM customers WHERE isp_id = $1 ORDER BY created_at DESC`,
+        [ispId]
+      );
   res.json(result.rows);
 });
 
 app.get("/api/customers/export", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
-  const result = await query(
-    `SELECT full_name AS "fullName", phone, email, status, created_at AS "createdAt"
-     FROM customers WHERE isp_id = $1 ORDER BY created_at DESC`,
-    [ispId]
-  );
-  const headers = ["fullName", "phone", "email", "status", "createdAt"];
+  const faId = req.user.role === "field_agent" ? req.user.sub : null;
+  const result = faId
+    ? await query(
+        `SELECT full_name AS "fullName", phone, email, status, field_agent_id AS "fieldAgentId", created_at AS "createdAt"
+         FROM customers WHERE isp_id = $1 AND field_agent_id = $2 ORDER BY created_at DESC`,
+        [ispId, faId]
+      )
+    : await query(
+        `SELECT full_name AS "fullName", phone, email, status, field_agent_id AS "fieldAgentId", created_at AS "createdAt"
+         FROM customers WHERE isp_id = $1 ORDER BY created_at DESC`,
+        [ispId]
+      );
+  const headers = ["fullName", "phone", "email", "status", "fieldAgentId", "createdAt"];
   const csv = rowsToCsv(headers, result.rows);
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader(
@@ -2804,6 +2898,7 @@ app.get("/api/customers/export", authenticate, async (req, res) => {
 app.post(
   "/api/customers/import",
   authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "noc_operator"),
   uploadCsvMemory.fields([
     { name: "file", maxCount: 1 },
     { name: "defaultPassword", maxCount: 1 }
@@ -2903,40 +2998,61 @@ app.post(
   }
 );
 
-app.post("/api/customers", authenticate, async (req, res) => {
-  const ispId = resolveIspId(req, res);
-  if (!ispId) return;
-  const { fullName, phone, initialPassword, email } = req.body;
-  if (!fullName || !phone) return res.status(400).json({ message: "fullName and phone are required" });
-  const phoneNorm = normalizeSubscriberPhone(phone);
-  if (!phoneNorm) return res.status(400).json({ message: "phone is required" });
-  const emailTrim =
-    email != null && String(email).trim() ? String(email).trim().slice(0, 320) : null;
-  if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
-    return res.status(400).json({ message: "Invalid email format" });
+app.post(
+  "/api/customers",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "noc_operator"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { fullName, phone, initialPassword, email, fieldAgentId } = req.body;
+    if (!fullName || !phone) return res.status(400).json({ message: "fullName and phone are required" });
+    const phoneNorm = normalizeSubscriberPhone(phone);
+    if (!phoneNorm) return res.status(400).json({ message: "phone is required" });
+    const emailTrim =
+      email != null && String(email).trim() ? String(email).trim().slice(0, 320) : null;
+    if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+    if (initialPassword != null && String(initialPassword).length > 0 && String(initialPassword).length < 6) {
+      return res.status(400).json({ message: "initialPassword must be at least 6 characters when provided" });
+    }
+    let fieldAgentUuid = null;
+    if (fieldAgentId != null && String(fieldAgentId).trim() !== "") {
+      if (!isUuidString(fieldAgentId)) {
+        return res.status(400).json({ message: "Invalid fieldAgentId" });
+      }
+      const u = await query(`SELECT id, role FROM users WHERE id = $1 AND isp_id = $2`, [
+        fieldAgentId,
+        ispId
+      ]);
+      if (!u.rows[0] || u.rows[0].role !== "field_agent") {
+        return res.status(400).json({ message: "fieldAgentId must reference a field_agent user for this ISP" });
+      }
+      fieldAgentUuid = fieldAgentId;
+    }
+    let inserted;
+    if (initialPassword && String(initialPassword).length >= 6) {
+      const hash = await bcrypt.hash(String(initialPassword), 10);
+      inserted = await query(
+        `INSERT INTO customers (id, isp_id, full_name, phone, email, status, password_hash, must_set_password, field_agent_id)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, 'active', $5, FALSE, $6)
+         RETURNING id, isp_id AS "ispId", full_name AS "fullName", phone, email, status,
+                   field_agent_id AS "fieldAgentId", created_at AS "createdAt"`,
+        [ispId, fullName, phoneNorm, emailTrim, hash, fieldAgentUuid]
+      );
+    } else {
+      inserted = await query(
+        `INSERT INTO customers (id, isp_id, full_name, phone, email, status, field_agent_id)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, 'active', $5)
+         RETURNING id, isp_id AS "ispId", full_name AS "fullName", phone, email, status,
+                   field_agent_id AS "fieldAgentId", created_at AS "createdAt"`,
+        [ispId, fullName, phoneNorm, emailTrim, fieldAgentUuid]
+      );
+    }
+    res.status(201).json(inserted.rows[0]);
   }
-  if (initialPassword != null && String(initialPassword).length > 0 && String(initialPassword).length < 6) {
-    return res.status(400).json({ message: "initialPassword must be at least 6 characters when provided" });
-  }
-  let inserted;
-  if (initialPassword && String(initialPassword).length >= 6) {
-    const hash = await bcrypt.hash(String(initialPassword), 10);
-    inserted = await query(
-      `INSERT INTO customers (id, isp_id, full_name, phone, email, status, password_hash, must_set_password)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, 'active', $5, FALSE)
-       RETURNING id, isp_id AS "ispId", full_name AS "fullName", phone, email, status, created_at AS "createdAt"`,
-      [ispId, fullName, phoneNorm, emailTrim, hash]
-    );
-  } else {
-    inserted = await query(
-      `INSERT INTO customers (id, isp_id, full_name, phone, email, status)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, 'active')
-       RETURNING id, isp_id AS "ispId", full_name AS "fullName", phone, email, status, created_at AS "createdAt"`,
-      [ispId, fullName, phoneNorm, emailTrim]
-    );
-  }
-  res.status(201).json(inserted.rows[0]);
-});
+);
 
 app.patch(
   "/api/customers/:customerId",
@@ -2947,29 +3063,93 @@ app.patch(
     if (!ispId) return;
     const { customerId } = req.params;
     const body = req.body || {};
-    if (!Object.prototype.hasOwnProperty.call(body, "email")) {
-      return res.status(400).json({ message: "Provide email (string or null to clear)" });
+    const hasEmail = Object.prototype.hasOwnProperty.call(body, "email");
+    const hasFieldAgentId = Object.prototype.hasOwnProperty.call(body, "fieldAgentId");
+
+    if (req.user.role === "field_agent") {
+      const extraKeys = Object.keys(body).filter((k) => k !== "email");
+      if (!hasEmail || extraKeys.length) {
+        return res.status(400).json({ message: "Field agents may only update email for assigned customers" });
+      }
+    } else if (!hasEmail && !hasFieldAgentId) {
+      return res.status(400).json({ message: "Provide email and/or fieldAgentId" });
     }
-    const { email } = body;
+
     const ex = await query("SELECT id FROM customers WHERE id = $1 AND isp_id = $2", [customerId, ispId]);
     if (!ex.rows[0]) return res.status(404).json({ message: "Customer not found" });
-    const emailTrim =
-      email === null || email === "" ? null : String(email).trim().slice(0, 320);
-    if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
-      return res.status(400).json({ message: "Invalid email format" });
+
+    let emailTrim = null;
+    if (hasEmail) {
+      const { email } = body;
+      emailTrim = email === null || email === "" ? null : String(email).trim().slice(0, 320);
+      if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+        return res.status(400).json({ message: "Invalid email format" });
+      }
     }
-    const updated = await query(
-      `UPDATE customers SET email = $1 WHERE id = $2 AND isp_id = $3
-       RETURNING id, isp_id AS "ispId", full_name AS "fullName", phone, email, status, created_at AS "createdAt"`,
-      [emailTrim, customerId, ispId]
-    );
+
+    let fieldAgentUuid = undefined;
+    if (hasFieldAgentId && req.user.role !== "field_agent") {
+      const raw = body.fieldAgentId;
+      if (raw === null || raw === "") {
+        fieldAgentUuid = null;
+      } else {
+        if (!isUuidString(raw)) {
+          return res.status(400).json({ message: "Invalid fieldAgentId" });
+        }
+        const u = await query(`SELECT id, role FROM users WHERE id = $1 AND isp_id = $2`, [raw, ispId]);
+        if (!u.rows[0] || u.rows[0].role !== "field_agent") {
+          return res.status(400).json({ message: "fieldAgentId must reference a field_agent user for this ISP" });
+        }
+        fieldAgentUuid = raw;
+      }
+    }
+
+    let updated;
+    if (req.user.role === "field_agent") {
+      updated = await query(
+        `UPDATE customers SET email = $1
+         WHERE id = $2 AND isp_id = $3 AND field_agent_id = $4
+         RETURNING id, isp_id AS "ispId", full_name AS "fullName", phone, email, status,
+                   field_agent_id AS "fieldAgentId", created_at AS "createdAt"`,
+        [emailTrim, customerId, ispId, req.user.sub]
+      );
+      if (!updated.rows[0]) {
+        return res.status(404).json({ message: "Customer not found or not assigned to you" });
+      }
+    } else {
+      const sets = [];
+      const vals = [];
+      let i = 1;
+      if (hasEmail) {
+        sets.push(`email = $${i++}`);
+        vals.push(emailTrim);
+      }
+      if (fieldAgentUuid !== undefined) {
+        sets.push(`field_agent_id = $${i++}`);
+        vals.push(fieldAgentUuid);
+      }
+      if (!sets.length) {
+        return res.status(400).json({ message: "No changes" });
+      }
+      vals.push(customerId, ispId);
+      updated = await query(
+        `UPDATE customers SET ${sets.join(", ")} WHERE id = $${i++} AND isp_id = $${i++}
+         RETURNING id, isp_id AS "ispId", full_name AS "fullName", phone, email, status,
+                   field_agent_id AS "fieldAgentId", created_at AS "createdAt"`,
+        vals
+      );
+    }
+
     await logAudit({
       ispId,
       actorUserId: req.user.sub,
       action: "customer.updated",
       entityType: "customer",
       entityId: customerId,
-      details: { email: emailTrim }
+      details: {
+        email: hasEmail ? emailTrim : undefined,
+        fieldAgentId: fieldAgentUuid !== undefined ? fieldAgentUuid : undefined
+      }
     });
     return res.json(updated.rows[0]);
   }
@@ -2989,7 +3169,11 @@ app.get("/api/plans", authenticate, async (req, res) => {
   res.json(result.rows);
 });
 
-app.post("/api/plans", authenticate, async (req, res) => {
+app.post(
+  "/api/plans",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const {
@@ -3028,7 +3212,8 @@ app.post("/api/plans", authenticate, async (req, res) => {
     ]
   );
   res.status(201).json(inserted.rows[0]);
-});
+  }
+);
 
 app.patch(
   "/api/plans/:planId",
@@ -3098,16 +3283,32 @@ app.patch(
 app.get("/api/subscriptions", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
-  const result = await query(
-    `SELECT id, isp_id AS "ispId", customer_id AS "customerId", plan_id AS "planId", status, access_type AS "accessType",
+  const faId = req.user.role === "field_agent" ? req.user.sub : null;
+  const result = faId
+    ? await query(
+        `SELECT s.id, s.isp_id AS "ispId", s.customer_id AS "customerId", s.plan_id AS "planId", s.status,
+                s.access_type AS "accessType", s.start_date AS "startDate", s.end_date AS "endDate",
+                s.max_simultaneous_devices AS "maxSimultaneousDevices"
+         FROM subscriptions s
+         INNER JOIN customers c ON c.id = s.customer_id AND c.isp_id = s.isp_id
+         WHERE s.isp_id = $1 AND c.field_agent_id = $2
+         ORDER BY s.start_date DESC`,
+        [ispId, faId]
+      )
+    : await query(
+        `SELECT id, isp_id AS "ispId", customer_id AS "customerId", plan_id AS "planId", status, access_type AS "accessType",
             start_date AS "startDate", end_date AS "endDate", max_simultaneous_devices AS "maxSimultaneousDevices"
      FROM subscriptions WHERE isp_id = $1 ORDER BY start_date DESC`,
-    [ispId]
-  );
+        [ispId]
+      );
   res.json(result.rows);
 });
 
-app.post("/api/subscriptions", authenticate, async (req, res) => {
+app.post(
+  "/api/subscriptions",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "noc_operator"),
+  async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const { customerId, planId, accessType = "pppoe" } = req.body;
@@ -3144,7 +3345,8 @@ app.post("/api/subscriptions", authenticate, async (req, res) => {
     });
   }
   res.status(201).json({ subscription, invoice: invoiceInsert.rows[0] });
-});
+  }
+);
 
 app.post(
   "/api/subscriptions/:subscriptionId/suspend",
@@ -3209,10 +3411,21 @@ app.post(
 app.get("/api/invoices", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
-  const result = await query(
-    "SELECT id, isp_id AS \"ispId\", subscription_id AS \"subscriptionId\", customer_id AS \"customerId\", amount_usd AS \"amountUsd\", status, due_date AS \"dueDate\", created_at AS \"createdAt\" FROM invoices WHERE isp_id = $1 ORDER BY created_at DESC",
-    [ispId]
-  );
+  const faId = req.user.role === "field_agent" ? req.user.sub : null;
+  const result = faId
+    ? await query(
+        `SELECT i.id, i.isp_id AS "ispId", i.subscription_id AS "subscriptionId", i.customer_id AS "customerId",
+                i.amount_usd AS "amountUsd", i.status, i.due_date AS "dueDate", i.created_at AS "createdAt"
+         FROM invoices i
+         INNER JOIN customers c ON c.id = i.customer_id AND c.isp_id = i.isp_id
+         WHERE i.isp_id = $1 AND c.field_agent_id = $2
+         ORDER BY i.created_at DESC`,
+        [ispId, faId]
+      )
+    : await query(
+        "SELECT id, isp_id AS \"ispId\", subscription_id AS \"subscriptionId\", customer_id AS \"customerId\", amount_usd AS \"amountUsd\", status, due_date AS \"dueDate\", created_at AS \"createdAt\" FROM invoices WHERE isp_id = $1 ORDER BY created_at DESC",
+        [ispId]
+      );
   res.json(result.rows);
 });
 
@@ -3769,6 +3982,15 @@ app.get("/api/network/stats", authenticate, async (req, res) => {
     [ispId, from, to]
   );
   const cashbox = await getCashboxSummary(ispId, from, to);
+  const dailyUsage = await query(
+    `SELECT metric_date::text AS date, hotspot_users AS "hotspotUsers", pppoe_users AS "pppoeUsers",
+            connected_devices AS "connectedDevices",
+            (bandwidth_down_gb + bandwidth_up_gb)::float AS "bandwidthGb"
+     FROM network_usage_daily
+     WHERE isp_id = $1 AND metric_date BETWEEN $2::date AND $3::date
+     ORDER BY metric_date ASC`,
+    [ispId, from, to]
+  );
   return res.json({
     period: { from, to },
     hotspotUsers: usage.rows[0].hotspotUsers,
@@ -3776,7 +3998,8 @@ app.get("/api/network/stats", authenticate, async (req, res) => {
     connectedDevices: usage.rows[0].connectedDevices,
     bandwidthTotalGb: usage.rows[0].bandwidthTotalGb,
     revenueCollectedUsd: revenue.rows[0].revenueCollectedUsd,
-    cashbox
+    cashbox,
+    dailyUsage: dailyUsage.rows
   });
 });
 
@@ -3785,15 +4008,45 @@ app.get("/api/dashboard", authenticate, async (req, res) => {
   if (!ispId) return;
   const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   const to = new Date().toISOString().slice(0, 10);
+  const faId = req.user.role === "field_agent" ? req.user.sub : null;
   const [customers, active, unpaid, revenue, cashbox] = await Promise.all([
-    query("SELECT COUNT(*)::int AS value FROM customers WHERE isp_id = $1", [ispId]),
-    query("SELECT COUNT(*)::int AS value FROM subscriptions WHERE isp_id = $1 AND status = 'active'", [ispId]),
-    query(
-      "SELECT COUNT(*)::int AS value FROM invoices WHERE isp_id = $1 AND status IN ('unpaid', 'overdue')",
-      [ispId]
-    ),
-    query("SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE isp_id = $1 AND status = 'paid'", [ispId]),
-    getCashboxSummary(ispId, from, to)
+    faId
+      ? query(
+          "SELECT COUNT(*)::int AS value FROM customers WHERE isp_id = $1 AND field_agent_id = $2",
+          [ispId, faId]
+        )
+      : query("SELECT COUNT(*)::int AS value FROM customers WHERE isp_id = $1", [ispId]),
+    faId
+      ? query(
+          `SELECT COUNT(*)::int AS value FROM subscriptions s
+           INNER JOIN customers c ON c.id = s.customer_id AND c.isp_id = s.isp_id
+           WHERE s.isp_id = $1 AND s.status = 'active' AND c.field_agent_id = $2`,
+          [ispId, faId]
+        )
+      : query("SELECT COUNT(*)::int AS value FROM subscriptions WHERE isp_id = $1 AND status = 'active'", [ispId]),
+    faId
+      ? query(
+          `SELECT COUNT(*)::int AS value FROM invoices i
+           INNER JOIN customers c ON c.id = i.customer_id AND c.isp_id = i.isp_id
+           WHERE i.isp_id = $1 AND i.status IN ('unpaid', 'overdue') AND c.field_agent_id = $2`,
+          [ispId, faId]
+        )
+      : query(
+          "SELECT COUNT(*)::int AS value FROM invoices WHERE isp_id = $1 AND status IN ('unpaid', 'overdue')",
+          [ispId]
+        ),
+    faId
+      ? query(
+          `SELECT COALESCE(SUM(i.amount_usd), 0)::float AS value FROM invoices i
+           INNER JOIN customers c ON c.id = i.customer_id AND c.isp_id = i.isp_id
+           WHERE i.isp_id = $1 AND i.status = 'paid' AND c.field_agent_id = $2`,
+          [ispId, faId]
+        )
+      : query(
+          "SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE isp_id = $1 AND status = 'paid'",
+          [ispId]
+        ),
+    getCashboxSummary(ispId, from, to, faId)
   ]);
   res.json({
     totalCustomers: customers.rows[0].value,
