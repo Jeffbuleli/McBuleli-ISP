@@ -14,6 +14,16 @@ function getStoredUiLang() {
   return saved === "en" ? "en" : "fr";
 }
 
+const DEFAULT_PAWAPAY_NETWORKS = [
+  { key: "orange", label: "Orange Money" },
+  { key: "airtel", label: "Airtel Money" },
+  { key: "mpesa", label: "M-Pesa (Vodacom)" }
+];
+
+function usablePawapayNetworks(networks) {
+  return Array.isArray(networks) && networks.length ? networks : DEFAULT_PAWAPAY_NETWORKS;
+}
+
 const EN_TEXT_MAP = {
   "Image de marque / marque blanche": "Tenant Branding / White-label",
   "Nom affiché": "Display name",
@@ -341,7 +351,9 @@ const LOAD_FAILURE_LABELS_FR = {
 function App() {
   const [user, setUser] = useState(null);
   const [tenantContext, setTenantContext] = useState(null);
-  const [loginForm, setLoginForm] = useState({ email: "admin@isp.local", password: "admin123" });
+  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  const [mfaLogin, setMfaLogin] = useState(null);
+  const [mfaCode, setMfaCode] = useState("");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
   const [isps, setIsps] = useState([]);
   const [selectedIspId, setSelectedIspId] = useState("");
@@ -476,7 +488,10 @@ function App() {
     email: "",
     password: "",
     role: "billing_agent",
-    accreditationLevel: "basic"
+    accreditationLevel: "basic",
+    phone: "",
+    address: "",
+    assignedSite: ""
   });
   const [tidForm, setTidForm] = useState({
     invoiceId: "",
@@ -509,9 +524,22 @@ function App() {
   const [saasPayForm, setSaasPayForm] = useState({
     currency: "CDF",
     phoneNumber: "",
-    provider: "MTN_MOMO_COD"
+    networkKey: "orange",
+    packageId: ""
   });
   const [saasDepositResult, setSaasDepositResult] = useState(null);
+  const [pawapayNetworks, setPawapayNetworks] = useState(DEFAULT_PAWAPAY_NETWORKS);
+  const [withdrawals, setWithdrawals] = useState([]);
+  const [withdrawalForm, setWithdrawalForm] = useState({
+    amountUsd: "",
+    currency: "USD",
+    phoneNumber: "",
+    networkKey: "orange",
+    mfaCode: ""
+  });
+  const [totpSetup, setTotpSetup] = useState(null);
+  const [totpSetupCode, setTotpSetupCode] = useState("");
+  const [totpSetupLoading, setTotpSetupLoading] = useState(false);
   const [upgradePackageId, setUpgradePackageId] = useState("");
   const [platformBillingStatus, setPlatformBillingStatus] = useState(null);
   const [networkNodeForm, setNetworkNodeForm] = useState({
@@ -531,6 +559,7 @@ function App() {
     recipient: "",
     message: "Message de test McBuleli."
   });
+  const availablePawapayNetworks = pawapayNetworks.length ? pawapayNetworks : DEFAULT_PAWAPAY_NETWORKS;
 
   async function refresh(selectedTenantId = selectedIspId) {
     setLoading(true);
@@ -548,14 +577,18 @@ function App() {
         setIsps([]);
         setSelectedIspId(sid);
         try {
-          const [packages, platformSubs, snap] = await Promise.all([
+          const [packages, platformSubs, snap, networks, withdrawalData] = await Promise.all([
             api.getPlatformPackages(),
             api.getPlatformSubscriptions(sid),
-            api.getPlatformBillingStatus(sid)
+            api.getPlatformBillingStatus(sid),
+            api.getPawapayNetworks(),
+            api.getWithdrawals(sid)
           ]);
           setPlatformPackages(packages);
           setPlatformSubscriptions(platformSubs);
           setPlatformBillingStatus(snap);
+          setPawapayNetworks(Array.isArray(networks) && networks.length ? networks : DEFAULT_PAWAPAY_NETWORKS);
+          setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
         } catch (_e) {
           /* billing endpoints stay reachable */
         }
@@ -576,12 +609,14 @@ function App() {
       ]);
       const allIsps = take([allIspsResult], 0, [], "isps");
       const packages = take([packagesResult], 0, [], "platformPackages");
+      const [networkOptionsResult] = await Promise.allSettled([api.getPawapayNetworks()]);
+      setPawapayNetworks(take([networkOptionsResult], 0, DEFAULT_PAWAPAY_NETWORKS, "pawapayNetworks"));
 
       const activeIspId =
         tenantContext?.ispId || selectedTenantId || currentUser.ispId || allIsps[0]?.id || "";
 
       let superDash;
-      if (currentUser.role === "super_admin") {
+      if (currentUser.role === "system_owner" || currentUser.role === "super_admin") {
         const [sd] = await Promise.allSettled([api.getSuperDashboard()]);
         superDash = take([sd], 0, {
           totalIsps: allIsps.length,
@@ -620,6 +655,7 @@ function App() {
       let vchs = [];
       let telemetry = [];
       let radiusAcct = [];
+      let withdrawalData = { items: [] };
 
       if (activeIspId) {
         const settled = await Promise.allSettled([
@@ -645,7 +681,8 @@ function App() {
           api.getVouchers(activeIspId),
           api.getTelemetrySnapshots(activeIspId),
           api.getRadiusAccountingIngest(activeIspId, 80),
-          api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to)
+          api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to),
+          api.getWithdrawals(activeIspId)
         ]);
         dash = take(settled, 0, {}, "dashboard");
         c = take(settled, 1, [], "customers");
@@ -670,11 +707,17 @@ function App() {
         telemetry = take(settled, 20, [], "telemetry");
         radiusAcct = take(settled, 21, [], "radiusAccounting");
         const expData = take(settled, 22, { items: [], summary: null }, "expenses");
+        withdrawalData = take(settled, 23, { cashbox: null, items: [] }, "withdrawals");
         setExpenses(Array.isArray(expData?.items) ? expData.items : []);
         setExpenseSummary(expData?.summary || null);
+        setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
+        if (withdrawalData?.cashbox) {
+          dash = { ...dash, cashbox: withdrawalData.cashbox };
+        }
       } else {
         setExpenses([]);
         setExpenseSummary(null);
+        setWithdrawals([]);
       }
 
       if (loadFailures.length) {
@@ -791,7 +834,13 @@ function App() {
         // Ignore tenant-context bootstrap failures.
       }
       if (localStorage.getItem("token")) {
-        refresh();
+        try {
+          await refresh();
+        } catch (_err) {
+          setAuthToken("");
+          setUser(null);
+          localStorage.removeItem("token");
+        }
       }
     }
     bootstrap();
@@ -802,6 +851,12 @@ function App() {
     setError("");
     try {
       const payload = await api.login(loginForm);
+      if (payload.mfaRequired) {
+        setMfaLogin(payload);
+        setMfaCode("");
+        setNotice(payload.message || "Code MFA requis.");
+        return;
+      }
       setAuthToken(payload.token);
       setUser(payload.user);
       refresh(payload.user.ispId || "");
@@ -810,9 +865,30 @@ function App() {
     }
   }
 
+  async function onVerifyLoginMfa(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = await api.verifyLoginMfa({
+        challengeId: mfaLogin?.challengeId,
+        code: mfaCode
+      });
+      setAuthToken(payload.token);
+      setUser(payload.user);
+      setMfaLogin(null);
+      setMfaCode("");
+      setNotice("");
+      refresh(payload.user.ispId || "");
+    } catch (err) {
+      setError(err.message || "Code MFA invalide.");
+    }
+  }
+
   function onLogout() {
     setAuthToken("");
     setUser(null);
+    setMfaLogin(null);
+    setMfaCode("");
     setIsps([]);
     setSelectedIspId("");
     setSuperDashboard(null);
@@ -838,6 +914,10 @@ function App() {
     setVouchers([]);
     setExpenses([]);
     setExpenseSummary(null);
+    setWithdrawals([]);
+    setWithdrawalMfa(null);
+    setMfaLogin(null);
+    setMfaCode("");
     setPlans([]);
     setSubscriptions([]);
     setInvoices([]);
@@ -993,7 +1073,8 @@ function App() {
       const data = await api.initiatePlatformDeposit(selectedIspId, {
         currency: saasPayForm.currency,
         phoneNumber: saasPayForm.phoneNumber,
-        provider: saasPayForm.provider
+        networkKey: saasPayForm.networkKey,
+        packageId: saasPayForm.packageId || undefined
       });
       setSaasDepositResult(data);
       setNotice(data.message || "Dépôt initié.");
@@ -1015,21 +1096,68 @@ function App() {
     }
   }
 
-  async function onUpgradeTrialPlan(e) {
+  async function onCreateWithdrawal(e) {
     e.preventDefault();
     setError("");
     setNotice("");
-    if (!selectedIspId || !upgradePackageId) {
-      setError("Choisissez une formule à laquelle basculer.");
+    if (!selectedIspId) {
+      setError("Sélectionnez d'abord un espace FAI.");
+      return;
+    }
+    if (!user?.mfaTotpEnabled) {
+      setError("Configurez Google Authenticator avant de demander un retrait.");
       return;
     }
     try {
-      await api.upgradePlatformPlan(selectedIspId, upgradePackageId);
-      setNotice("Formule mise à jour pour le reste de votre essai.");
+      const data = await api.createWithdrawal(selectedIspId, {
+        amountUsd: withdrawalForm.amountUsd,
+        currency: withdrawalForm.currency,
+        phoneNumber: withdrawalForm.phoneNumber,
+        networkKey: withdrawalForm.networkKey,
+        mfaCode: withdrawalForm.mfaCode
+      });
+      setNotice(data.message || "Retrait demandé.");
+      setWithdrawalForm({ ...withdrawalForm, amountUsd: "", mfaCode: "" });
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible de changer de formule.");
+      setError(err.message || "Impossible de créer le retrait.");
     }
+  }
+
+  async function onStartTotpSetup() {
+    setError("");
+    setNotice("");
+    setTotpSetupLoading(true);
+    try {
+      const data = await api.startTotpSetup();
+      setTotpSetup(data);
+      setTotpSetupCode("");
+      setNotice("Secret Google Authenticator généré.");
+    } catch (err) {
+      setError(err.message || "Impossible de démarrer la configuration MFA.");
+    } finally {
+      setTotpSetupLoading(false);
+    }
+  }
+
+  async function onEnableTotp(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    try {
+      await api.enableTotp({ code: totpSetupCode });
+      setTotpSetup(null);
+      setTotpSetupCode("");
+      setNotice("Google Authenticator activé pour les retraits.");
+      await refresh();
+    } catch (err) {
+      setError(err.message || "Code Google Authenticator invalide.");
+    }
+  }
+
+  function onUpgradeTrialPlan(e) {
+    e.preventDefault();
+    setError("Le changement de formule se fait maintenant par paiement Mobile Money dans le formulaire ci-dessus.");
   }
 
   async function onCreatePlan(e) {
@@ -1220,7 +1348,10 @@ function App() {
       email: "",
       password: "",
       role: "billing_agent",
-      accreditationLevel: "basic"
+      accreditationLevel: "basic",
+      phone: "",
+      address: "",
+      assignedSite: ""
     });
     refresh();
   }
@@ -1641,9 +1772,15 @@ function App() {
           <section className="login-poster" aria-label="Présentation">
             <div className="login-poster-logo">McBuleli</div>
             <p className="login-poster-lead">
-              Facturation abonnés, factures, encaissements Mobile Money, portail client et suivi réseau — une
-              seule plateforme pour votre FAI. Connectez-vous ci-contre pour gérer votre espace.
+              {isEn
+                ? "Billing, Mobile Money collections, customer portal, agents, MikroTik and reporting in one professional ISP workspace."
+                : "Facturation, encaissements Mobile Money, portail client, agents, MikroTik et reporting dans un espace FAI professionnel."}
             </p>
+            <ul className="login-poster-list">
+              <li>{isEn ? "Company dashboard for leaders and managers" : "Tableau entreprise pour dirigeants et managers"}</li>
+              <li>{isEn ? "Agent access with roles, audit and field actions" : "Accès agents avec rôles, audit et actions terrain"}</li>
+              <li>{isEn ? "Invoices, subscriptions and customer payments" : "Factures, abonnements et paiements clients"}</li>
+            </ul>
           </section>
           <div className="login-stack">
             <header className="app-header app-header--login">
@@ -1669,28 +1806,55 @@ function App() {
               </div>
             </header>
             {error && <p className="error">{error}</p>}
-            <form className="panel" onSubmit={onLogin}>
-              <h2>{isEn ? "Login" : "Connexion"}</h2>
-              <input
-                placeholder={isEn ? "Email address" : "Adresse e-mail"}
-                value={loginForm.email}
-                onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-              />
-              <input
-                placeholder={isEn ? "Password" : "Mot de passe"}
-                type="password"
-                value={loginForm.password}
-                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-              />
-              <button type="submit">{isEn ? "Login" : "Se connecter"}</button>
-              <p>
-                <a href="/signup">{isEn ? "Create a McBuleli account" : "Créer un compte entreprise McBuleli"}</a>{" "}
-                ({isEn ? "7-day trial, Mobile Money billing" : "essai 7 jours, facturation Mobile Money"})
-              </p>
-              <p style={{ fontSize: "0.88rem", color: "var(--mb-muted)" }}>
-                {isEn ? "Demo admin:" : "Démo admin :"} admin@isp.local / admin123
-              </p>
-            </form>
+            {mfaLogin ? (
+              <form className="panel" onSubmit={onVerifyLoginMfa}>
+                <h2>{isEn ? "MFA verification" : "Vérification MFA"}</h2>
+                <p>
+                  {isEn
+                    ? "Enter the 6-digit code sent to the internal notification outbox or SMS provider."
+                    : "Saisissez le code à 6 chiffres envoyé dans la file de notifications interne ou par SMS."}
+                </p>
+                {mfaLogin.devCode ? (
+                  <p style={{ fontSize: "0.9rem", color: "var(--mb-muted)" }}>
+                    {isEn ? "Development code:" : "Code développement :"} <code>{mfaLogin.devCode}</code>
+                  </p>
+                ) : null}
+                <input
+                  placeholder={isEn ? "MFA code" : "Code MFA"}
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                />
+                <button type="submit">{isEn ? "Verify" : "Valider"}</button>
+                <button type="button" onClick={() => setMfaLogin(null)}>
+                  {isEn ? "Back to login" : "Retour connexion"}
+                </button>
+              </form>
+            ) : (
+              <form className="panel" onSubmit={onLogin}>
+                <h2>{isEn ? "Login" : "Connexion"}</h2>
+                <p className="app-meta">
+                  {isEn
+                    ? "Access the business interface, demo workspaces, billing, agents and customer operations."
+                    : "Accédez à l'interface entreprise, aux espaces démo, à la facturation, aux agents et aux opérations clients."}
+                </p>
+                <input
+                  placeholder={isEn ? "Email address" : "Adresse e-mail"}
+                  value={loginForm.email}
+                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                />
+                <input
+                  placeholder={isEn ? "Password" : "Mot de passe"}
+                  type="password"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                />
+                <button type="submit">{isEn ? "Login" : "Se connecter"}</button>
+                <p>
+                  <a href="/signup">{isEn ? "Create a McBuleli account" : "Créer un compte entreprise McBuleli"}</a>{" "}
+                  ({isEn ? "1-month trial, Mobile Money billing" : "essai 1 mois, facturation Mobile Money"})
+                </p>
+              </form>
+            )}
           </div>
         </div>
       </main>
@@ -1744,25 +1908,58 @@ function App() {
 
   return (
     <main className="container app-shell">
-      <header className="app-header">
-        <div>
-          <h1>{resolvePublicBrandName(branding?.displayName || tenantContext?.displayName)}</h1>
-          <p className="app-meta">
-            {t("Connecté :", "Logged in as")} <strong>{user.fullName}</strong> ({user.role})
-          </p>
+      <header className="app-header app-header--dashboard">
+        <div className="dashboard-brandline">
+          <img className="dashboard-logo" src="/mcbuleli-logo.svg" alt="" />
+          <div>
+            <h1>{resolvePublicBrandName(branding?.displayName || tenantContext?.displayName)}</h1>
+            <p className="app-meta">
+              {t("Connecté :", "Logged in as")} <strong>{user.fullName}</strong> ({user.role})
+            </p>
+          </div>
         </div>
-        <div>
+        <div className="dashboard-toolbar">
           <button type="button" onClick={() => setUiLang("fr")} disabled={uiLang === "fr"}>
             FR
           </button>{" "}
           <button type="button" onClick={() => setUiLang("en")} disabled={uiLang === "en"}>
             EN
           </button>{" "}
-        <button type="button" className="btn-logout" onClick={onLogout}>
-          {t("Déconnexion", "Logout")}
-        </button>
+          <button type="button" className="btn-logout" onClick={onLogout}>
+            {t("Déconnexion", "Logout")}
+          </button>
         </div>
       </header>
+      <nav className="dashboard-subnav" aria-label="Navigation tableau de bord">
+        <a href="#dashboard-overview">{t("Vue d'ensemble", "Overview")}</a>
+        <a href="#workspace-settings">{t("Paramètres", "Settings")}</a>
+        <a href="#network-ops">{t("Réseau", "Network")}</a>
+        <a href="#billing-ops">{t("Facturation", "Billing")}</a>
+        <a href="#team-settings">{t("Utilisateurs", "Users")}</a>
+        <a href="#security-settings">{t("Sécurité", "Security")}</a>
+      </nav>
+      <section className="dashboard-quick-actions" aria-label="Raccourcis tableau de bord">
+        <a href="#workspace-settings">
+          <span>SET</span>
+          <strong>{t("Paramètres entreprise", "Company settings")}</strong>
+          <small>{t("Logo, couleurs, domaines, contacts", "Logo, colors, domains, contacts")}</small>
+        </a>
+        <a href="#billing-ops">
+          <span>PAY</span>
+          <strong>{t("Facturation & paiements", "Billing & payments")}</strong>
+          <small>{t("TID, Mobile Money, retraits", "TID, Mobile Money, withdrawals")}</small>
+        </a>
+        <a href="#team-settings">
+          <span>USR</span>
+          <strong>{t("Menus utilisateurs", "User menus")}</strong>
+          <small>{t("Agents, rôles, invitations", "Agents, roles, invites")}</small>
+        </a>
+        <a href="#network-ops">
+          <span>NET</span>
+          <strong>{t("Réseau", "Network")}</strong>
+          <small>{t("MikroTik, Hotspot, télémétrie", "MikroTik, Hotspot, telemetry")}</small>
+        </a>
+      </section>
       {loading && <p>{t("Chargement…", "Loading...")}</p>}
       {error && <p className="error">{isEn ? translateToEnglish(error) : error}</p>}
       {notice && <p>{isEn ? translateToEnglish(notice) : notice}</p>}
@@ -1803,6 +2000,23 @@ function App() {
                 <h3>{t("Payer par Mobile Money", "Pay with Mobile Money")}</h3>
                 <form onSubmit={onInitiatePlatformDeposit}>
                   <select
+                    value={saasPayForm.packageId}
+                    onChange={(e) => setSaasPayForm({ ...saasPayForm, packageId: e.target.value })}
+                  >
+                    <option value="">
+                      {billing.package
+                        ? `${billing.package.name} (${billing.monthlyPriceUsd} $ / mois)`
+                        : t("Formule actuelle", "Current plan")}
+                    </option>
+                    {platformPackages
+                      .filter((p) => ["essential", "pro", "business"].includes(p.code))
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.monthlyPriceUsd}&nbsp;$ / mois)
+                        </option>
+                      ))}
+                  </select>
+                  <select
                     value={saasPayForm.currency}
                     onChange={(e) => setSaasPayForm({ ...saasPayForm, currency: e.target.value })}
                   >
@@ -1814,11 +2028,16 @@ function App() {
                     value={saasPayForm.phoneNumber}
                     onChange={(e) => setSaasPayForm({ ...saasPayForm, phoneNumber: e.target.value })}
                   />
-                  <input
-                    placeholder={t("Code fournisseur Mobile Money", "Mobile Money provider code")}
-                    value={saasPayForm.provider}
-                    onChange={(e) => setSaasPayForm({ ...saasPayForm, provider: e.target.value })}
-                  />
+                  <select
+                    value={saasPayForm.networkKey}
+                    onChange={(e) => setSaasPayForm({ ...saasPayForm, networkKey: e.target.value })}
+                  >
+                    {availablePawapayNetworks.map((network) => (
+                      <option key={network.key} value={network.key}>
+                        {network.label}
+                      </option>
+                    ))}
+                  </select>
                   <button type="submit" disabled={!selectedIspId}>
                     {t("Payer l'abonnement mensuel", "Pay monthly subscription")}
                   </button>
@@ -1833,32 +2052,19 @@ function App() {
                 ) : null}
               </>
             )}
-            {billing.subscription?.status === "trialing" &&
-              (user.role === "super_admin" ||
-                user.role === "company_manager" ||
-                user.role === "isp_admin") && (
-                <form onSubmit={onUpgradeTrialPlan}>
-                  <h3>{t("Changer de formule pendant l'essai", "Change plan during trial")}</h3>
-                  <select value={upgradePackageId} onChange={(e) => setUpgradePackageId(e.target.value)}>
-                    <option value="">{t("Choisir une formule", "Select plan")}</option>
-                    {platformPackages
-                      .filter((p) => ["essential", "pro", "business"].includes(p.code))
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.monthlyPriceUsd}&nbsp;$ / mois)
-                        </option>
-                      ))}
-                  </select>
-                  <button type="submit" disabled={!selectedIspId || !upgradePackageId}>
-                    {t("Mettre à jour la formule d'essai", "Update trial plan")}
-                  </button>
-                </form>
-              )}
+            {billing.subscription?.status === "trialing" ? (
+              <p style={{ fontSize: "0.9rem", color: "var(--mb-muted)" }}>
+                {t(
+                  "Pour changer de formule, choisissez le nouveau plan dans le formulaire de paiement Mobile Money. La formule sera appliquée seulement après confirmation Pawapay.",
+                  "To change plan, select the new tier in the Mobile Money payment form. The tier is applied only after Pawapay confirms payment."
+                )}
+              </p>
+            ) : null}
           </section>
         );
       })()}
 
-      <section className="grid metrics">
+      <section className="grid metrics dashboard-section-anchor" id="dashboard-overview">
         <Card title={t("FAI", "ISPs")} value={superDashboard?.totalIsps ?? 0} />
         <Card title={t("Clients (tous FAI)", "All Customers")} value={superDashboard?.totalCustomers ?? 0} />
         <Card
@@ -1868,12 +2074,54 @@ function App() {
         <Card title={t("Chiffre d'affaires global (USD)", "Global Revenue (USD)")} value={superDashboard?.totalRevenueUsd ?? 0} />
       </section>
 
+      {user.role === "system_owner" && superDashboard?.tenants ? (
+        <section className="panel">
+          <h2>Vue créateur système</h2>
+          <p>
+            Compte propriétaire global. Les mots de passe des entreprises sont stockés de façon chiffrée et ne sont pas
+            affichables ; utilisez les invitations ou la réinitialisation pour donner un nouvel accès.
+          </p>
+          <div className="grid">
+            {superDashboard.tenants.map((tenant) => (
+              <article className="panel" key={tenant.id}>
+                <h3>
+                  {tenant.name} {tenant.isDemo ? "(démo)" : ""}
+                </h3>
+                <p>
+                  {tenant.location} — {tenant.contactPhone} — {tenant.subscriptionStatus || "sans abonnement"}
+                </p>
+                <p>
+                  Plan: {tenant.packageName || "—"} · Fin:{" "}
+                  {tenant.subscriptionEndsAt
+                    ? new Date(tenant.subscriptionEndsAt).toLocaleDateString("fr-FR")
+                    : "—"}
+                </p>
+                <p>
+                  Créé le {new Date(tenant.createdAt).toLocaleDateString("fr-FR")} · Admins:{" "}
+                  {(tenant.adminUsers || []).map((admin) => `${admin.fullName} <${admin.email}>`).join(", ") || "—"}
+                </p>
+                <button type="button" onClick={() => refresh(tenant.id)}>
+                  Ouvrir cet espace
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="grid metrics">
         <Card title={t("Utilisateurs hotspot", "Hotspot Users")} value={networkStats?.hotspotUsers ?? 0} />
         <Card title={t("Utilisateurs PPPoE", "PPPoE Users")} value={networkStats?.pppoeUsers ?? 0} />
         <Card title={t("Appareils connectés", "Connected Devices")} value={networkStats?.connectedDevices ?? 0} />
         <Card title={t("Bande passante (Go)", "Bandwidth (GB)")} value={networkStats?.bandwidthTotalGb ?? 0} />
         <Card title={t("Encaissements sur la période (USD)", "Revenue In Period (USD)")} value={networkStats?.revenueCollectedUsd ?? 0} />
+      </section>
+
+      <section className="grid metrics">
+        <Card title={t("Caisse cash (USD)", "Cash till (USD)")} value={networkStats?.cashbox?.cashUsd ?? dashboard?.cashbox?.cashUsd ?? 0} />
+        <Card title={t("Caisse TID (USD)", "TID till (USD)")} value={networkStats?.cashbox?.tidUsd ?? dashboard?.cashbox?.tidUsd ?? 0} />
+        <Card title={t("Mobile Money (USD)", "Mobile Money (USD)")} value={networkStats?.cashbox?.mobileMoneyUsd ?? dashboard?.cashbox?.mobileMoneyUsd ?? 0} />
+        <Card title={t("Retirable Mobile Money (USD)", "Withdrawable Mobile Money (USD)")} value={networkStats?.cashbox?.withdrawableMobileMoneyUsd ?? dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0} />
       </section>
 
       <section className="panel">
@@ -1917,7 +2165,7 @@ function App() {
         </section>
       )}
 
-      <section className="grid">
+      <section className="grid" id="tenant-workspace">
         {user.role === "super_admin" && (
           <form className="panel" onSubmit={onCreateIsp}>
             <h2>{t("Créer un FAI (locataire)", "Create ISP Tenant")}</h2>
@@ -1957,7 +2205,7 @@ function App() {
         </section>
       </section>
 
-      <section className="grid">
+      <section className="grid" id="workspace-settings">
         {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onSaveBranding}>
             <h2>Image de marque / marque blanche</h2>
@@ -2049,7 +2297,7 @@ function App() {
         )}
       </section>
 
-      <section className="grid">
+      <section className="grid" id="billing-ops">
         {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreatePaymentMethod}>
             <h2>Moyens de paiement FAI</h2>
@@ -2163,7 +2411,7 @@ function App() {
         )}
       </section>
 
-      <section className="grid">
+      <section className="grid" id="network-ops">
         {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreateNetworkNode}>
             <h2>Nœud réseau MikroTik</h2>
@@ -2321,7 +2569,7 @@ function App() {
         </section>
       </section>
 
-      <section className="grid">
+      <section className="grid" id="team-settings">
         {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onUpsertNotificationProvider}>
             <h2>Fournisseurs de notifications</h2>
@@ -2904,6 +3152,96 @@ function App() {
         <Card title="Factures impayées" value={dashboard?.unpaidInvoices ?? 0} />
         <Card title="Chiffre d'affaires (USD)" value={dashboard?.revenueUsd ?? 0} />
       </section>
+
+      <section className="grid metrics">
+        <Card title="Cash encaissé (USD)" value={dashboard?.cashbox?.cashUsd ?? 0} />
+        <Card title="TID validés (USD)" value={dashboard?.cashbox?.tidUsd ?? 0} />
+        <Card title="Mobile Money Pawapay (USD)" value={dashboard?.cashbox?.mobileMoneyUsd ?? 0} />
+        <Card title="Retirable Mobile Money (USD)" value={dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0} />
+      </section>
+
+      {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+        <section className="panel" id="security-settings">
+          <h2>Retrait Mobile Money sécurisé</h2>
+          <p>
+            Les retraits sont limités aux paiements Mobile Money confirmés via Pawapay. Les encaissements cash et TID
+            manuel restent visibles dans les statistiques, mais ne sont pas retirables depuis le compte Pawapay.
+          </p>
+          <section className="panel" style={{ background: "#f8f9fb" }}>
+            <h3>Google Authenticator</h3>
+            <p>
+              Statut : {user.mfaTotpEnabled ? "configuré" : "non configuré"}. Scannez l'URL otpauth avec Google
+              Authenticator/Authy, puis validez avec le code à 6 chiffres.
+            </p>
+            <button type="button" onClick={onStartTotpSetup} disabled={totpSetupLoading}>
+              {user.mfaTotpEnabled ? "Regénérer le secret MFA" : "Configurer Google Authenticator"}
+            </button>
+            {totpSetup ? (
+              <form onSubmit={onEnableTotp}>
+                <input readOnly value={totpSetup.secret || ""} />
+                <input readOnly value={totpSetup.otpauthUrl || ""} />
+                <input
+                  placeholder="Code Google Authenticator"
+                  value={totpSetupCode}
+                  onChange={(e) => setTotpSetupCode(e.target.value)}
+                />
+                <button type="submit">Activer MFA</button>
+              </form>
+            ) : null}
+          </section>
+          <form onSubmit={onCreateWithdrawal}>
+            <input
+              type="number"
+              min={withdrawalForm.currency === "CDF" ? "1000" : "0.5"}
+              step="0.01"
+              placeholder={withdrawalForm.currency === "CDF" ? "Montant à retirer (CDF)" : "Montant à retirer (USD)"}
+              value={withdrawalForm.amountUsd}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, amountUsd: e.target.value })}
+            />
+            <select
+              value={withdrawalForm.currency}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, currency: e.target.value })}
+            >
+              <option value="USD">USD</option>
+              <option value="CDF">CDF</option>
+            </select>
+            <p style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+              Le solde retirable est suivi en USD. Si vous choisissez CDF, le montant est converti au taux plateforme
+              avant comparaison, puis envoyé à Pawapay en CDF.
+            </p>
+            <input
+              placeholder="Téléphone bénéficiaire"
+              value={withdrawalForm.phoneNumber}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, phoneNumber: e.target.value })}
+            />
+            <select
+              value={withdrawalForm.networkKey}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, networkKey: e.target.value })}
+            >
+              {availablePawapayNetworks.map((n) => (
+                <option key={n.key} value={n.key}>
+                  {n.label}
+                </option>
+              ))}
+            </select>
+            <input
+              placeholder="Code Google Authenticator"
+              value={withdrawalForm.mfaCode}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, mfaCode: e.target.value })}
+            />
+            <button type="submit" disabled={!selectedIspId || !user.mfaTotpEnabled}>
+              Valider le retrait
+            </button>
+          </form>
+          {withdrawals.slice(0, 8).map((w) => (
+            <p key={w.id}>
+              {new Date(w.createdAt).toLocaleString()} — {w.amountUsd} {w.currency} vers {w.phoneNumber} ({w.provider}) —{" "}
+              {w.status}
+              {w.failureMessage ? ` — ${w.failureMessage}` : ""}
+            </p>
+          ))}
+        </section>
+      )}
 
       {(user.role === "super_admin" ||
         user.role === "company_manager" ||

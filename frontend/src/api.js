@@ -182,7 +182,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  verifyLoginMfa: (payload) =>
+    publicRequest("/auth/mfa/verify-login", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   me: () => request("/auth/me"),
+  setupTotpMfa: () =>
+    request("/auth/mfa/totp/setup", {
+      method: "POST",
+      body: JSON.stringify({})
+    }),
+  startTotpSetup: () =>
+    request("/auth/mfa/totp/setup", {
+      method: "POST",
+      body: JSON.stringify({})
+    }),
+  enableTotpMfa: (code) =>
+    request("/auth/mfa/totp/enable", {
+      method: "POST",
+      body: JSON.stringify({ code })
+    }),
+  enableTotp: (payload) =>
+    request("/auth/mfa/totp/enable", {
+      method: "POST",
+      body: JSON.stringify({ code: payload?.code ?? payload })
+    }),
   changePassword: (payload) =>
     request("/auth/change-password", {
       method: "POST",
@@ -194,6 +219,7 @@ export const api = {
       body: JSON.stringify(payload)
     }),
   getIsps: () => request("/isps"),
+  getSystemOwnerOverview: () => request("/system-owner/overview"),
   getBranding: (ispId) => request(withIsp("/branding", ispId)),
   updateBranding: (ispId, payload) =>
     request(withIsp("/branding", ispId), {
@@ -527,6 +553,7 @@ export const api = {
       body: JSON.stringify({ ...payload, ispId })
     }),
   getPlatformBillingStatus: (ispId) => request(withIsp("/platform/billing/status", ispId)),
+  getPawapayNetworks: () => publicRequest("/public/mobile-money-networks"),
   initiatePlatformDeposit: (ispId, payload) =>
     request(withIsp("/platform/billing/initiate-deposit", ispId), {
       method: "POST",
@@ -534,9 +561,10 @@ export const api = {
     }),
   getPlatformDepositStatus: (ispId, depositId) =>
     request(withIsp(`/platform/billing/deposit-status/${encodeURIComponent(depositId)}`, ispId)),
-  upgradePlatformPlan: (ispId, packageId) =>
-    request(withIsp("/platform/billing/upgrade-plan", ispId), {
+  getWithdrawals: (ispId) => request(withIsp("/withdrawals", ispId)),
+  createWithdrawal: (ispId, payload) =>
+    request(withIsp("/withdrawals", ispId), {
       method: "POST",
-      body: JSON.stringify({ packageId, ispId })
+      body: JSON.stringify({ ...payload, ispId })
     })
 };

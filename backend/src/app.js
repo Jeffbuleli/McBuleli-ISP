@@ -15,9 +15,10 @@ import {
   getPlatformBillingSnapshot,
   getPlatformFeatureLimits,
   markSaasDepositFailed,
+  usdAmountForCdf,
   usdAmountString
 } from "./platformBilling.js";
-import { fetchPawapayDepositStatus, initiatePawapayDeposit } from "./pawapayClient.js";
+import { fetchPawapayDepositStatus, initiatePawapayDeposit, initiatePawapayPayout } from "./pawapayClient.js";
 import { processNotificationOutboxBatch, sendNotificationDirect } from "./notifications.js";
 import { provisionSubscriptionAccess } from "./networkProvisioning.js";
 import { collectAndStoreNetworkTelemetry } from "./networkTelemetry.js";
@@ -47,6 +48,7 @@ import {
 import { WIFI_GUEST_NETWORK_OPTIONS, resolveWifiGuestPawapayProvider } from "./wifiGuestProviders.js";
 import { createPublicRateLimiter } from "./publicRateLimit.js";
 import { insertRadiusAccountingRecord } from "./radiusAccountingIngest.js";
+import { generateTotpSecret, totpAuthUrl, verifyTotpCode } from "./totp.js";
 import fs from "fs";
 import path from "path";
 import multer from "multer";
@@ -70,6 +72,15 @@ function authenticate(req, res, next) {
 
 const app = express();
 app.set("trust proxy", process.env.TRUST_PROXY === "true" ? 1 : 0);
+
+function configuredCorsOrigins() {
+  return String(process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+}
+
+const corsOrigins = configuredCorsOrigins();
 
 function isUuidString(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -203,6 +214,7 @@ const rlRadiusAcct = createPublicRateLimiter("radius_acct_webhook", {
 app.use(helmet());
 app.use(
   cors({
+    origin: corsOrigins.length > 0 ? corsOrigins : undefined,
     allowedHeaders: ["Content-Type", "Authorization", "X-Portal-Token"]
   })
 );
@@ -295,8 +307,165 @@ app.get("/api/public/branding-logo/:ispId", rlPublicRead, async (req, res) => {
   return res.status(404).end();
 });
 
-const TRIAL_DAYS = Math.min(Math.max(Number(process.env.PLATFORM_TRIAL_DAYS || 7), 1), 90);
-const SAAS_PLAN_CODES = ["essential", "pro", "business"];
+const TRIAL_DAYS = Math.min(Math.max(Number(process.env.PLATFORM_TRIAL_DAYS || 30), 1), 90);
+const SAAS_PLAN_CODES = ["essential", "pro"];
+const MFA_REQUIRED_ROLES = new Set(["super_admin", "company_manager", "isp_admin", "field_agent"]);
+const MFA_OTP_TTL_MINUTES = Math.min(Math.max(Number(process.env.MFA_OTP_TTL_MINUTES || 10), 1), 60);
+const MOBILE_MONEY_WITHDRAWAL_METHODS = ["pawapay"];
+
+function generateOtpCode() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+function hashOtpCode(code) {
+  return crypto.createHash("sha256").update(String(code)).digest("hex");
+}
+
+function publicUserPayload(user, extra = {}) {
+  return {
+    id: user.id,
+    email: user.email,
+    fullName: user.full_name,
+    role: user.role,
+    ispId: user.isp_id,
+    isActive: user.is_active,
+    mustChangePassword: user.must_change_password,
+    mfaRequired: MFA_REQUIRED_ROLES.has(user.role),
+    mfaTotpEnabled: Boolean(user.mfa_totp_enabled),
+    ...extra
+  };
+}
+
+async function verifyTotpForUser(userId, code) {
+  const result = await query(
+    "SELECT mfa_totp_secret, mfa_totp_enabled FROM users WHERE id = $1",
+    [userId]
+  );
+  const user = result.rows[0];
+  if (!user?.mfa_totp_enabled || !user?.mfa_totp_secret) {
+    return { ok: false, message: "Configure Google Authenticator before requesting withdrawals." };
+  }
+  if (!verifyTotpCode({ secret: user.mfa_totp_secret, code })) {
+    return { ok: false, message: "Invalid authenticator code." };
+  }
+  return { ok: true };
+}
+
+async function createMfaChallenge({ user, purpose, metadata = {} }) {
+  const code = generateOtpCode();
+  const expiresAt = new Date(Date.now() + MFA_OTP_TTL_MINUTES * 60 * 1000);
+  const inserted = await query(
+    `INSERT INTO user_mfa_challenges (id, user_id, purpose, code_hash, metadata, expires_at)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4::jsonb, $5)
+     RETURNING id, purpose, expires_at AS "expiresAt"`,
+    [user.id, purpose, hashOtpCode(code), JSON.stringify(metadata), expiresAt.toISOString()]
+  );
+  if (user.isp_id) {
+    await query(
+      `INSERT INTO notification_outbox (id, isp_id, channel, recipient, template_key, payload, status)
+       VALUES (gen_random_uuid(), $1, 'internal', $2, $3, $4::jsonb, 'queued')`,
+      [
+        user.isp_id,
+        user.email,
+        purpose === "withdrawal" ? "withdrawal_mfa_code" : "login_mfa_code",
+        JSON.stringify({
+          userId: user.id,
+          code,
+          purpose,
+          expiresAt: expiresAt.toISOString()
+        })
+      ]
+    );
+  }
+  const delivery = user.isp_id ? "notification_outbox" : "response_dev";
+  return {
+    ...inserted.rows[0],
+    delivery,
+    code: process.env.NODE_ENV === "production" ? undefined : code
+  };
+}
+
+async function verifyMfaChallenge({ userId = null, challengeId, purpose, code }) {
+  const params = [challengeId, purpose, hashOtpCode(code)];
+  let userPredicate = "";
+  if (userId) {
+    params.push(userId);
+    userPredicate = `AND user_id = $${params.length}`;
+  }
+  const result = await query(
+    `UPDATE user_mfa_challenges
+     SET status = 'verified', verified_at = NOW()
+     WHERE id = $1::uuid
+       ${userPredicate}
+       AND purpose = $2
+       AND status = 'pending'
+       AND expires_at >= NOW()
+       AND code_hash = $3
+     RETURNING id, user_id AS "userId", metadata`,
+    params
+  );
+  if (result.rows[0]) {
+    return { ok: true, userId: result.rows[0].userId, challenge: result.rows[0] };
+  }
+  const expireParams = [challengeId, purpose];
+  let expireUserPredicate = "";
+  if (userId) {
+    expireParams.push(userId);
+    expireUserPredicate = `AND user_id = $${expireParams.length}`;
+  }
+  await query(
+    `UPDATE user_mfa_challenges SET status = 'expired'
+     WHERE id = $1::uuid AND purpose = $2 ${expireUserPredicate} AND status = 'pending' AND expires_at < NOW()`,
+    expireParams
+  );
+  return { ok: false };
+}
+
+function normalizeRevenueMethod(method) {
+  const m = String(method || "").toLowerCase();
+  if (m === "cash") return "cash";
+  if (m === "manual_mobile_money") return "tid";
+  if (MOBILE_MONEY_WITHDRAWAL_METHODS.includes(m)) return "mobileMoney";
+  return "other";
+}
+
+async function getCashboxSummary(ispId, from = "1970-01-01", to = new Date().toISOString().slice(0, 10)) {
+  const rows = await query(
+    `SELECT method, COALESCE(SUM(amount_usd), 0)::float AS total
+     FROM payments
+     WHERE isp_id = $1 AND status = 'confirmed' AND paid_at::date BETWEEN $2::date AND $3::date
+     GROUP BY method`,
+    [ispId, from, to]
+  );
+  const breakdown = {
+    cashUsd: 0,
+    tidUsd: 0,
+    mobileMoneyUsd: 0,
+    otherUsd: 0,
+    totalUsd: 0
+  };
+  for (const row of rows.rows) {
+    const amount = Number(row.total) || 0;
+    breakdown.totalUsd += amount;
+    const bucket = normalizeRevenueMethod(row.method);
+    if (bucket === "cash") breakdown.cashUsd += amount;
+    else if (bucket === "tid") breakdown.tidUsd += amount;
+    else if (bucket === "mobileMoney") breakdown.mobileMoneyUsd += amount;
+    else breakdown.otherUsd += amount;
+  }
+  const withdrawals = await query(
+    `SELECT COALESCE(SUM(amount_usd), 0)::float AS total
+     FROM isp_withdrawal_requests
+     WHERE isp_id = $1 AND status IN ('requested', 'processing', 'completed')`,
+    [ispId]
+  );
+  const withdrawnUsd = Number(withdrawals.rows[0]?.total) || 0;
+  return {
+    ...breakdown,
+    withdrawnMobileMoneyUsd: withdrawnUsd,
+    withdrawableMobileMoneyUsd: Math.max(0, breakdown.mobileMoneyUsd - withdrawnUsd)
+  };
+}
 
 app.get("/api/public/platform-packages", rlPublicRead, async (_req, res) => {
   const result = await query(
@@ -414,13 +583,60 @@ async function handleUnifiedPawapayWebhook(req, res) {
     return res.status(401).json({ message: "Invalid or missing callback secret" });
   }
   try {
-    const result = await processPawapayCallback(req.body || {});
+    const body = req.body || {};
+    const result = await processPawapayCallback(body);
+    if (body?.depositId && body?.status === "COMPLETED") {
+      const portal = await completePortalInvoicePayment(String(body.depositId));
+      if (portal.ok) {
+        return res.status(200).json({ ok: true, kind: "deposit", status: body.status, result: portal, handled: "portal_invoice_deposit" });
+      }
+    }
+    if (body?.depositId && body?.status === "FAILED") {
+      await markPortalInvoicePaymentFailed(String(body.depositId));
+    }
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("pawapay webhook", err?.message || err);
     return res.status(500).json({ message: "Webhook handling failed" });
   }
+}
+
+async function completePortalInvoicePayment(depositId) {
+  const local = await query(
+    `SELECT id, isp_id, invoice_id, customer_id, subscription_id, status
+     FROM portal_invoice_payment_sessions
+     WHERE deposit_id = $1::uuid`,
+    [depositId]
+  );
+  const session = local.rows[0];
+  if (!session) return { ok: false, reason: "unknown_portal_invoice" };
+  if (session.status === "completed") return { ok: true, duplicate: true, invoiceId: session.invoice_id };
+  if (session.status !== "pending") return { ok: false, reason: "not_pending" };
+  const result = await applyInvoicePayment({
+    ispId: session.isp_id,
+    invoiceId: session.invoice_id,
+    providerRef: `pawapay-deposit-${depositId}`,
+    status: "confirmed",
+    methodType: "pawapay"
+  });
+  if (!result.ok) return result;
+  await query(
+    `UPDATE portal_invoice_payment_sessions
+     SET status = 'completed', completed_at = NOW()
+     WHERE id = $1`,
+    [session.id]
+  );
+  return { ok: true, invoiceId: session.invoice_id, payment: result.payment };
+}
+
+async function markPortalInvoicePaymentFailed(depositId) {
+  await query(
+    `UPDATE portal_invoice_payment_sessions
+     SET status = 'failed', completed_at = NOW()
+     WHERE deposit_id = $1::uuid AND status = 'pending'`,
+    [depositId]
+  );
 }
 
 app.get("/api/webhooks/pawapay", (_req, res) => {
@@ -454,6 +670,14 @@ app.post("/api/webhooks/radius-accounting", rlRadiusAcct, async (req, res) => {
   } catch (err) {
     return res.status(400).json({ message: err?.message || "Could not store accounting record" });
   }
+});
+
+app.get("/api/public/mobile-money-networks", rlPublicRead, (_req, res) => {
+  return res.json(WIFI_GUEST_NETWORK_OPTIONS.map(({ key, label }) => ({ key, label })));
+});
+
+app.get("/api/public/pawapay-networks", rlPublicRead, (_req, res) => {
+  return res.json(WIFI_GUEST_NETWORK_OPTIONS.map(({ key, label }) => ({ key, label })));
 });
 
 app.get("/api/public/wifi-networks", rlPublicRead, (_req, res) => {
@@ -673,9 +897,16 @@ app.get("/api/portal/session", authenticatePortal, async (req, res) => {
       [ispId, customerId]
     ),
     query(
-      `SELECT id, plan_id AS "planId", status, access_type AS "accessType", start_date AS "startDate", end_date AS "endDate",
-              max_simultaneous_devices AS "maxSimultaneousDevices"
-       FROM subscriptions WHERE isp_id = $1 AND customer_id = $2 ORDER BY start_date DESC LIMIT 20`,
+      `SELECT s.id, s.plan_id AS "planId", p.name AS "planName", p.price_usd AS "priceUsd",
+              p.duration_days AS "durationDays", p.rate_limit AS "rateLimit", p.speed_label AS "speedLabel",
+              p.default_access_type AS "defaultAccessType", s.status, s.access_type AS "accessType",
+              s.start_date AS "startDate", s.end_date AS "endDate",
+              s.max_simultaneous_devices AS "maxSimultaneousDevices"
+       FROM subscriptions s
+       JOIN plans p ON p.id = s.plan_id
+       WHERE s.isp_id = $1 AND s.customer_id = $2
+       ORDER BY s.end_date DESC, s.start_date DESC
+       LIMIT 20`,
       [ispId, customerId]
     ),
     query(
@@ -737,6 +968,104 @@ app.post("/api/portal/tid-submissions", authenticatePortal, async (req, res) => 
     details: { invoiceId: invoice.id, tid, source: "customer_portal" }
   });
   return res.status(201).json(inserted.rows[0]);
+});
+
+app.post("/api/portal/mobile-money/initiate", authenticatePortal, async (req, res) => {
+  const { ispId, customerId } = req.portal;
+  const { invoiceId, phoneNumber, networkKey, currency = "CDF" } = req.body || {};
+  if (!invoiceId || !phoneNumber || !networkKey) {
+    return res.status(400).json({ message: "invoiceId, phoneNumber and networkKey are required" });
+  }
+  const pawapayProvider = resolveWifiGuestPawapayProvider(networkKey);
+  if (!pawapayProvider) return res.status(400).json({ message: "networkKey must be one of: orange, airtel, mpesa" });
+  const cur = String(currency).toUpperCase();
+  if (cur !== "USD" && cur !== "CDF") return res.status(400).json({ message: "currency must be USD or CDF" });
+  const invoiceResult = await query(
+    `SELECT id, isp_id, customer_id, subscription_id, amount_usd, status
+     FROM invoices WHERE id = $1 AND isp_id = $2 AND customer_id = $3`,
+    [invoiceId, ispId, customerId]
+  );
+  const invoice = invoiceResult.rows[0];
+  if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+  if (!["unpaid", "overdue"].includes(invoice.status)) {
+    return res.status(400).json({ message: "This invoice is not open for Mobile Money payment" });
+  }
+  const depositId = uuidv4();
+  const phone = String(phoneNumber).replace(/\s+/g, "").replace(/^\+/, "");
+  const amount = cur === "USD" ? usdAmountString(invoice.amount_usd) : cdfAmountForUsd(invoice.amount_usd);
+  try {
+    await query(
+      `INSERT INTO portal_invoice_payment_sessions
+       (id, isp_id, customer_id, invoice_id, subscription_id, deposit_id, phone, pawapay_provider, currency, amount, status)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::uuid, $6, $7, $8, $9, 'pending')
+       ON CONFLICT (deposit_id) DO NOTHING`,
+      [ispId, customerId, invoice.id, invoice.subscription_id, depositId, phone, pawapayProvider, cur, amount]
+    );
+    const pw = await initiatePawapayDeposit({
+      depositId,
+      amount,
+      currency: cur,
+      payer: {
+        type: "MMO",
+        accountDetails: {
+          phoneNumber: phone,
+          provider: pawapayProvider
+        }
+      },
+      clientReferenceId: `portal-invoice-${invoiceId}-${depositId}`.slice(0, 200),
+      customerMessage: "McBuleli invoice"
+    });
+    if (pw.status !== "ACCEPTED" && pw.status !== "DUPLICATE_IGNORED") {
+      return res.status(400).json({
+        message: pw.failureReason?.failureMessage || "Pawapay did not accept this invoice payment",
+        pawapay: pw
+      });
+    }
+    await logAudit({
+      ispId,
+      action: "portal.invoice_mobile_money_initiated",
+      entityType: "invoice",
+      entityId: invoice.id,
+      details: { depositId, currency: cur, amount, networkKey, provider: pawapayProvider }
+    });
+    return res.status(201).json({
+      depositId,
+      amount,
+      currency: cur,
+      pawapay: pw,
+      message: "Demande envoyée au téléphone. Validez le PIN Mobile Money."
+    });
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "Pawapay initiation failed" });
+  }
+});
+
+app.get("/api/portal/mobile-money/status/:depositId", authenticatePortal, async (req, res) => {
+  const { ispId, customerId } = req.portal;
+  const { depositId } = req.params;
+  const local = await query(
+    `SELECT id, deposit_id AS "depositId", invoice_id AS "invoiceId", status, amount, currency
+     FROM portal_invoice_payment_sessions
+     WHERE deposit_id = $1::uuid AND isp_id = $2 AND customer_id = $3`,
+    [depositId, ispId, customerId]
+  );
+  const row = local.rows[0];
+  if (!row) return res.status(404).json({ message: "Payment session not found" });
+  if (row.status === "completed" || row.status === "failed") return res.json(row);
+  try {
+    const pw = await fetchPawapayDepositStatus(depositId);
+    if (pw.status === "COMPLETED") {
+      await completePortalInvoicePayment(depositId);
+      return res.json({ ...row, status: "completed", pawapay: pw });
+    }
+    if (pw.status === "FAILED") {
+      await markPortalInvoicePaymentFailed(depositId);
+      return res.json({ ...row, status: "failed", pawapay: pw });
+    }
+    return res.json({ ...row, status: "pending", pawapay: pw });
+  } catch (err) {
+    return res.json({ ...row, status: "pending", pawapayError: err.message });
+  }
 });
 
 app.post(
@@ -802,24 +1131,41 @@ app.post("/api/auth/login", async (req, res) => {
   }
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ message: "Invalid credentials" });
+  if (MFA_REQUIRED_ROLES.has(user.role) && user.mfa_totp_enabled) {
+    const challenge = await createMfaChallenge({ user, purpose: "login" });
+    return res.status(202).json({
+      mfaRequired: true,
+      challengeId: challenge.id,
+      delivery: challenge.delivery,
+      expiresAt: challenge.expiresAt,
+      devCode: challenge.code,
+      message: "MFA code required. Check the notification outbox or configured SMS provider."
+    });
+  }
   const token = signToken(user);
-  return res.json({
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      fullName: user.full_name,
-      role: user.role,
-      ispId: user.isp_id,
-      isActive: user.is_active,
-      mustChangePassword: user.must_change_password
-    }
-  });
+  return res.json({ token, user: publicUserPayload(user) });
+});
+
+app.post("/api/auth/mfa/verify-login", async (req, res) => {
+  const { challengeId, code } = req.body;
+  const lookup = await query(
+    "SELECT user_id AS \"userId\" FROM user_mfa_challenges WHERE id = $1::uuid AND purpose = 'login'",
+    [challengeId]
+  );
+  const userId = lookup.rows[0]?.userId;
+  if (!userId) return res.status(400).json({ message: "Invalid MFA challenge" });
+  const verified = await verifyMfaChallenge({ userId, challengeId, code, purpose: "login" });
+  if (!verified.ok) return res.status(400).json({ message: "Invalid or expired MFA code" });
+  const result = await query("SELECT * FROM users WHERE id = $1", [verified.userId]);
+  const user = result.rows[0];
+  if (!user || !user.is_active) return res.status(403).json({ message: "User account is inactive" });
+  const token = signToken(user);
+  return res.json({ token, user: publicUserPayload(user) });
 });
 
 app.get("/api/auth/me", authenticate, async (req, res) => {
   const result = await query(
-    "SELECT id, email, full_name, role, isp_id, is_active, must_change_password FROM users WHERE id = $1",
+    "SELECT id, email, full_name, role, isp_id, is_active, must_change_password, mfa_totp_enabled FROM users WHERE id = $1",
     [req.user.sub]
   );
   const user = result.rows[0];
@@ -828,16 +1174,45 @@ app.get("/api/auth/me", authenticate, async (req, res) => {
   if (user.isp_id) {
     platformBilling = await getPlatformBillingSnapshot(user.isp_id);
   }
+  return res.json(publicUserPayload(user, { platformBilling }));
+});
+
+app.post("/api/auth/mfa/totp/setup", authenticate, async (req, res) => {
+  const result = await query(
+    "SELECT id, email, role, mfa_totp_enabled FROM users WHERE id = $1",
+    [req.user.sub]
+  );
+  const user = result.rows[0];
+  if (!user) return res.status(404).json({ message: "User not found" });
+  if (!MFA_REQUIRED_ROLES.has(user.role)) {
+    return res.status(400).json({ message: "MFA setup is required only for protected roles." });
+  }
+  const secret = generateTotpSecret();
+  await query("UPDATE users SET mfa_totp_secret = $1, mfa_totp_enabled = FALSE WHERE id = $2", [
+    secret,
+    req.user.sub
+  ]);
   return res.json({
-    id: user.id,
-    email: user.email,
-    fullName: user.full_name,
-    role: user.role,
-    ispId: user.isp_id,
-    isActive: user.is_active,
-    mustChangePassword: user.must_change_password,
-    platformBilling
+    secret,
+    otpauthUrl: totpAuthUrl({
+      secret,
+      accountName: user.email,
+      issuer: "McBuleli"
+    }),
+    enabled: false
   });
+});
+
+app.post("/api/auth/mfa/totp/enable", authenticate, async (req, res) => {
+  const { code } = req.body;
+  const result = await query("SELECT id, mfa_totp_secret FROM users WHERE id = $1", [req.user.sub]);
+  const user = result.rows[0];
+  if (!user?.mfa_totp_secret) return res.status(400).json({ message: "Start TOTP setup first." });
+  if (!verifyTotpCode({ secret: user.mfa_totp_secret, code })) {
+    return res.status(400).json({ message: "Invalid authenticator code." });
+  }
+  await query("UPDATE users SET mfa_totp_enabled = TRUE WHERE id = $1", [req.user.sub]);
+  return res.json({ enabled: true });
 });
 
 app.post("/api/auth/change-password", authenticate, async (req, res) => {
@@ -884,12 +1259,12 @@ app.post("/api/auth/accept-invite", async (req, res) => {
 
 app.get("/api/isps", authenticate, async (_req, res) => {
   const result = await query(
-    "SELECT id, name, location, subdomain, contact_phone AS \"contactPhone\", created_at AS \"createdAt\" FROM isps ORDER BY created_at DESC"
+    "SELECT id, name, location, subdomain, contact_phone AS \"contactPhone\", is_demo AS \"isDemo\", created_at AS \"createdAt\" FROM isps ORDER BY created_at DESC"
   );
   res.json(result.rows);
 });
 
-app.post("/api/isps", authenticate, requireRoles("super_admin"), async (req, res) => {
+app.post("/api/isps", authenticate, requireRoles("system_owner", "super_admin"), async (req, res) => {
   const { name, location, contactPhone, subdomain } = req.body;
   if (!name || !location || !contactPhone) return res.status(400).json({ message: "name, location and contactPhone are required" });
   const safeSubdomain =
@@ -933,6 +1308,12 @@ app.post(
   async (req, res) => {
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
+    const limits = await getPlatformFeatureLimits(ispId);
+    if ((customDomain || subdomain) && !limits?.customDomain) {
+      return res.status(403).json({
+        message: "Votre formule actuelle ne permet pas de domaine personnalisé. Passez à Pro ou Premium."
+      });
+    }
     const {
       displayName,
       logoUrl,
@@ -1095,6 +1476,10 @@ app.get("/api/platform/billing/status", authenticate, async (req, res) => {
   return res.json(snapshot);
 });
 
+app.get("/api/platform/billing/networks", authenticate, (_req, res) => {
+  return res.json(WIFI_GUEST_NETWORK_OPTIONS.map(({ key, label }) => ({ key, label })));
+});
+
 app.post(
   "/api/platform/billing/initiate-deposit",
   authenticate,
@@ -1102,9 +1487,10 @@ app.post(
   async (req, res) => {
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
-    const { currency, phoneNumber, provider } = req.body;
-    if (!currency || !phoneNumber || !provider) {
-      return res.status(400).json({ message: "currency, phoneNumber and provider are required (Pawapay MMO codes, e.g. MTN_MOMO_COD)" });
+    const { currency, phoneNumber, networkKey, provider, packageId } = req.body;
+    const pawapayProvider = provider ? String(provider).trim() : resolveWifiGuestPawapayProvider(networkKey);
+    if (!currency || !phoneNumber || !pawapayProvider) {
+      return res.status(400).json({ message: "currency, phoneNumber and networkKey are required" });
     }
     const cur = String(currency).toUpperCase();
     if (cur !== "USD" && cur !== "CDF") {
@@ -1112,9 +1498,12 @@ app.post(
     }
     const sub = await getLatestPlatformSubscription(ispId);
     if (!sub) return res.status(400).json({ message: "No platform subscription on file for this workspace" });
+    const targetPackageId = packageId || sub.packageId;
     const pkgRow = await query(
-      "SELECT monthly_price_usd AS \"monthlyPriceUsd\" FROM platform_packages WHERE id = $1",
-      [sub.packageId]
+      `SELECT id, code, monthly_price_usd AS "monthlyPriceUsd"
+       FROM platform_packages
+       WHERE id = $1 AND code = ANY($2::text[])`,
+      [targetPackageId, SAAS_PLAN_CODES]
     );
     const monthlyUsd = pkgRow.rows[0]?.monthlyPriceUsd;
     if (monthlyUsd == null) return res.status(400).json({ message: "Package not found" });
@@ -1129,10 +1518,10 @@ app.post(
         type: "MMO",
         accountDetails: {
           phoneNumber: phone,
-          provider: String(provider).trim()
+          provider: pawapayProvider
         }
       },
-      clientReferenceId: `saas-${ispId}-${sub.id}`.slice(0, 200),
+      clientReferenceId: `saas-${ispId}-${sub.id}-${pkgRow.rows[0].code}`.slice(0, 200),
       customerMessage: "McBuleli plan"
     };
     try {
@@ -1143,12 +1532,13 @@ app.post(
           pawapay: pw
         });
       }
-      if (pw.status === "ACCEPTED") {
+      if (pw.status === "ACCEPTED" || pw.status === "DUPLICATE_IGNORED") {
         await query(
           `INSERT INTO platform_saas_deposit_sessions
-           (id, isp_id, platform_subscription_id, deposit_id, amount, currency, provider, phone_number, status, pawapay_init_status)
-           VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, $6, $7, 'initiated', $8)`,
-          [ispId, sub.id, depositId, amount, cur, provider, phone, pw.status || null]
+           (id, isp_id, platform_subscription_id, target_package_id, deposit_id, amount, currency, provider, phone_number, status, pawapay_init_status)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4::uuid, $5, $6, $7, $8, 'initiated', $9)
+           ON CONFLICT (deposit_id) DO NOTHING`,
+          [ispId, sub.id, targetPackageId, depositId, amount, cur, pawapayProvider, phone, pw.status || null]
         );
       }
       await logAudit({
@@ -1157,7 +1547,7 @@ app.post(
         action: "platform.billing.deposit_initiated",
         entityType: "platform_saas_deposit",
         entityId: depositId,
-        details: { currency: cur, amount, provider }
+        details: { currency: cur, amount, networkKey, provider: pawapayProvider, targetPackageId }
       });
       return res.status(201).json({
         depositId,
@@ -1172,6 +1562,136 @@ app.post(
     } catch (err) {
       return res.status(400).json({ message: err.message || "Pawapay initiation failed" });
     }
+  }
+);
+
+app.get(
+  "/api/withdrawals",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const rows = await query(
+      `SELECT id, amount_usd AS "amountUsd", currency, phone_number AS "phoneNumber", provider,
+              status, payout_id AS "payoutId", pawapay_init_status AS "pawapayInitStatus",
+              mobile_money_basis_usd AS "mobileMoneyBasisUsd", failure_message AS "failureMessage",
+              requested_by AS "requestedBy", created_at AS "createdAt", completed_at AS "completedAt"
+       FROM isp_withdrawal_requests
+       WHERE isp_id = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [ispId]
+    );
+    return res.json({
+      cashbox: await getCashboxSummary(ispId),
+      items: rows.rows
+    });
+  }
+);
+
+app.post(
+  "/api/withdrawals",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { amountUsd, currency = "USD", phoneNumber, networkKey, provider, mfaCode } = req.body;
+    const requestedAmount = Number(amountUsd);
+    if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
+      return res.status(400).json({ message: "Withdrawal amount must be greater than 0. Test amounts like 0.50 USD or 1000 CDF are allowed." });
+    }
+    const cur = String(currency).toUpperCase();
+    if (cur !== "USD" && cur !== "CDF") return res.status(400).json({ message: "currency must be USD or CDF" });
+    const amountUsdForBalance = cur === "CDF" ? usdAmountForCdf(requestedAmount) : requestedAmount;
+    const pawapayProvider = provider ? String(provider).trim() : resolveWifiGuestPawapayProvider(networkKey);
+    if (!phoneNumber || !pawapayProvider || !mfaCode) {
+      return res.status(400).json({ message: "phoneNumber, networkKey and mfaCode are required" });
+    }
+    const mfa = await verifyTotpForUser(req.user.sub, mfaCode);
+    if (!mfa.ok) return res.status(400).json({ message: mfa.message || "Invalid authenticator code" });
+    const cashbox = await getCashboxSummary(ispId);
+    if (amountUsdForBalance > cashbox.withdrawableMobileMoneyUsd) {
+      return res.status(400).json({
+        message:
+          "Withdrawal amount exceeds confirmed Pawapay balance after currency conversion. Cash and TID payments are not withdrawable.",
+        requestedAmount,
+        requestedCurrency: cur,
+        requestedAmountUsd: amountUsdForBalance,
+        cashbox
+      });
+    }
+    const payoutId = uuidv4();
+    const phone = String(phoneNumber).replace(/\s+/g, "").replace(/^\+/, "");
+    const payoutAmount = cur === "USD" ? usdAmountString(requestedAmount) : String(Math.round(requestedAmount));
+    let pawapay = null;
+    let status = "requested";
+    let failureMessage = null;
+    try {
+      pawapay = await initiatePawapayPayout({
+        payoutId,
+        amount: payoutAmount,
+        currency: cur,
+        recipient: {
+          type: "MMO",
+          accountDetails: {
+            phoneNumber: phone,
+            provider: pawapayProvider
+          }
+        },
+        clientReferenceId: `withdrawal-${ispId}-${payoutId}`.slice(0, 200),
+        customerMessage: "McBuleli withdrawal"
+      });
+      status = pawapay.status === "ACCEPTED" || pawapay.status === "DUPLICATE_IGNORED" ? "processing" : "failed";
+      failureMessage =
+        pawapay.status === "ACCEPTED" || pawapay.status === "DUPLICATE_IGNORED"
+          ? null
+          : pawapay.failureReason?.failureMessage || "Pawapay did not accept payout request";
+    } catch (err) {
+      status = "failed";
+      failureMessage = err.message || "Pawapay payout initiation failed";
+    }
+    const inserted = await query(
+      `INSERT INTO isp_withdrawal_requests
+       (id, isp_id, amount_usd, currency, phone_number, provider, status, payout_id, pawapay_init_status,
+        mobile_money_basis_usd, failure_message, requested_by, mfa_challenge_id)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::uuid, $8, $9, $10, $11, NULL)
+       RETURNING id, amount_usd AS "amountUsd", currency, phone_number AS "phoneNumber", provider, status,
+                 payout_id AS "payoutId", pawapay_init_status AS "pawapayInitStatus",
+                 mobile_money_basis_usd AS "mobileMoneyBasisUsd", failure_message AS "failureMessage",
+                 created_at AS "createdAt"`,
+      [
+        ispId,
+        amountUsdForBalance,
+        cur,
+        phone,
+        pawapayProvider,
+        status,
+        payoutId,
+        pawapay?.status || null,
+        cashbox.mobileMoneyUsd,
+        failureMessage,
+        req.user.sub
+      ]
+    );
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "withdrawal.requested",
+      entityType: "withdrawal",
+      entityId: inserted.rows[0].id,
+      details: {
+        requestedAmount,
+        requestedCurrency: cur,
+        amountUsd: amountUsdForBalance,
+        networkKey,
+        provider: pawapayProvider,
+        payoutId,
+        status
+      }
+    });
+    return res.status(201).json({ withdrawal: inserted.rows[0], pawapay, cashbox: await getCashboxSummary(ispId) });
   }
 );
 
@@ -1206,42 +1726,11 @@ app.post(
   "/api/platform/billing/upgrade-plan",
   authenticate,
   requireRoles("super_admin", "company_manager", "isp_admin"),
-  async (req, res) => {
-    const ispId = resolveIspId(req, res);
-    if (!ispId) return;
-    const { packageId } = req.body;
-    if (!packageId) return res.status(400).json({ message: "packageId is required" });
-    const allowed = await query("SELECT id FROM platform_packages WHERE id = $1 AND code = ANY($2::text[])", [
-      packageId,
-      SAAS_PLAN_CODES
-    ]);
-    if (!allowed.rows[0]) return res.status(400).json({ message: "Invalid package for self-serve plans" });
-    const updated = await query(
-      `UPDATE isp_platform_subscriptions s
-       SET package_id = $1
-       WHERE s.id = (
-         SELECT id FROM isp_platform_subscriptions WHERE isp_id = $2 ORDER BY ends_at DESC, created_at DESC LIMIT 1
-       )
-       AND s.isp_id = $2
-       AND s.status = 'trialing'
-       RETURNING s.id, s.package_id AS "packageId", s.status`,
-      [packageId, ispId]
-    );
-    if (!updated.rows[0]) {
-      return res.status(400).json({
-        message: "Plan can only be changed while you are still on the free trial. After paying, contact support to change tiers."
-      });
-    }
-    await logAudit({
-      ispId,
-      actorUserId: req.user.sub,
-      action: "platform.billing.plan_changed_trial",
-      entityType: "platform_subscription",
-      entityId: updated.rows[0].id,
-      details: { packageId }
-    });
-    return res.json(updated.rows[0]);
-  }
+  async (_req, res) =>
+    res.status(410).json({
+      message:
+        "Plan changes must be paid through Mobile Money. Call /api/platform/billing/initiate-deposit with packageId."
+    })
 );
 
 app.get("/api/payment-methods", authenticate, async (req, res) => {
@@ -1269,6 +1758,13 @@ app.post(
     if (!PAYMENT_METHOD_TYPES.has(normalizedMethodType)) {
       return res.status(400).json({
         message: `Unsupported methodType. Allowed: ${Array.from(PAYMENT_METHOD_TYPES).join(", ")}`
+      });
+    }
+    const limits = await getPlatformFeatureLimits(ispId);
+    const customGatewayTypes = new Set(["pawapay", "onafriq", "paypal", "binance_pay", "crypto_wallet", "gateway"]);
+    if (customGatewayTypes.has(normalizedMethodType) && !limits?.customPaymentGateway) {
+      return res.status(403).json({
+        message: "Votre formule actuelle utilise le compte Pawapay McBuleli. Passez à Pro ou Premium pour ajouter votre propre agrégateur."
       });
     }
     const inserted = await query(
@@ -2080,7 +2576,7 @@ app.post(
   const targetIspId = resolveIspId(req, res);
   if (!targetIspId) return;
 
-  const { fullName, email, password, role, accreditationLevel = "basic" } = req.body;
+  const { fullName, email, password, role, accreditationLevel = "basic", phone, address, assignedSite } = req.body;
   if (!fullName || !email || !password || !role) {
     return res.status(400).json({ message: "fullName, email, password and role are required" });
   }
@@ -2118,8 +2614,23 @@ app.post(
     }
   }
   const inserted = await query(
-    "INSERT INTO users (id, isp_id, full_name, email, password_hash, role, accreditation_level, is_active, must_change_password) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, TRUE, TRUE) RETURNING id, isp_id AS \"ispId\", full_name AS \"fullName\", email, role, accreditation_level AS \"accreditationLevel\", is_active AS \"isActive\", must_change_password AS \"mustChangePassword\", created_at AS \"createdAt\"",
-    [targetIspId, fullName, email.toLowerCase(), hash, role, accreditationLevel]
+    `INSERT INTO users
+     (id, isp_id, full_name, email, password_hash, role, accreditation_level, phone, address, assigned_site, is_active, must_change_password)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, TRUE)
+     RETURNING id, isp_id AS "ispId", full_name AS "fullName", email, role,
+               accreditation_level AS "accreditationLevel", phone, address, assigned_site AS "assignedSite",
+               is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"`,
+    [
+      targetIspId,
+      fullName,
+      email.toLowerCase(),
+      hash,
+      role,
+      accreditationLevel,
+      phone || null,
+      address || null,
+      assignedSite || null
+    ]
   );
   await logAudit({
     ispId: targetIspId,
@@ -3257,49 +3768,81 @@ app.get("/api/network/stats", authenticate, async (req, res) => {
     "SELECT COALESCE(SUM(amount_usd),0)::float AS \"revenueCollectedUsd\" FROM payments WHERE isp_id = $1 AND status = 'confirmed' AND paid_at::date BETWEEN $2::date AND $3::date",
     [ispId, from, to]
   );
+  const cashbox = await getCashboxSummary(ispId, from, to);
   return res.json({
     period: { from, to },
     hotspotUsers: usage.rows[0].hotspotUsers,
     pppoeUsers: usage.rows[0].pppoeUsers,
     connectedDevices: usage.rows[0].connectedDevices,
     bandwidthTotalGb: usage.rows[0].bandwidthTotalGb,
-    revenueCollectedUsd: revenue.rows[0].revenueCollectedUsd
+    revenueCollectedUsd: revenue.rows[0].revenueCollectedUsd,
+    cashbox
   });
 });
 
 app.get("/api/dashboard", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
-  const [customers, active, unpaid, revenue] = await Promise.all([
+  const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const to = new Date().toISOString().slice(0, 10);
+  const [customers, active, unpaid, revenue, cashbox] = await Promise.all([
     query("SELECT COUNT(*)::int AS value FROM customers WHERE isp_id = $1", [ispId]),
     query("SELECT COUNT(*)::int AS value FROM subscriptions WHERE isp_id = $1 AND status = 'active'", [ispId]),
     query(
       "SELECT COUNT(*)::int AS value FROM invoices WHERE isp_id = $1 AND status IN ('unpaid', 'overdue')",
       [ispId]
     ),
-    query("SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE isp_id = $1 AND status = 'paid'", [ispId])
+    query("SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE isp_id = $1 AND status = 'paid'", [ispId]),
+    getCashboxSummary(ispId, from, to)
   ]);
   res.json({
     totalCustomers: customers.rows[0].value,
     activeSubscriptions: active.rows[0].value,
     unpaidInvoices: unpaid.rows[0].value,
     revenueUsd: revenue.rows[0].value,
-    networkSessions: 0
+    networkSessions: 0,
+    cashboxPeriod: { from, to },
+    cashbox
   });
 });
 
-app.get("/api/super/dashboard", authenticate, requireRoles("super_admin"), async (_req, res) => {
-  const [isps, customers, active, revenue] = await Promise.all([
+app.get("/api/super/dashboard", authenticate, requireRoles("system_owner", "super_admin"), async (_req, res) => {
+  const [isps, customers, active, revenue, tenants] = await Promise.all([
     query("SELECT COUNT(*)::int AS value FROM isps"),
     query("SELECT COUNT(*)::int AS value FROM customers"),
     query("SELECT COUNT(*)::int AS value FROM subscriptions WHERE status = 'active'"),
-    query("SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE status = 'paid'")
+    query("SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE status = 'paid'"),
+    query(
+      `SELECT i.id, i.name, i.location, i.contact_phone AS "contactPhone", i.is_demo AS "isDemo",
+              i.created_at AS "createdAt", ps.status AS "subscriptionStatus", ps.ends_at AS "subscriptionEndsAt",
+              pp.name AS "packageName",
+              COALESCE(
+                json_agg(
+                  json_build_object('id', u.id, 'fullName', u.full_name, 'email', u.email, 'role', u.role)
+                ) FILTER (WHERE u.id IS NOT NULL),
+                '[]'::json
+              ) AS "adminUsers"
+       FROM isps i
+       LEFT JOIN LATERAL (
+         SELECT s.package_id, s.status, s.ends_at
+         FROM isp_platform_subscriptions s
+         WHERE s.isp_id = i.id
+         ORDER BY s.ends_at DESC, s.created_at DESC
+         LIMIT 1
+       ) ps ON TRUE
+       LEFT JOIN platform_packages pp ON pp.id = ps.package_id
+       LEFT JOIN users u ON u.isp_id = i.id AND u.role IN ('company_manager', 'isp_admin')
+       GROUP BY i.id, ps.status, ps.ends_at, pp.name
+       ORDER BY i.created_at DESC
+       LIMIT 100`
+    )
   ]);
   res.json({
     totalIsps: isps.rows[0].value,
     totalCustomers: customers.rows[0].value,
     totalActiveSubscriptions: active.rows[0].value,
-    totalRevenueUsd: revenue.rows[0].value
+    totalRevenueUsd: revenue.rows[0].value,
+    tenants: tenants.rows
   });
 });
 

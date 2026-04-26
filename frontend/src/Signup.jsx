@@ -73,9 +73,14 @@ export default function Signup() {
             <div className="login-poster-logo">McBuleli</div>
           <p className="login-poster-lead">
               {isEn
-                ? "Launch your operator workspace in minutes: 7-day free trial, then monthly billing via Mobile Money. McBuleli centralizes billing, payments, and operations for your ISP."
-                : "Ouvrez votre espace opérateur en quelques minutes : essai gratuit 7 jours, puis abonnement mensuel en francs congolais ou dollars via Mobile Money. McBuleli centralise la facturation, les paiements et le suivi pour votre FAI."}
+                ? "Launch your operator workspace in minutes: 1-month free trial, then monthly billing via Mobile Money. McBuleli centralizes billing, payments, and operations for your ISP."
+                : "Ouvrez votre espace opérateur en quelques minutes : essai gratuit 1 mois, puis abonnement mensuel en francs congolais ou dollars via Mobile Money. McBuleli centralise la facturation, les paiements et le suivi pour votre FAI."}
           </p>
+          <ul className="login-poster-list">
+            <li>{isEn ? "Professional company workspace" : "Interface entreprise professionnelle"}</li>
+            <li>{isEn ? "Customer portal, Wi-Fi passes and invoices" : "Portail client, pass Wi-Fi et factures"}</li>
+            <li>{isEn ? "MikroTik, agents and payment tracking" : "MikroTik, agents et suivi des paiements"}</li>
+          </ul>
         </section>
         <div className="login-stack">
           <header className="app-header app-header--login">
@@ -83,8 +88,8 @@ export default function Signup() {
                 <h1>{isEn ? "Create your McBuleli workspace" : "Créer votre espace McBuleli"}</h1>
               <p className="app-meta">
                   {isEn
-                    ? "Plans: Essential ($10/mo), Pro ($15), Business ($20). Monthly billing through Mobile Money."
-                    : "Formules Essential (10 $/mois), Pro (15 $) ou Business (20 $). Paiement mensuel ensuite via Mobile Money."}
+                    ? "Plans: Essential ($10/month) or Pro ($15/month). Premium is customized by contract."
+                    : "Formules Essential (10 $/mois) ou Pro (15 $/mois). Premium est personnalisé sur contrat."}
               </p>
             </div>
               <div style={{ marginTop: 10 }}>
@@ -155,8 +160,8 @@ export default function Signup() {
             <p>
               <small>
                   {isEn
-                    ? "Essential: small teams. Pro: advanced analytics and more users. Business: custom domain and higher limits. You can switch during trial."
-                    : "Essential : petites équipes et un routeur. Pro : analyses et plus d'utilisateurs. Business : domaine personnalisé et plafonds plus élevés. Vous pouvez changer pendant l'essai depuis le tableau de bord."}
+                    ? "Essential: 10 routers, field agents, roles, customers and finance with McBuleli Pawapay. Pro adds custom domain, own gateway, higher router limits and richer analytics."
+                    : "Essential : 10 routeurs, agents terrain, rôles, clients et finances via Pawapay McBuleli. Pro ajoute domaine personnalisé, agrégateur propre, plus de routeurs et analyses avancées."}
               </small>
             </p>
               <button type="submit" disabled={!packages.length}>

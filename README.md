@@ -24,8 +24,8 @@ Multi-tenant ISP billing and operations: many ISPs, one platform (DRC-ready work
   - renewal invoices: create next invoice before subscription end, queue **SMS or email** (if `customers.email` is set and an active **email** provider is configured) plus internal fallback, extend period on payment
   - subscription suspend/reactivate with network sync hooks
   - manager-defined accreditation role profiles
-  - platform SaaS packages and tenant subscriptions: **Essential ($10/mo), Pro ($15/mo), Business ($20/mo)** with different `feature_flags` (max users, network nodes, analytics, custom domain)
-  - **Self-serve tenant signup** (`POST /api/public/signup`) with **7-day trial** (`PLATFORM_TRIAL_DAYS`), then **Pawapay deposits** in **USD or CDF** (`POST /api/platform/billing/initiate-deposit`; `PLATFORM_USD_TO_CDF` for CDF amount estimate). **Unified Pawapay callback:** `POST /api/webhooks/pawapay` handles **deposits, payouts (withdrawals), and refunds** (same URL in the Pawapay dashboard for all). Optional secret: header `X-Pawapay-Callback-Secret` = `PAWAPAY_CALLBACK_SECRET` (or legacy `PAWAPAY_PLATFORM_CALLBACK_SECRET`). **`GET /api/webhooks/pawapay`** returns JSON instructions and example bodies for your test dashboard. `POST /api/webhooks/pawapay-platform` is an alias. Expired workspaces get **HTTP 402** until a matching deposit completes.
+  - platform SaaS packages and tenant subscriptions: **Essential ($10/mo)** and **Pro ($15/mo)** are active self-serve plans; **Premium personnalisé** is a custom contract for high-volume ISPs
+  - **Self-serve tenant signup** (`POST /api/public/signup`) with **1-month trial** (`PLATFORM_TRIAL_DAYS=30`), then **Pawapay deposits** in **USD or CDF** (`POST /api/platform/billing/initiate-deposit`; `PLATFORM_USD_TO_CDF` for CDF amount estimate). **Unified Pawapay callback:** `POST /api/webhooks/pawapay` handles **deposits, payouts (withdrawals), and refunds** (same URL in the Pawapay dashboard for all). Optional secret: header `X-Pawapay-Callback-Secret` = `PAWAPAY_CALLBACK_SECRET` (or legacy `PAWAPAY_PLATFORM_CALLBACK_SECRET`). **`GET /api/webhooks/pawapay`** returns JSON instructions and example bodies for your test dashboard. `POST /api/webhooks/pawapay-platform` is an alias. Expired workspaces get **HTTP 402** until a matching deposit completes.
   - customers (optional **email** for renewal notices), plans, subscriptions, invoices, payments
   - **Network telemetry**: `POST /api/network/nodes/:nodeId/collect-telemetry` pulls active PPPoE / Hotspot session counts from MikroTik, stores snapshots, and merges peaks into `network_usage_daily` for dashboard stats
   - super-admin global dashboard + per-ISP dashboard
@@ -77,6 +77,44 @@ npm run dev
 ```
 
 Web app: `http://localhost:5173`
+
+## Deploy to Vercel + Render
+
+The hosted setup is:
+
+- Frontend: Vercel project `mcbuleli-front.vercel.app`
+- Public app domain: `https://app.mcbuleli.live`
+- Backend: Render web service URL `https://mcbuleli-isp.onrender.com`
+
+### Frontend environment variables on Vercel
+
+Set these in the Vercel project, then redeploy:
+
+```bash
+VITE_API_URL=https://mcbuleli-isp.onrender.com/api
+VITE_PUBLIC_API_ORIGIN=https://mcbuleli-isp.onrender.com
+```
+
+`VITE_API_URL` must include `/api`; `VITE_PUBLIC_API_ORIGIN` is the same Render origin without `/api`.
+
+### Backend environment variables on Render
+
+Use `backend/.env.render.example` as the checklist. At minimum set:
+
+```bash
+NODE_ENV=production
+TRUST_PROXY=true
+DATABASE_URL=<Render PostgreSQL external or internal database URL>
+JWT_SECRET=<strong random secret>
+NETWORK_NODE_SECRET_KEY=<unique 32+ character random secret>
+PLATFORM_PUBLIC_BASE_URL=https://app.mcbuleli.live
+PUBLIC_API_BASE_URL=https://mcbuleli-isp.onrender.com
+CORS_ORIGINS=https://app.mcbuleli.live,https://mcbuleli-front.vercel.app
+```
+
+Pawapay callback URL: `https://mcbuleli-isp.onrender.com/api/webhooks/pawapay`.
+
+Use Render build command `npm install` and start command `npm start` from the `backend` directory.
 
 ## White-label subdomains/custom domains
 

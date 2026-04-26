@@ -143,20 +143,29 @@ export default function WifiPortal() {
 
   return (
     <main className="container">
-      <section className="login-poster" style={{ marginBottom: 20 }} aria-label="Présentation">
-        <div className="login-poster-logo">McBuleli</div>
-        <p className="login-poster-lead" style={{ margin: 0 }}>
-          Achetez un pass Wi‑Fi en Mobile Money, sans compte : choisissez une offre, payez sur votre téléphone, puis
-          suivez les instructions de votre opérateur.
-        </p>
+      <section className="wifi-hero" aria-label="Présentation Wi-Fi">
+        <div>
+          <p className="eyebrow">Wi‑Fi public McBuleli</p>
+          <h1>Achetez un pass internet en quelques secondes.</h1>
+          <p className="wifi-lead">
+            Choisissez une offre, payez par Mobile Money, puis profitez de l'accès Hotspot ou PPPoE de votre opérateur.
+          </p>
+        </div>
+        <div className="demo-board">
+          <div className="demo-board-row"><span>📶</span><b>Choisir l'offre</b></div>
+          <div className="demo-board-row"><span>💳</span><b>Valider Mobile Money</b></div>
+          <div className="demo-board-row"><span>⚡</span><b>Accès activé</b></div>
+        </div>
       </section>
-      <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+      <header className="app-header" style={{ alignItems: "center" }}>
         {branding?.logoUrl ? (
           <img src={publicAssetUrl(branding.logoUrl)} alt="" style={{ height: 40 }} />
         ) : null}
-        <h1 style={{ margin: 0 }}>{wifiDisplayName(branding?.displayName)}</h1>
+        <div>
+          <h1 style={{ margin: 0 }}>{wifiDisplayName(branding?.displayName)}</h1>
+          <p className="app-meta">Catalogue Wi‑Fi invité, paiement Mobile Money et redirection automatique.</p>
+        </div>
       </header>
-      <p>Choisissez une formule et payez par Mobile Money — aucun compte n'est requis.</p>
 
       {!activeIspId && (
         <form className="panel" onSubmit={onOpenCatalog}>
@@ -215,7 +224,7 @@ export default function WifiPortal() {
           <button
             key={plan.id}
             type="button"
-            className="panel"
+            className="panel pricing-card"
             style={{ textAlign: "left", cursor: "pointer" }}
             onClick={() => {
               setSelectedPlan(plan);

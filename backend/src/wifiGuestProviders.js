@@ -3,10 +3,12 @@
  * Confirm values against https://docs.pawapay.io/v2/docs/providers or your sandbox active configuration.
  */
 export const WIFI_GUEST_NETWORK_OPTIONS = [
-  { key: "orange", label: "Orange Money", pawapayProvider: "ORANGE_MOMO_COD" },
-  { key: "airtel", label: "Airtel Money", pawapayProvider: "AIRTEL_MOMO_COD" },
-  { key: "mpesa", label: "M-Pesa (Vodacom)", pawapayProvider: "VODACOM_MOMO_COD" }
+  { key: "orange", label: "Orange Money", pawapayProvider: "ORANGE_COD" },
+  { key: "airtel", label: "Airtel Money", pawapayProvider: "AIRTEL_COD" },
+  { key: "mpesa", label: "M-Pesa (Vodacom)", pawapayProvider: "VODACOM_MPESA_COD" }
 ];
+
+export const PAWAPAY_NETWORK_OPTIONS = WIFI_GUEST_NETWORK_OPTIONS;
 
 export function resolveWifiGuestPawapayProvider(networkKey) {
   const k = String(networkKey || "").toLowerCase();

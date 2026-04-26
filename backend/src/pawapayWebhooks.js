@@ -83,8 +83,24 @@ export async function processPawapayCallback(body) {
   }
 
   if (kind === "payout") {
+    const payoutId = String(body.payoutId);
+    if (status === "COMPLETED") {
+      await query(
+        `UPDATE isp_withdrawal_requests
+         SET status = 'completed', completed_at = NOW(), failure_message = NULL
+         WHERE payout_id = $1::uuid AND status = 'processing'`,
+        [payoutId]
+      );
+    } else if (status === "FAILED") {
+      await query(
+        `UPDATE isp_withdrawal_requests
+         SET status = 'failed', completed_at = NOW(), failure_message = $2
+         WHERE payout_id = $1::uuid`,
+        [payoutId, body?.failureReason?.failureMessage || body?.message || "Pawapay payout failed"]
+      );
+    }
     await logPawapayCallback({ action: "pawapay.callback.payout", pawapayId: body.payoutId, body });
-    return { kind, status, acknowledged: true, note: "Payout logged; extend with wallet / ISP payout reconciliation when needed." };
+    return { kind, status, acknowledged: true, note: "Payout logged and withdrawal status reconciled when payoutId matches." };
   }
 
   if (kind === "refund") {
@@ -127,7 +143,8 @@ export function getPawapayCallbackDocumentation() {
     behavior: {
       deposit:
         "COMPLETED extends McBuleli workspace billing when depositId matches platform_saas_deposit_sessions; FAILED marks session failed.",
-      payoutAndRefund: "Recorded in audit_logs for now; add business logic (wallet ledger, ISP payouts) in one place later."
+      payoutAndRefund:
+        "Payout callbacks reconcile isp_withdrawal_requests when payoutId matches; refunds are recorded in audit_logs."
     }
   };
 }

@@ -26,6 +26,7 @@ export async function initDb() {
     );
   `);
   await query("ALTER TABLE isps ADD COLUMN IF NOT EXISTS subdomain TEXT UNIQUE;");
+  await query("ALTER TABLE isps ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE;");
 
   await query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -44,6 +45,8 @@ export async function initDb() {
     ADD CONSTRAINT users_role_check
     CHECK (
       role IN (
+        'system_owner',
+        'system_owner',
         'super_admin',
         'company_manager',
         'isp_admin',
@@ -58,6 +61,27 @@ export async function initDb() {
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;"
   );
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS accreditation_level TEXT NOT NULL DEFAULT 'basic';");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_totp_secret TEXT NULL;");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_totp_enabled BOOLEAN NOT NULL DEFAULT FALSE;");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NULL;");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT NULL;");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_site TEXT NULL;");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS seeded_account_key TEXT UNIQUE NULL;");
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS user_mfa_challenges (
+      id UUID PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      purpose TEXT NOT NULL CHECK (purpose IN ('login', 'withdrawal')),
+      code_hash TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'expired')),
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      expires_at TIMESTAMP NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      verified_at TIMESTAMP NULL
+    );
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_user_mfa_challenges_user ON user_mfa_challenges (user_id, purpose, status, expires_at DESC);");
 
   await query(`
     CREATE TABLE IF NOT EXISTS invite_tokens (
@@ -159,17 +183,6 @@ export async function initDb() {
   await query(
     "ALTER TABLE wifi_guest_purchases ADD COLUMN IF NOT EXISTS subscriber_setup_token TEXT NULL;"
   );
-  await query(`
-    DO $wgp$ BEGIN
-      ALTER TABLE wifi_guest_purchases DROP CONSTRAINT IF EXISTS wifi_guest_purchases_status_check;
-    EXCEPTION WHEN undefined_object THEN NULL;
-    END $wgp$;
-  `);
-  await query(`
-    ALTER TABLE wifi_guest_purchases
-    ADD CONSTRAINT wifi_guest_purchases_status_check
-    CHECK (status IN ('pending', 'completed', 'failed'))
-  `);
 
   await query(`
     CREATE TABLE IF NOT EXISTS invoices (
@@ -193,6 +206,38 @@ export async function initDb() {
     ALTER TABLE invoices
     ADD CONSTRAINT invoices_status_check
     CHECK (status IN ('unpaid', 'overdue', 'paid'))
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS portal_invoice_payment_sessions (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+      subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+      deposit_id UUID NOT NULL UNIQUE,
+      phone TEXT NOT NULL,
+      pawapay_provider TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      amount TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMP NULL
+    );
+  `);
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_portal_invoice_payments_isp ON portal_invoice_payment_sessions (isp_id, created_at DESC);"
+  );
+  await query(`
+    DO $wgp$ BEGIN
+      ALTER TABLE wifi_guest_purchases DROP CONSTRAINT IF EXISTS wifi_guest_purchases_status_check;
+    EXCEPTION WHEN undefined_object THEN NULL;
+    END $wgp$;
+  `);
+  await query(`
+    ALTER TABLE wifi_guest_purchases
+    ADD CONSTRAINT wifi_guest_purchases_status_check
+    CHECK (status IN ('pending', 'completed', 'failed'))
   `);
 
   await query(`
@@ -315,7 +360,31 @@ export async function initDb() {
       completed_at TIMESTAMP NULL
     );
   `);
+  await query(
+    "ALTER TABLE platform_saas_deposit_sessions ADD COLUMN IF NOT EXISTS target_package_id UUID NULL REFERENCES platform_packages(id) ON DELETE SET NULL;"
+  );
   await query("CREATE INDEX IF NOT EXISTS idx_platform_saas_deposits_isp ON platform_saas_deposit_sessions (isp_id);");
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS isp_withdrawal_requests (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      amount_usd NUMERIC(12,2) NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      phone_number TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'requested' CHECK (status IN ('requested', 'processing', 'completed', 'failed')),
+      payout_id UUID NULL UNIQUE,
+      pawapay_init_status TEXT NULL,
+      mobile_money_basis_usd NUMERIC(12,2) NOT NULL DEFAULT 0,
+      failure_message TEXT NULL,
+      requested_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      mfa_challenge_id UUID NULL REFERENCES user_mfa_challenges(id) ON DELETE SET NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMP NULL
+    );
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_isp_withdrawals_isp ON isp_withdrawal_requests (isp_id, created_at DESC);");
 
   await query(`
     CREATE TABLE IF NOT EXISTS isp_role_profiles (
@@ -657,23 +726,55 @@ export async function initDb() {
     ON CONFLICT (isp_id, channel) DO NOTHING;
   `);
 
+  const ownerEmail = process.env.SYSTEM_OWNER_EMAIL || "owner@mcbuleli.live";
+  const ownerPassword = process.env.SYSTEM_OWNER_INITIAL_PASSWORD || "owner12345";
+  const ownerHash = await bcrypt.hash(ownerPassword, 10);
+  await query(
+    `INSERT INTO users (id, isp_id, full_name, email, password_hash, role, is_active, must_change_password)
+     VALUES (gen_random_uuid(), NULL, $1, $2, $3, 'system_owner', TRUE, TRUE)
+     ON CONFLICT (email) DO UPDATE SET role = 'system_owner', isp_id = NULL, is_active = TRUE`,
+    ["Créateur système", ownerEmail.toLowerCase(), ownerHash]
+  );
+
   const adminCount = await query("SELECT COUNT(*)::int AS count FROM users WHERE role = 'super_admin'");
   if (adminCount.rows[0].count === 0) {
     const hash = await bcrypt.hash("admin123", 10);
     await query(
-      "INSERT INTO users (id, isp_id, full_name, email, password_hash, role, is_active, must_change_password) VALUES (gen_random_uuid(), NULL, $1, $2, $3, 'super_admin', TRUE, FALSE)",
+      "INSERT INTO users (id, isp_id, full_name, email, password_hash, role, is_active, must_change_password) VALUES (gen_random_uuid(), NULL, $1, $2, $3, 'super_admin', TRUE, TRUE)",
       ["Platform Admin", "admin@isp.local", hash]
     );
   }
 
+  const demoIspId = "00000000-0000-4000-8000-000000000123";
+  await query(
+    `INSERT INTO isps (id, name, location, contact_phone, subdomain, is_demo)
+     VALUES ($1, 'McBuleli Demo ISP', 'Demo', '+243000000000', 'demo.mcbuleli.local', TRUE)
+     ON CONFLICT (id) DO UPDATE SET is_demo = TRUE`,
+    [demoIspId]
+  );
+  await query(
+    `INSERT INTO isp_branding (id, isp_id, display_name, contact_phone)
+     VALUES (gen_random_uuid(), $1, 'McBuleli Demo', '+243000000000')
+     ON CONFLICT (isp_id) DO UPDATE SET display_name = EXCLUDED.display_name`,
+    [demoIspId]
+  );
+  const demoPassword = process.env.DEMO_ACCOUNT_INITIAL_PASSWORD || "demo12345";
+  const demoHash = await bcrypt.hash(demoPassword, 10);
+  await query(
+    `INSERT INTO users (id, isp_id, full_name, email, password_hash, role, is_active, must_change_password)
+     VALUES (gen_random_uuid(), $1, 'Compte Démo McBuleli', 'demo@mcbuleli.live', $2, 'isp_admin', TRUE, FALSE)
+     ON CONFLICT (email) DO UPDATE SET isp_id = $1, role = 'isp_admin', is_active = TRUE`,
+    [demoIspId, demoHash]
+  );
+
   await query(`
     INSERT INTO platform_packages (id, code, name, monthly_price_usd, feature_flags) VALUES
       (gen_random_uuid(), 'essential', 'Essential', 10,
-        '{"maxUsers":5,"maxNetworkNodes":3,"advancedAnalytics":false,"customDomain":false}'::jsonb),
+        '{"maxUsers":25,"maxNetworkNodes":10,"advancedAnalytics":false,"customDomain":false,"customPaymentGateway":false,"fieldAgents":true,"roleProfiles":true,"expenseTracking":true,"customerPortal":true,"pawapayPlatformGateway":true}'::jsonb),
       (gen_random_uuid(), 'pro', 'Pro', 15,
-        '{"maxUsers":20,"maxNetworkNodes":3,"advancedAnalytics":true,"customDomain":false}'::jsonb),
-      (gen_random_uuid(), 'business', 'Business', 20,
-        '{"maxUsers":80,"maxNetworkNodes":10,"advancedAnalytics":true,"customDomain":true}'::jsonb)
+        '{"maxUsers":75,"maxNetworkNodes":50,"advancedAnalytics":true,"customDomain":true,"customPaymentGateway":true,"fieldAgents":true,"roleProfiles":true,"expenseTracking":true,"customerPortal":true,"pawapayPlatformGateway":true,"prioritySupport":true,"multiSiteAnalytics":true}'::jsonb),
+      (gen_random_uuid(), 'premium_custom', 'Premium personnalisé', 0,
+        '{"maxUsers":null,"maxNetworkNodes":null,"advancedAnalytics":true,"customDomain":true,"customPaymentGateway":true,"fieldAgents":true,"roleProfiles":true,"expenseTracking":true,"customerPortal":true,"pawapayPlatformGateway":true,"prioritySupport":true,"multiSiteAnalytics":true,"customContract":true}'::jsonb)
     ON CONFLICT (code) DO UPDATE SET
       name = EXCLUDED.name,
       monthly_price_usd = EXCLUDED.monthly_price_usd,
@@ -681,7 +782,7 @@ export async function initDb() {
   `);
   await query(`
     DELETE FROM platform_packages pp
-    WHERE pp.code IN ('starter', 'growth', 'enterprise')
+    WHERE pp.code IN ('starter', 'growth', 'enterprise', 'business')
       AND NOT EXISTS (SELECT 1 FROM isp_platform_subscriptions s WHERE s.package_id = pp.id)
   `);
 }
