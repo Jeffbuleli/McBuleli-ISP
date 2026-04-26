@@ -1,6 +1,6 @@
 const STR = {
   fr: {
-    eyebrow: "Wi‑Fi invité McBuleli",
+    eyebrow: "Wi‑Fi invité",
     heroTitle: "Achetez un pass internet en quelques secondes.",
     heroLead:
       "Choisissez une offre, payez par Mobile Money, puis profitez de l'accès Hotspot ou PPPoE de votre opérateur.",
@@ -37,10 +37,15 @@ const STR = {
     noticePostPay:
       "Paiement confirmé. Copiez le jeton ci-dessous, ouvrez le portail client de votre opérateur et définissez un mot de passe avant de quitter cette page.",
     errPayFailed: "Paiement refusé ou annulé. Vous pouvez réessayer.",
-    errPayStart: "Impossible de démarrer le paiement."
+    errPayStart: "Impossible de démarrer le paiement.",
+    contactTitle: "Contacter votre opérateur",
+    contactPhone: "Téléphone",
+    contactEmail: "E-mail",
+    contactAddress: "Adresse",
+    mcbuleliFooter: "Propulsé par McBuleli — plateforme de gestion pour opérateurs et FAI."
   },
   en: {
-    eyebrow: "McBuleli guest Wi‑Fi",
+    eyebrow: "Guest Wi‑Fi",
     heroTitle: "Buy an internet pass in seconds.",
     heroLead:
       "Pick a plan, pay with Mobile Money, then enjoy Hotspot or PPPoE access from your provider.",
@@ -77,7 +82,12 @@ const STR = {
     noticePostPay:
       "Payment confirmed. Copy the token below, open your provider's customer portal and set a password before leaving this page.",
     errPayFailed: "Payment declined or cancelled. You can try again.",
-    errPayStart: "Could not start payment."
+    errPayStart: "Could not start payment.",
+    contactTitle: "Contact your provider",
+    contactPhone: "Phone",
+    contactEmail: "Email",
+    contactAddress: "Address",
+    mcbuleliFooter: "Powered by McBuleli — operations platform for ISPs and providers."
   }
 };
 

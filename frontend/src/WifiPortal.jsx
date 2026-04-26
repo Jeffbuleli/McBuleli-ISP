@@ -11,8 +11,23 @@ function getStoredUiLang() {
 
 function wifiDisplayName(name, lang) {
   const s = name != null ? String(name).trim() : "";
-  if (!s || s === "AA") return lang === "en" ? "McBuleli — guest Wi‑Fi" : "McBuleli — Wi‑Fi invité";
+  if (!s || s === "AA") return lang === "en" ? "Guest Wi‑Fi catalog" : "Catalogue Wi‑Fi invité";
   return s;
+}
+
+function wifiEyebrowText(branding, lang, t) {
+  const base = t("eyebrow");
+  const n = branding?.displayName != null ? String(branding.displayName).trim() : "";
+  if (n && n !== "AA") return `${base} — ${n}`;
+  return base;
+}
+
+function hasIspContact(b) {
+  if (!b) return false;
+  const phone = b.contactPhone != null ? String(b.contactPhone).trim() : "";
+  const email = b.contactEmail != null ? String(b.contactEmail).trim() : "";
+  const addr = b.address != null ? String(b.address).trim() : "";
+  return Boolean(phone || email || addr);
 }
 
 export default function WifiPortal() {
@@ -160,12 +175,36 @@ export default function WifiPortal() {
       <section className="wifi-hero" aria-label={uiLang === "en" ? "Wi‑Fi guest overview" : "Présentation Wi‑Fi"}>
         <div className="wifi-hero-top">
           <div>
-            <p className="eyebrow">{t("eyebrow")}</p>
+            <p className="eyebrow">{wifiEyebrowText(branding, uiLang, t)}</p>
             <h1>{t("heroTitle")}</h1>
             <p className="wifi-lead">{t("heroLead")}</p>
           </div>
           <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="wifi" />
         </div>
+        {activeIspId && hasIspContact(branding) ? (
+          <aside className="wifi-isp-contact" aria-label={t("contactTitle")}>
+            <p className="wifi-isp-contact__title">{t("contactTitle")}</p>
+            <ul className="wifi-isp-contact__list">
+              {branding.contactPhone ? (
+                <li>
+                  <span className="wifi-isp-contact__label">{t("contactPhone")}</span>{" "}
+                  <a href={`tel:${String(branding.contactPhone).replace(/\s+/g, "")}`}>{branding.contactPhone}</a>
+                </li>
+              ) : null}
+              {branding.contactEmail ? (
+                <li>
+                  <span className="wifi-isp-contact__label">{t("contactEmail")}</span>{" "}
+                  <a href={`mailto:${branding.contactEmail}`}>{branding.contactEmail}</a>
+                </li>
+              ) : null}
+              {branding.address ? (
+                <li>
+                  <span className="wifi-isp-contact__label">{t("contactAddress")}</span> {branding.address}
+                </li>
+              ) : null}
+            </ul>
+          </aside>
+        ) : null}
         <div className="demo-board">
           <div className="demo-board-row">
             <span className="wifi-step-icon" aria-hidden="true">
@@ -338,6 +377,10 @@ export default function WifiPortal() {
           ) : null}
         </div>
       )}
+      <footer className="mcbuleli-site-footer">
+        <img src="/mcbuleli-logo.svg" alt="" width={28} height={28} className="mcbuleli-site-footer__logo" />
+        <p>{t("mcbuleliFooter")}</p>
+      </footer>
     </main>
   );
 }

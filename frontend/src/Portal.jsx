@@ -36,6 +36,20 @@ function formatPortalClientRef(customerId, prefix) {
   return `${p}${core}`;
 }
 
+function hasPortalIspContact(b) {
+  if (!b) return false;
+  const phone = b.contactPhone != null ? String(b.contactPhone).trim() : "";
+  const email = b.contactEmail != null ? String(b.contactEmail).trim() : "";
+  const addr = b.address != null ? String(b.address).trim() : "";
+  return Boolean(phone || email || addr);
+}
+
+function portalBrandInitial(displayName) {
+  const s = displayName != null ? String(displayName).trim() : "";
+  if (!s || s === "AA") return "?";
+  return s.charAt(0).toUpperCase();
+}
+
 async function portalFetch(path, auth, options = {}) {
   const headers = {
     "Content-Type": "application/json",
@@ -142,9 +156,9 @@ export default function Portal() {
     setError("");
     setNotice("");
     try {
-      const t = tokenInput.trim();
+      const trimmedToken = tokenInput.trim();
       localStorage.removeItem(SUBSCRIBER_JWT_KEY);
-      const next = t.length >= 16 ? { type: "opaque", token: t } : null;
+      const next = trimmedToken.length >= 16 ? { type: "opaque", token: trimmedToken } : null;
       setAuth(next);
       if (!next) {
         setSession(null);
@@ -294,9 +308,22 @@ export default function Portal() {
         >
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {brand?.logoUrl ? (
-              <img src={publicAssetUrl(brand.logoUrl)} alt="" style={{ height: 48 }} />
+              <img
+                className="portal-hero-logo"
+                src={publicAssetUrl(brand.logoUrl)}
+                alt=""
+                height={48}
+                width={48}
+                style={{ height: 48, width: "auto", objectFit: "contain" }}
+              />
             ) : (
-              <img className="dashboard-logo" src="/mcbuleli-logo.svg" alt="" />
+              <div
+                className="portal-brand-fallback"
+                style={{ color: brand?.primaryColor || "#5d4037" }}
+                aria-hidden="true"
+              >
+                {portalBrandInitial(brand?.displayName)}
+              </div>
             )}
             <div>
               <p className="eyebrow">{t("eyebrow")}</p>
@@ -308,6 +335,30 @@ export default function Portal() {
           <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="portal" />
         </div>
         <p>{t("heroLead")}</p>
+        {session && brand && hasPortalIspContact(brand) ? (
+          <aside className="portal-isp-contact" aria-label={t("contactTitle")}>
+            <p className="portal-isp-contact__title">{t("contactTitle")}</p>
+            <ul className="portal-isp-contact__list">
+              {brand.contactPhone ? (
+                <li>
+                  <span className="portal-isp-contact__label">{t("contactPhone")}</span>{" "}
+                  <a href={`tel:${String(brand.contactPhone).replace(/\s+/g, "")}`}>{brand.contactPhone}</a>
+                </li>
+              ) : null}
+              {brand.contactEmail ? (
+                <li>
+                  <span className="portal-isp-contact__label">{t("contactEmail")}</span>{" "}
+                  <a href={`mailto:${brand.contactEmail}`}>{brand.contactEmail}</a>
+                </li>
+              ) : null}
+              {brand.address ? (
+                <li>
+                  <span className="portal-isp-contact__label">{t("contactAddress")}</span> {brand.address}
+                </li>
+              ) : null}
+            </ul>
+          </aside>
+        ) : null}
       </header>
 
       {!session && (
@@ -536,6 +587,10 @@ export default function Portal() {
       {brand?.portalFooterText ? (
         <footer className="portal-tenant-footer">{brand.portalFooterText}</footer>
       ) : null}
+      <footer className="mcbuleli-site-footer">
+        <img src="/mcbuleli-logo.svg" alt="" width={28} height={28} className="mcbuleli-site-footer__logo" />
+        <p>{t("mcbuleliFooter")}</p>
+      </footer>
     </main>
   );
 }

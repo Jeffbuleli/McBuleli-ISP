@@ -692,6 +692,23 @@ export async function initDb() {
     );
   `);
 
+  await query(`
+    CREATE TABLE IF NOT EXISTS platform_dashboard_banners (
+      slot_index SMALLINT PRIMARY KEY CHECK (slot_index >= 0 AND slot_index <= 2),
+      image_url TEXT NULL,
+      link_url TEXT NULL,
+      alt_text TEXT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+  for (let s = 0; s < 3; s++) {
+    await query(
+      `INSERT INTO platform_dashboard_banners (slot_index) VALUES ($1) ON CONFLICT (slot_index) DO NOTHING`,
+      [s]
+    );
+  }
+
   const ispCount = await query("SELECT COUNT(*)::int AS count FROM isps");
   if (ispCount.rows[0].count === 0) {
     await query(

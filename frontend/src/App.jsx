@@ -2,11 +2,51 @@ import { useEffect, useRef, useState } from "react";
 import { api, publicAssetUrl, setAuthToken } from "./api";
 import LangSwitch from "./LangSwitch.jsx";
 import DashboardHistograms from "./DashboardHistograms.jsx";
+import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import GuestWifiShare from "./GuestWifiShare.jsx";
-import { IconAntenna, IconPeople, IconSliders, IconWallet } from "./icons.jsx";
+import { IconAntenna, IconHome, IconPeople, IconSignOut, IconSliders, IconWallet } from "./icons.jsx";
 
 function isPlatformSuperRole(role) {
   return role === "super_admin" || role === "system_owner";
+}
+
+function humanizeRoleKey(role) {
+  if (role == null || role === "") return "";
+  const s = String(role).replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatStaffRole(role, isEn) {
+  const fr = {
+    system_owner: "Propriétaire plateforme",
+    super_admin: "Super administrateur",
+    company_manager: "Directeur d'entreprise",
+    isp_admin: "Administrateur FAI",
+    billing_agent: "Agent facturation",
+    noc_operator: "Opérateur réseau (NOC)",
+    field_agent: "Agent terrain"
+  };
+  const en = {
+    system_owner: "Platform owner",
+    super_admin: "Super administrator",
+    company_manager: "Company manager",
+    isp_admin: "ISP administrator",
+    billing_agent: "Billing agent",
+    noc_operator: "NOC operator",
+    field_agent: "Field agent"
+  };
+  return (isEn ? en : fr)[role] || humanizeRoleKey(role);
+}
+
+function workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) {
+  const fromBrand = branding?.displayName != null ? String(branding.displayName).trim() : "";
+  if (fromBrand && fromBrand !== "AA") return fromBrand;
+  const sid = selectedIspId || tenantContext?.ispId;
+  const isp = sid && Array.isArray(isps) ? isps.find((i) => i.id === sid) : null;
+  if (isp?.name) return String(isp.name).trim();
+  const tc = tenantContext?.displayName != null ? String(tenantContext.displayName).trim() : "";
+  if (tc && tc !== "AA") return tc;
+  return "";
 }
 
 /** Replace placeholder tenant names (e.g. "AA") with McBuleli for public-facing titles. */
@@ -499,6 +539,19 @@ function App() {
     portalFooterText: "",
     portalClientRefPrefix: ""
   });
+  /** Local object URL for logo file picker preview (revoked when replaced or after upload). */
+  const [brandingLogoPickPreview, setBrandingLogoPickPreview] = useState(null);
+
+  useEffect(() => {
+    const url = brandingLogoPickPreview;
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [brandingLogoPickPreview]);
+
+  const [platformBannerSlots, setPlatformBannerSlots] = useState([]);
+  const [platformBannerEdits, setPlatformBannerEdits] = useState({});
+
   const [userForm, setUserForm] = useState({
     fullName: "",
     email: "",
@@ -886,6 +939,36 @@ function App() {
     bootstrap();
   }, []);
 
+  useEffect(() => {
+    if (user?.role !== "system_owner") {
+      setPlatformBannerSlots([]);
+      setPlatformBannerEdits({});
+      return;
+    }
+    let cancelled = false;
+    api
+      .getSystemOwnerDashboardBanners()
+      .then((data) => {
+        if (!cancelled) setPlatformBannerSlots(data.slots || []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role, user?.id]);
+
+  useEffect(() => {
+    const next = {};
+    for (const s of platformBannerSlots) {
+      next[s.slotIndex] = {
+        linkUrl: s.linkUrl ?? "",
+        altText: s.altText ?? "",
+        isActive: s.isActive !== false
+      };
+    }
+    setPlatformBannerEdits(next);
+  }, [platformBannerSlots]);
+
   async function onLogin(e) {
     e.preventDefault();
     setError("");
@@ -961,6 +1044,68 @@ function App() {
     setPlans([]);
     setSubscriptions([]);
     setInvoices([]);
+    setPlatformBannerSlots([]);
+    setPlatformBannerEdits({});
+  }
+
+  async function reloadPlatformBannerSlots() {
+    if (user?.role !== "system_owner") return;
+    try {
+      const data = await api.getSystemOwnerDashboardBanners();
+      setPlatformBannerSlots(data.slots || []);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function onPlatformBannerUpload(slotIndex, e) {
+    const input = e.target;
+    const f = input.files?.[0];
+    if (!f) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.uploadSystemOwnerDashboardBanner(slotIndex, f);
+      input.value = "";
+      await reloadPlatformBannerSlots();
+      await refresh();
+      setNotice(t("Bannière enregistrée.", "Banner saved."));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function onPlatformBannerSaveMeta(slotIndex) {
+    const ed = platformBannerEdits[slotIndex];
+    if (!ed) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.patchSystemOwnerDashboardBanner(slotIndex, {
+        linkUrl: ed.linkUrl.trim() || null,
+        altText: ed.altText.trim() || null,
+        isActive: ed.isActive
+      });
+      await reloadPlatformBannerSlots();
+      await refresh();
+      setNotice(t("Paramètres de bannière enregistrés.", "Banner settings saved."));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function onPlatformBannerDeleteImage(slotIndex) {
+    if (!window.confirm(t("Supprimer l'image de cette bannière ?", "Remove this banner image?"))) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.deleteSystemOwnerDashboardBannerImage(slotIndex);
+      await reloadPlatformBannerSlots();
+      await refresh();
+      setNotice(t("Image supprimée.", "Image removed."));
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   async function onCreateIsp(e) {
@@ -1299,15 +1444,28 @@ function App() {
   }
 
   async function onBrandingLogoFile(e) {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f || !selectedIspId) return;
+    const input = e.target;
+    const f = input.files?.[0];
+    if (!f) return;
+    setBrandingLogoPickPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(f);
+    });
+    if (!selectedIspId) {
+      setError(t("Choisissez d'abord un FAI dans « Espace FAI actif ».", "Select an ISP in Active ISP Workspace first."));
+      return;
+    }
     setError("");
     setNotice("");
     try {
       const row = await api.uploadBrandingLogo(selectedIspId, f);
       setBrandingForm((prev) => ({ ...prev, logoUrl: row?.logoUrl || prev.logoUrl }));
       setNotice("Logo téléversé.");
+      input.value = "";
+      setBrandingLogoPickPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
       refresh();
     } catch (err) {
       setError(err.message);
@@ -1848,7 +2006,7 @@ function App() {
       <main className="container container--login">
         <div className="login-layout">
           <section className="login-poster" aria-label="Présentation">
-            <div className="login-poster-logo">McBuleli</div>
+            <img className="login-poster-logo-img" src="/mcbuleli-logo.svg" alt="McBuleli" width={72} height={72} />
             <p className="login-poster-lead">
               {isEn
                 ? "Billing, Mobile Money collections, customer portal, agents, MikroTik and reporting in one professional ISP workspace."
@@ -1862,7 +2020,9 @@ function App() {
           </section>
           <div className="login-stack">
             <header className="app-header app-header--login">
-              <div>
+              <div className="login-brand-row">
+                <img className="login-brand-logo" src="/mcbuleli-logo.svg" alt="McBuleli" width={44} height={44} />
+                <div>
                 <h1>{loginTitle}</h1>
                 <p className="app-meta">
                   {tenantContext?.displayName
@@ -1873,6 +2033,7 @@ function App() {
                       ? "McBuleli team workspace — enter your credentials below."
                       : "Espace équipe McBuleli — saisissez vos identifiants ci-dessous."}
                 </p>
+                </div>
               </div>
               <div className="login-lang">
                 <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="login" />
@@ -1938,7 +2099,9 @@ function App() {
     return (
       <main className="container">
         <header className="app-header app-header--login">
-          <div>
+          <div className="login-brand-row">
+            <img className="login-brand-logo" src="/mcbuleli-logo.svg" alt="McBuleli" width={48} height={48} />
+            <div>
             <h1>McBuleli</h1>
             <p className="app-meta">
               {t(
@@ -1946,6 +2109,7 @@ function App() {
                 "You must update your password before continuing."
               )}
             </p>
+            </div>
           </div>
           <div className="login-lang">
             <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="pwd" />
@@ -1983,27 +2147,71 @@ function App() {
     <main className="container app-shell">
       <div className="dashboard-sticky-stack">
         <header className="app-header app-header--dashboard">
-          <div className="dashboard-brandline">
-            <img className="dashboard-logo" src="/mcbuleli-logo.svg" alt="" />
-            <div>
-              <h1>{resolvePublicBrandName(branding?.displayName || tenantContext?.displayName)}</h1>
-              <p className="app-meta">
-                {t("Connecté :", "Logged in as")} <strong>{user.fullName}</strong> ({user.role})
-              </p>
+          <div className="dashboard-header-top">
+            <div className="dashboard-brandline">
+              {branding?.logoUrl ? (
+                <img
+                  className="dashboard-logo dashboard-logo--tenant"
+                  src={publicAssetUrl(branding.logoUrl)}
+                  alt=""
+                />
+              ) : (
+                <span className="dashboard-logo-fallback" aria-hidden="true">
+                  {(workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) || "?")
+                    .charAt(0)
+                    .toUpperCase()}
+                </span>
+              )}
+              <div className="dashboard-brand-text">
+                <h1>
+                  {workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
+                    t("Espace opérateur", "Operator workspace")}
+                </h1>
+                <p className="app-meta dashboard-user-role">
+                  <strong>{user.fullName}</strong>
+                  <span className="dashboard-role-paren"> ({formatStaffRole(user.role, isEn)})</span>
+                </p>
+              </div>
+            </div>
+            <div
+              className="dashboard-toolbar dashboard-toolbar--icons"
+              role="toolbar"
+              aria-label={t("Langue et navigation", "Language and navigation")}
+            >
+              <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash" />
+              <a
+                className="btn-icon-toolbar"
+                href="/?site=public"
+                title={t("Site public (accueil)", "Public site (home)")}
+                aria-label={t("Site public", "Public site")}
+              >
+                <IconHome width={22} height={22} />
+              </a>
+              <button
+                type="button"
+                className="btn-icon-toolbar"
+                onClick={onLogout}
+                title={t("Sortie — déconnexion", "Sign out")}
+                aria-label={t("Déconnexion", "Logout")}
+              >
+                <IconSignOut width={22} height={22} />
+              </button>
             </div>
           </div>
-          <div className="dashboard-toolbar">
-            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash" />
-            <a className="btn-home-public" href="/?site=public">
-              {t("Site public", "Public site")}
-            </a>
-            <button type="button" className="btn-logout" onClick={onLogout}>
-              {t("Déconnexion", "Logout")}
-            </button>
-          </div>
+          {user?.dashboardBanners?.length ? (
+            <DashboardBannerCarousel slides={user.dashboardBanners} />
+          ) : user?.dashboardBannerHtml ? (
+            <div
+              className="dashboard-ad-slot"
+              dangerouslySetInnerHTML={{ __html: user.dashboardBannerHtml }}
+            />
+          ) : null}
         </header>
         <nav className="dashboard-subnav" aria-label="Navigation tableau de bord">
           <a href="#dashboard-overview">{t("Vue d'ensemble", "Overview")}</a>
+          {user.role === "system_owner" ? (
+            <a href="#platform-banners">{t("Bannières publiques", "Public banners")}</a>
+          ) : null}
           {!isFieldAgent ? (
             <>
               <a href="#workspace-settings">{t("Paramètres", "Settings")}</a>
@@ -2175,6 +2383,103 @@ function App() {
           invoices={invoices}
           telemetrySnapshots={telemetrySnapshots}
         />
+      ) : null}
+
+      {user.role === "system_owner" ? (
+        <section className="panel" id="platform-banners">
+          <h2>{t("Bannières tableau de bord (3 visuels)", "Dashboard banners (3 slides)")}</h2>
+          <p className="app-meta" style={{ maxWidth: "56rem", marginBottom: 12 }}>
+            {t(
+              "Préparez trois images au même format paysage pour un défilement homogène. Recommandé : 1200 × 400 px (ratio ~3:1) ou 1920 × 360 px ; PNG, JPEG ou WebP ; max. 2 Mo par fichier. Un format « 24 × 45 » très vertical convient mal à cette zone : préférez une largeur nettement plus grande que la hauteur. Lien optionnel : URL complète en https://…",
+              "Use three images with the same landscape dimensions for a clean rotation. Recommended: 1200 × 400 px (~3:1) or 1920 × 360 px; PNG, JPEG or WebP; max 2 MB each. A very tall 24×45-style strip fits poorly here—keep width clearly larger than height. Optional link: full https://… URL."
+            )}
+          </p>
+          <p className="app-meta" style={{ marginBottom: 16 }}>
+            {t(
+              "Défilement automatique toutes les 6 secondes pour les bannières actives avec image. Réservé au compte propriétaire plateforme (system_owner).",
+              "Auto-rotation every 6 seconds for active slides that have an image. Managed by the platform owner (system_owner) account only."
+            )}
+          </p>
+          <div className="grid">
+            {platformBannerSlots.map((slot) => {
+              const ed = platformBannerEdits[slot.slotIndex] || {
+                linkUrl: "",
+                altText: "",
+                isActive: true
+              };
+              return (
+                <div key={slot.slotIndex} className="panel" style={{ margin: 0 }}>
+                  <h3 style={{ marginTop: 0 }}>
+                    {t("Bannière", "Banner")} {slot.slotIndex + 1}
+                  </h3>
+                  {slot.imageUrl ? (
+                    <p style={{ margin: "8px 0" }}>
+                      <img
+                        src={publicAssetUrl(slot.imageUrl)}
+                        alt=""
+                        style={{ maxWidth: "100%", maxHeight: 120, objectFit: "contain" }}
+                      />
+                    </p>
+                  ) : (
+                    <p className="app-meta">{t("Aucune image", "No image yet")}</p>
+                  )}
+                  <label style={{ display: "block", marginBottom: 8 }}>
+                    {t("Fichier image", "Image file")}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      onChange={(e) => onPlatformBannerUpload(slot.slotIndex, e)}
+                      style={{ display: "block", marginTop: 6 }}
+                    />
+                  </label>
+                  <input
+                    placeholder="https://…"
+                    value={ed.linkUrl}
+                    onChange={(e) =>
+                      setPlatformBannerEdits((prev) => ({
+                        ...prev,
+                        [slot.slotIndex]: { ...ed, linkUrl: e.target.value }
+                      }))
+                    }
+                  />
+                  <input
+                    placeholder={t("Texte alternatif (accessibilité)", "Alt text (accessibility)")}
+                    value={ed.altText}
+                    onChange={(e) =>
+                      setPlatformBannerEdits((prev) => ({
+                        ...prev,
+                        [slot.slotIndex]: { ...ed, altText: e.target.value }
+                      }))
+                    }
+                  />
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={ed.isActive}
+                      onChange={(e) =>
+                        setPlatformBannerEdits((prev) => ({
+                          ...prev,
+                          [slot.slotIndex]: { ...ed, isActive: e.target.checked }
+                        }))
+                      }
+                    />
+                    {t("Afficher dans le carrousel", "Show in carousel")}
+                  </label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                    <button type="button" onClick={() => onPlatformBannerSaveMeta(slot.slotIndex)}>
+                      {t("Enregistrer lien / texte / actif", "Save link / alt / active")}
+                    </button>
+                    {slot.imageUrl ? (
+                      <button type="button" onClick={() => onPlatformBannerDeleteImage(slot.slotIndex)}>
+                        {t("Supprimer l'image", "Remove image")}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       ) : null}
 
       {user.role === "system_owner" && superDashboard?.tenants ? (
@@ -2366,12 +2671,12 @@ function App() {
               Logo entreprise (depuis votre appareil)
               <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={onBrandingLogoFile} />
             </label>
-            {brandingForm.logoUrl ? (
-              <p style={{ margin: "8px 0" }}>
+            {brandingLogoPickPreview || brandingForm.logoUrl ? (
+              <p className="branding-logo-preview" style={{ margin: "8px 0" }}>
                 <img
-                  src={publicAssetUrl(brandingForm.logoUrl)}
-                  alt="Aperçu du logo"
-                  style={{ maxHeight: 48, maxWidth: 200, objectFit: "contain" }}
+                  src={brandingLogoPickPreview || publicAssetUrl(brandingForm.logoUrl)}
+                  alt={t("Aperçu du logo", "Logo preview")}
+                  style={{ maxHeight: 64, maxWidth: 220, objectFit: "contain", display: "block" }}
                 />
               </p>
             ) : null}

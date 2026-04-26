@@ -71,7 +71,7 @@ export default function Signup() {
     <main className="container container--login">
       <div className="login-layout">
         <section className="login-poster" aria-label="Présentation">
-            <div className="login-poster-logo">McBuleli</div>
+            <img className="login-poster-logo-img" src="/mcbuleli-logo.svg" alt="McBuleli" width={72} height={72} />
           <p className="login-poster-lead">
               {isEn
                 ? "Launch your operator workspace in minutes: 1-month free trial, then monthly billing via Mobile Money. McBuleli centralizes billing, payments, and operations for your ISP."
@@ -85,17 +85,20 @@ export default function Signup() {
         </section>
         <div className="login-stack">
           <header className="app-header app-header--login">
-            <div>
+            <div className="login-brand-row">
+              <img className="login-brand-logo" src="/mcbuleli-logo.svg" alt="McBuleli" width={44} height={44} />
+              <div>
                 <h1>{isEn ? "Create your McBuleli workspace" : "Créer votre espace McBuleli"}</h1>
-              <p className="app-meta">
+                <p className="app-meta">
                   {isEn
                     ? "Plans: Essential ($10/month) or Pro ($15/month). Premium is customized by contract."
                     : "Formules Essential (10 $/mois) ou Pro (15 $/mois). Premium est personnalisé sur contrat."}
-              </p>
-            </div>
-              <div className="login-lang">
-                <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="signup" />
+                </p>
               </div>
+            </div>
+            <div className="login-lang">
+              <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="signup" />
+            </div>
           </header>
           {error && <p className="error">{error}</p>}
           {notice && <p>{notice}</p>}

@@ -57,7 +57,12 @@ const STR = {
     paymentStatus: "Statut paiement",
     errMobileStart: "Impossible de démarrer le paiement Mobile Money.",
     errMobileCheck: "Impossible de vérifier le paiement Mobile Money.",
-    brandFallbackTitle: "McBuleli — portail client"
+    brandFallbackTitle: "Portail client",
+    contactTitle: "Coordonnées de votre opérateur",
+    contactPhone: "Téléphone",
+    contactEmail: "E-mail",
+    contactAddress: "Adresse",
+    mcbuleliFooter: "Propulsé par McBuleli — plateforme de gestion pour opérateurs et FAI."
   },
   en: {
     eyebrow: "Customer portal",
@@ -116,7 +121,12 @@ const STR = {
     paymentStatus: "Payment status",
     errMobileStart: "Could not start Mobile Money payment.",
     errMobileCheck: "Could not check Mobile Money payment.",
-    brandFallbackTitle: "McBuleli — customer portal"
+    brandFallbackTitle: "Customer portal",
+    contactTitle: "Your provider's contact details",
+    contactPhone: "Phone",
+    contactEmail: "Email",
+    contactAddress: "Address",
+    mcbuleliFooter: "Powered by McBuleli — operations platform for ISPs and providers."
   }
 };
 
@@ -129,5 +139,5 @@ export function portalBrandTitle(displayName, lang) {
   const s = displayName != null ? String(displayName).trim() : "";
   if (!s || s === "AA") return portalT(lang, "brandFallbackTitle");
   const suffix = lang === "en" ? " — customer portal" : " — portail client";
-  return `${displayName}${suffix}`;
+  return `${s}${suffix}`;
 }

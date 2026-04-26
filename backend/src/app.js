@@ -55,8 +55,11 @@ import multer from "multer";
 import { parseCsv, rowsToCsv } from "./csvUtils.js";
 import {
   brandingUploadDir,
+  clearBrandingLogoFiles,
+  clearPlatformBannerFiles,
   ensureBrandingUploadDir,
-  clearBrandingLogoFiles
+  ensurePlatformBannerUploadDir,
+  platformBannerUploadDir
 } from "./uploadsConfig.js";
 import {
   deleteBrandingObjectInS3,
@@ -308,6 +311,30 @@ app.get("/api/public/branding-logo/:ispId", rlPublicRead, async (req, res) => {
   return res.status(404).end();
 });
 
+function parsePlatformBannerSlot(param) {
+  const n = Number(param);
+  if (!Number.isInteger(n) || n < 0 || n > 2) return null;
+  return n;
+}
+
+app.get("/api/public/platform-banner/:slot", rlPublicRead, async (req, res) => {
+  const slot = parsePlatformBannerSlot(req.params.slot);
+  if (slot == null) return res.status(400).end();
+  ensurePlatformBannerUploadDir();
+  for (const ext of Object.keys(BRANDING_LOGO_MIME)) {
+    const fp = path.join(platformBannerUploadDir, `${slot}${ext}`);
+    try {
+      await fs.promises.access(fp, fs.constants.R_OK);
+      res.type(BRANDING_LOGO_MIME[ext]);
+      res.set("Cache-Control", "public, max-age=3600");
+      return res.sendFile(path.resolve(fp));
+    } catch {
+      /* try next extension */
+    }
+  }
+  return res.status(404).end();
+});
+
 const TRIAL_DAYS = Math.min(Math.max(Number(process.env.PLATFORM_TRIAL_DAYS || 30), 1), 90);
 const SAAS_PLAN_CODES = ["essential", "pro"];
 const MFA_REQUIRED_ROLES = new Set(["super_admin", "company_manager", "isp_admin", "field_agent"]);
@@ -335,6 +362,46 @@ function publicUserPayload(user, extra = {}) {
     mfaTotpEnabled: Boolean(user.mfa_totp_enabled),
     ...extra
   };
+}
+
+async function dashboardPayloadFromDb() {
+  const r = await query(
+    `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", link_url AS "linkUrl",
+            alt_text AS "altText", is_active AS "isActive"
+     FROM platform_dashboard_banners
+     WHERE slot_index BETWEEN 0 AND 2
+     ORDER BY slot_index`
+  );
+  const slides = r.rows
+    .filter((row) => row.isActive && row.imageUrl)
+    .map((row) => ({
+      slotIndex: row.slotIndex,
+      imageUrl: row.imageUrl,
+      linkUrl: row.linkUrl || null,
+      altText: row.altText || null
+    }));
+  return slides.length ? { dashboardBanners: slides } : {};
+}
+
+async function attachDashboardPayload(basePayload) {
+  const fromDb = await dashboardPayloadFromDb();
+  if (fromDb.dashboardBanners?.length) return { ...basePayload, ...fromDb };
+  const dashboardBannerHtml = String(process.env.PLATFORM_DASHBOARD_BANNER_HTML || "").trim();
+  return dashboardBannerHtml ? { ...basePayload, dashboardBannerHtml } : basePayload;
+}
+
+function normalizeBannerLinkUrl(raw) {
+  if (raw == null || raw === "") return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  if (!/^https?:\/\//i.test(s)) return undefined;
+  return s.slice(0, 2048);
+}
+
+function normalizeBannerAltText(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  return s ? s.slice(0, 240) : null;
 }
 
 async function verifyTotpForUser(userId, code) {
@@ -718,7 +785,8 @@ app.get("/api/public/wifi-plans", rlPublicRead, async (req, res) => {
   if (!isp.rows[0]) return res.status(404).json({ message: "ISP not found" });
   const brand = await query(
     `SELECT display_name AS "displayName", logo_url AS "logoUrl", primary_color AS "primaryColor",
-            secondary_color AS "secondaryColor", wifi_portal_redirect_url AS "wifiPortalRedirectUrl"
+            secondary_color AS "secondaryColor", wifi_portal_redirect_url AS "wifiPortalRedirectUrl",
+            contact_email AS "contactEmail", contact_phone AS "contactPhone", address
      FROM isp_branding WHERE isp_id = $1`,
     [ispId]
   );
@@ -939,7 +1007,8 @@ app.get("/api/portal/session", authenticatePortal, async (req, res) => {
     query(
       `SELECT display_name AS "displayName", logo_url AS "logoUrl", primary_color AS "primaryColor",
               secondary_color AS "secondaryColor", portal_footer_text AS "portalFooterText",
-              portal_client_ref_prefix AS "portalClientRefPrefix"
+              portal_client_ref_prefix AS "portalClientRefPrefix",
+              contact_email AS "contactEmail", contact_phone AS "contactPhone", address
        FROM isp_branding WHERE isp_id = $1`,
       [ispId]
     )
@@ -1173,7 +1242,7 @@ app.post("/api/auth/login", async (req, res) => {
     });
   }
   const token = signToken(user);
-  return res.json({ token, user: publicUserPayload(user) });
+  return res.json({ token, user: await attachDashboardPayload(publicUserPayload(user)) });
 });
 
 app.post("/api/auth/mfa/verify-login", async (req, res) => {
@@ -1190,7 +1259,7 @@ app.post("/api/auth/mfa/verify-login", async (req, res) => {
   const user = result.rows[0];
   if (!user || !user.is_active) return res.status(403).json({ message: "User account is inactive" });
   const token = signToken(user);
-  return res.json({ token, user: publicUserPayload(user) });
+  return res.json({ token, user: await attachDashboardPayload(publicUserPayload(user)) });
 });
 
 app.get("/api/auth/me", authenticate, async (req, res) => {
@@ -1204,7 +1273,7 @@ app.get("/api/auth/me", authenticate, async (req, res) => {
   if (user.isp_id) {
     platformBilling = await getPlatformBillingSnapshot(user.isp_id);
   }
-  return res.json(publicUserPayload(user, { platformBilling }));
+  return res.json(await attachDashboardPayload(publicUserPayload(user, { platformBilling })));
 });
 
 app.post("/api/auth/mfa/totp/setup", authenticate, async (req, res) => {
@@ -4098,6 +4167,139 @@ app.get("/api/super/dashboard", authenticate, requireRoles("system_owner", "supe
     tenants: tenants.rows
   });
 });
+
+app.get("/api/system-owner/dashboard-banners", authenticate, requireRoles("system_owner"), async (_req, res) => {
+  const r = await query(
+    `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", link_url AS "linkUrl",
+            alt_text AS "altText", is_active AS "isActive", updated_at AS "updatedAt"
+     FROM platform_dashboard_banners
+     WHERE slot_index BETWEEN 0 AND 2
+     ORDER BY slot_index`
+  );
+  res.json({ slots: r.rows });
+});
+
+app.post(
+  "/api/system-owner/dashboard-banners/:slot/image",
+  authenticate,
+  requireRoles("system_owner"),
+  uploadLogoMemory.single("banner"),
+  async (req, res) => {
+    const slot = parsePlatformBannerSlot(req.params.slot);
+    if (slot == null) return res.status(400).json({ message: "slot must be 0, 1, or 2" });
+    if (!req.file?.buffer) {
+      return res.status(400).json({ message: "Choose an image file (form field name: banner)." });
+    }
+    const mimeToExt = {
+      "image/png": ".png",
+      "image/jpeg": ".jpg",
+      "image/jpg": ".jpg",
+      "image/webp": ".webp",
+      "image/gif": ".gif"
+    };
+    const ext = mimeToExt[req.file.mimetype];
+    if (!ext) {
+      return res.status(400).json({ message: "Banner must be PNG, JPEG, WebP or GIF." });
+    }
+    await clearPlatformBannerFiles(slot);
+    ensurePlatformBannerUploadDir();
+    const fp = path.join(platformBannerUploadDir, `${slot}${ext}`);
+    await fs.promises.writeFile(fp, req.file.buffer);
+    const publicPath = `/api/public/platform-banner/${slot}`;
+    await query(`UPDATE platform_dashboard_banners SET image_url = $1, updated_at = NOW() WHERE slot_index = $2`, [
+      publicPath,
+      slot
+    ]);
+    await logAudit({
+      actorUserId: req.user.sub,
+      action: "platform_dashboard_banner.image_uploaded",
+      entityType: "platform_dashboard_banner",
+      entityId: null,
+      details: { slot, mime: req.file.mimetype }
+    });
+    const row = await query(
+      `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", link_url AS "linkUrl",
+              alt_text AS "altText", is_active AS "isActive", updated_at AS "updatedAt"
+       FROM platform_dashboard_banners WHERE slot_index = $1`,
+      [slot]
+    );
+    res.json(row.rows[0]);
+  }
+);
+
+app.patch("/api/system-owner/dashboard-banners/:slot", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const slot = parsePlatformBannerSlot(req.params.slot);
+  if (slot == null) return res.status(400).json({ message: "slot must be 0, 1, or 2" });
+  const b = req.body || {};
+  const pieces = [];
+  const vals = [];
+  let i = 1;
+  if (Object.prototype.hasOwnProperty.call(b, "linkUrl")) {
+    const norm = normalizeBannerLinkUrl(b.linkUrl);
+    if (norm === undefined) {
+      return res.status(400).json({ message: "linkUrl must be a valid http(s) URL or empty." });
+    }
+    pieces.push(`link_url = $${i++}`);
+    vals.push(norm);
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "altText")) {
+    pieces.push(`alt_text = $${i++}`);
+    vals.push(normalizeBannerAltText(b.altText));
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "isActive")) {
+    pieces.push(`is_active = $${i++}`);
+    vals.push(Boolean(b.isActive));
+  }
+  if (pieces.length === 0) {
+    return res.status(400).json({ message: "Provide linkUrl, altText, and/or isActive." });
+  }
+  pieces.push("updated_at = NOW()");
+  vals.push(slot);
+  await query(`UPDATE platform_dashboard_banners SET ${pieces.join(", ")} WHERE slot_index = $${i}`, vals);
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_dashboard_banner.updated",
+    entityType: "platform_dashboard_banner",
+    entityId: null,
+    details: { slot, fields: Object.keys(b) }
+  });
+  const row = await query(
+    `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", link_url AS "linkUrl",
+            alt_text AS "altText", is_active AS "isActive", updated_at AS "updatedAt"
+     FROM platform_dashboard_banners WHERE slot_index = $1`,
+    [slot]
+  );
+  res.json(row.rows[0]);
+});
+
+app.delete(
+  "/api/system-owner/dashboard-banners/:slot/image",
+  authenticate,
+  requireRoles("system_owner"),
+  async (req, res) => {
+    const slot = parsePlatformBannerSlot(req.params.slot);
+    if (slot == null) return res.status(400).json({ message: "slot must be 0, 1, or 2" });
+    await clearPlatformBannerFiles(slot);
+    await query(
+      `UPDATE platform_dashboard_banners SET image_url = NULL, updated_at = NOW() WHERE slot_index = $1`,
+      [slot]
+    );
+    await logAudit({
+      actorUserId: req.user.sub,
+      action: "platform_dashboard_banner.image_cleared",
+      entityType: "platform_dashboard_banner",
+      entityId: null,
+      details: { slot }
+    });
+    const row = await query(
+      `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", link_url AS "linkUrl",
+              alt_text AS "altText", is_active AS "isActive", updated_at AS "updatedAt"
+       FROM platform_dashboard_banners WHERE slot_index = $1`,
+      [slot]
+    );
+    res.json(row.rows[0]);
+  }
+);
 
 const EXPENSE_CATEGORIES = [
   "field_agent_fixed",

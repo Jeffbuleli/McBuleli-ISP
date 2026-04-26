@@ -98,3 +98,27 @@ export function IconZap(props) {
     </svg>
   );
 }
+
+/** Home / public site */
+export function IconHome(props) {
+  return (
+    <svg {...base} {...props}>
+      <path
+        d="M4 10.5 12 3l8 7.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Logout / exit */
+export function IconSignOut(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M10 17H5V7h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M14 12H22M18 8l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
