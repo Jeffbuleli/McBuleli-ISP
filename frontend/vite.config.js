@@ -10,7 +10,15 @@ export default defineConfig({
         server.middlewares.use((req, _res, next) => {
           const url = req.url || "";
           const base = url.split("?")[0];
-          if (req.method === "GET" && (base === "/portal" || base === "/signup" || base === "/wifi")) {
+          if (
+            req.method === "GET" &&
+            (base === "/portal" ||
+              base === "/signup" ||
+              base === "/wifi" ||
+              base.startsWith("/wifi/") ||
+              base === "/buy/packages" ||
+              base.startsWith("/buy/packages/"))
+          ) {
             req.url = "/";
           }
           next();

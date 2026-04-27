@@ -369,6 +369,22 @@ export default function PublicSite() {
 
   const year = useMemo(() => new Date().getFullYear(), []);
 
+  const sortedMarketingBlocks = useMemo(() => {
+    const list = [...(homeMarketing.footerBlocks || [])];
+    list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    return list;
+  }, [homeMarketing.footerBlocks]);
+
+  const afterWhyMarketingBlocks = useMemo(
+    () => sortedMarketingBlocks.filter((b) => b.placement === "after_why"),
+    [sortedMarketingBlocks]
+  );
+
+  const preFooterMarketingBlocks = useMemo(
+    () => sortedMarketingBlocks.filter((b) => b.placement !== "after_why"),
+    [sortedMarketingBlocks]
+  );
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("ui_lang", uiLang);
@@ -410,7 +426,7 @@ export default function PublicSite() {
             <a href="#pricing">{t("Tarifs", "Pricing")}</a>
             <a href="#testimonials">{t("Témoignages", "Testimonials")}</a>
             <a href="#faq">{t("FAQ", "FAQ")}</a>
-            <a href="/wifi">{t("Wi‑Fi invité", "Guest Wi‑Fi")}</a>
+            <a href="/buy/packages">{t("Wi‑Fi invité", "Guest Wi‑Fi")}</a>
             <a href="#contact">Contact</a>
           </nav>
           <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="public" />
@@ -442,7 +458,7 @@ export default function PublicSite() {
               <a className="btn-secondary" href="/login">
                 {t("Se connecter", "Login")}
               </a>
-              <a className="btn-secondary" href="/wifi">
+              <a className="btn-secondary" href="/buy/packages">
                 {t("Achat pass Wi‑Fi", "Buy Wi‑Fi pass")}
               </a>
             </div>
@@ -580,6 +596,10 @@ export default function PublicSite() {
         </ul>
       </section>
 
+      {(afterWhyMarketingBlocks || []).map((block) => (
+        <PublicMarketingSlot key={block.id} slot={{ ...block, isActive: true }} variant="footer" t={t} />
+      ))}
+
       <section className="public-section" id="testimonials">
         <p className="eyebrow">{t("Ils utilisent McBuleli", "Teams using McBuleli")}</p>
         <h2>{t("Ce que disent les opérateurs", "What operators say")}</h2>
@@ -615,7 +635,7 @@ export default function PublicSite() {
         </div>
       </section>
 
-      {(homeMarketing.footerBlocks || []).map((block) => (
+      {(preFooterMarketingBlocks || []).map((block) => (
         <PublicMarketingSlot key={block.id} slot={{ ...block, isActive: true }} variant="footer" t={t} />
       ))}
 

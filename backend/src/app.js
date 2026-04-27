@@ -363,6 +363,14 @@ function mapHomePromoRow(row) {
   };
 }
 
+function normalizePublicFooterLayout(raw) {
+  return String(raw || "").trim() === "wide" ? "wide" : "card";
+}
+
+function normalizePublicFooterPlacement(raw) {
+  return String(raw || "").trim() === "after_why" ? "after_why" : "pre_footer";
+}
+
 function mapFooterBlockRow(row) {
   if (!row) return null;
   const mime = row.image_mime ?? row.imageMime;
@@ -375,6 +383,8 @@ function mapFooterBlockRow(row) {
     bodyHtml: row.body_html ?? row.bodyHtml ?? "",
     imageUrl: dataUrl,
     linkUrl: row.link_url ?? row.linkUrl ?? null,
+    layout: normalizePublicFooterLayout(row.layout),
+    placement: normalizePublicFooterPlacement(row.placement),
     isActive: row.is_active ?? row.isActive !== false,
     createdAt: row.created_at ?? row.createdAt,
     updatedAt: row.updated_at ?? row.updatedAt
@@ -478,7 +488,7 @@ app.get("/api/public/home-marketing", rlPublicRead, async (_req, res) => {
          ORDER BY slot_index`
       ),
       query(
-        `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, updated_at
+        `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, layout, placement, updated_at
          FROM platform_public_footer_blocks
          WHERE is_active = TRUE
          ORDER BY sort_order ASC, updated_at DESC
@@ -4768,7 +4778,7 @@ app.delete("/api/system-owner/home-promos/:slot/image", authenticate, requireRol
 
 app.get("/api/system-owner/footer-blocks", authenticate, requireRoles("system_owner"), async (_req, res) => {
   const r = await query(
-    `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, is_active, created_at, updated_at
+    `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, layout, placement, is_active, created_at, updated_at
      FROM platform_public_footer_blocks
      ORDER BY sort_order ASC, updated_at DESC
      LIMIT 100`
@@ -4785,11 +4795,13 @@ app.post("/api/system-owner/footer-blocks", authenticate, requireRoles("system_o
     return res.status(400).json({ message: "linkUrl must be a valid http(s) URL or empty." });
   }
   const sortOrder = Number(b.sortOrder) || 0;
+  const layout = normalizePublicFooterLayout(b.layout);
+  const placement = normalizePublicFooterPlacement(b.placement);
   const inserted = await query(
-    `INSERT INTO platform_public_footer_blocks (id, sort_order, title, body_html, link_url, is_active)
-     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
-     RETURNING id, sort_order, title, body_html, image_bytes, image_mime, link_url, is_active, created_at, updated_at`,
-    [sortOrder, v.title, v.bodyHtml, normLink, b.isActive !== false]
+    `INSERT INTO platform_public_footer_blocks (id, sort_order, title, body_html, link_url, layout, placement, is_active)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, sort_order, title, body_html, image_bytes, image_mime, link_url, layout, placement, is_active, created_at, updated_at`,
+    [sortOrder, v.title, v.bodyHtml, normLink, layout, placement, b.isActive !== false]
   );
   await logAudit({
     actorUserId: req.user.sub,
@@ -4838,6 +4850,14 @@ app.patch("/api/system-owner/footer-blocks/:id", authenticate, requireRoles("sys
     pieces.push(`is_active = $${i++}`);
     vals.push(Boolean(b.isActive));
   }
+  if (Object.prototype.hasOwnProperty.call(b, "layout")) {
+    pieces.push(`layout = $${i++}`);
+    vals.push(normalizePublicFooterLayout(b.layout));
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "placement")) {
+    pieces.push(`placement = $${i++}`);
+    vals.push(normalizePublicFooterPlacement(b.placement));
+  }
   if (pieces.length === 0) {
     return res.status(400).json({ message: "Nothing to update." });
   }
@@ -4852,7 +4872,7 @@ app.patch("/api/system-owner/footer-blocks/:id", authenticate, requireRoles("sys
     details: { fields: Object.keys(b) }
   });
   const row = await query(
-    `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, is_active, created_at, updated_at
+    `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, layout, placement, is_active, created_at, updated_at
      FROM platform_public_footer_blocks WHERE id = $1`,
     [id]
   );
@@ -4903,7 +4923,7 @@ app.post(
       details: { mime: req.file.mimetype }
     });
     const row = await query(
-      `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, is_active, created_at, updated_at
+      `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, layout, placement, is_active, created_at, updated_at
        FROM platform_public_footer_blocks WHERE id = $1`,
       [id]
     );
@@ -4926,7 +4946,7 @@ app.delete("/api/system-owner/footer-blocks/:id/image", authenticate, requireRol
     details: {}
   });
   const row = await query(
-    `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, is_active, created_at, updated_at
+    `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, layout, placement, is_active, created_at, updated_at
      FROM platform_public_footer_blocks WHERE id = $1`,
     [id]
   );

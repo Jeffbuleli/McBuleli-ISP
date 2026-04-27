@@ -7,7 +7,7 @@ export function wifiGuestBaseUrl(origin, ispId) {
   const o = String(origin || "").replace(/\/$/, "");
   const id = String(ispId || "").trim();
   if (!o || !id) return "";
-  return `${o}/wifi?ispId=${encodeURIComponent(id)}`;
+  return `${o}/buy/packages?ispId=${encodeURIComponent(id)}`;
 }
 
 /** Modèle à coller dans le routeur : même forme que ?ip=…&router=…&mac=… (ex. Centipid). */

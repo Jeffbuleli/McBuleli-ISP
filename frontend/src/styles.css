@@ -1240,6 +1240,87 @@ button:disabled {
   border-radius: 12px;
 }
 
+/* Bloc marketing pleine largeur (bannière type captif / hero paysage) */
+.public-marketing-slot--wide {
+  margin: 24px 0 10px;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 18px 52px rgba(27, 20, 17, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.public-marketing-slot__wide-plate {
+  display: block;
+  position: relative;
+  min-height: min(280px, 36vw);
+  aspect-ratio: 21 / 9;
+  max-height: 400px;
+  background-size: cover;
+  background-position: center;
+  background-color: #0b1524;
+  text-decoration: none;
+  color: inherit;
+}
+
+.public-marketing-slot__wide-plate--no-image {
+  background: linear-gradient(125deg, #0d2137 0%, #1a4d6e 48%, #0b1524 100%);
+  aspect-ratio: unset;
+  max-height: none;
+  min-height: 200px;
+}
+
+@media (max-width: 720px) {
+  .public-marketing-slot__wide-plate {
+    aspect-ratio: 16 / 10;
+    min-height: 220px;
+    max-height: none;
+  }
+}
+
+.public-marketing-slot__wide-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(6, 10, 18, 0.82) 0%,
+    rgba(6, 10, 18, 0.5) 45%,
+    rgba(6, 10, 18, 0.22) 100%
+  );
+  pointer-events: none;
+}
+
+.public-marketing-slot__wide-content {
+  position: relative;
+  z-index: 1;
+  padding: clamp(20px, 3.8vw, 42px) clamp(18px, 3.5vw, 46px);
+  max-width: min(720px, 94%);
+}
+
+.public-marketing-slot__wide-title {
+  margin: 0 0 10px;
+  font-size: clamp(1.28rem, 3.6vw, 2.05rem);
+  font-weight: 850;
+  line-height: 1.18;
+  color: #fff;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.4);
+}
+
+.public-marketing-slot__body--wide {
+  font-size: clamp(0.92rem, 1.9vw, 1.06rem);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.93);
+  text-shadow: 0 1px 14px rgba(0, 0, 0, 0.45);
+}
+
+.public-marketing-slot__body--wide a {
+  color: #b3e5fc;
+  font-weight: 700;
+}
+
+.public-marketing-slot__body--wide p {
+  margin: 0.4em 0;
+}
+
 .public-brand {
   display: inline-flex;
   align-items: center;

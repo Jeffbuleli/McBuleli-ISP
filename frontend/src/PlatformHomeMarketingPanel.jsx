@@ -21,7 +21,9 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     bodyHtml: "<p></p>",
     linkUrl: "",
     sortOrder: 0,
-    plainLen: 0
+    plainLen: 0,
+    layout: "wide",
+    placement: "after_why"
   });
   const [editingFooterId, setEditingFooterId] = useState(null);
   const [editingFooter, setEditingFooter] = useState(null);
@@ -133,9 +135,19 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
         bodyHtml: footerForm.bodyHtml,
         linkUrl: footerForm.linkUrl.trim() || null,
         sortOrder: Number(footerForm.sortOrder) || 0,
+        layout: footerForm.layout,
+        placement: footerForm.placement,
         isActive: true
       });
-      setFooterForm({ title: "", bodyHtml: "<p></p>", linkUrl: "", sortOrder: 0, plainLen: 0 });
+      setFooterForm({
+        title: "",
+        bodyHtml: "<p></p>",
+        linkUrl: "",
+        sortOrder: 0,
+        plainLen: 0,
+        layout: "wide",
+        placement: "after_why"
+      });
       await loadFooter();
     } catch (err) {
       setError(err.message || "Error");
@@ -181,6 +193,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
         bodyHtml: editingFooter.bodyHtml,
         linkUrl: editingFooter.linkUrl.trim() || null,
         sortOrder: Number(editingFooter.sortOrder) || 0,
+        layout: editingFooter.layout,
+        placement: editingFooter.placement,
         isActive: editingFooter.isActive
       });
       setEditingFooterId(null);
@@ -227,8 +241,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       <h2>{t("Page d'accueil publique (marketing)", "Public home page (marketing)")}</h2>
       <p className="app-meta" style={{ maxWidth: "56rem" }}>
         {t(
-          "Trois visuels « Offres » (emplacements fixes 0–2) : chaque image est indépendante. En bas : blocs d’annonce (ajout, modification, suppression). Réservé au propriétaire plateforme.",
-          "Three “Offers” visuals (fixed slots 0–2): each image is independent. Below: announcement blocks (add, edit, delete). Platform owner only."
+          "Trois visuels « Offres » (emplacements fixes 0–2) : chaque image est indépendante. Blocs d’annonce : carte classique ou bannière large (image de fond + texte), placés après « Pourquoi choisir… » ou en bas de page avant le pied de page. Réservé au propriétaire plateforme.",
+          "Three “Offers” visuals (fixed slots 0–2): each image is independent. Announcement blocks: classic card or wide banner (background image + text), placed after “Why choose…” or at the bottom before the site footer. Platform owner only."
         )}
       </p>
       {error ? <p className="error">{error}</p> : null}
@@ -347,7 +361,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
         })}
       </div>
 
-      <h3 style={{ marginTop: 28 }}>{t("Blocs en bas de page", "Bottom-of-page blocks")}</h3>
+      <h3 style={{ marginTop: 28 }}>{t("Blocs d’annonce (page publique)", "Public page announcement blocks")}</h3>
       <form className="panel" style={{ marginBottom: 16 }} onSubmit={onCreateFooter}>
         <h4 style={{ marginTop: 0 }}>{t("Nouveau bloc", "New block")}</h4>
         <input
@@ -373,6 +387,32 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
           onChange={(e) => setFooterForm((f) => ({ ...f, sortOrder: e.target.value }))}
           style={{ display: "block", marginBottom: 8, maxWidth: 120 }}
         />
+        <label style={{ display: "block", marginBottom: 8 }}>
+          {t("Mise en page", "Layout")}
+          <select
+            value={footerForm.layout}
+            disabled={saving}
+            onChange={(e) => setFooterForm((f) => ({ ...f, layout: e.target.value }))}
+            style={{ display: "block", marginTop: 6, maxWidth: 360 }}
+          >
+            <option value="card">{t("Carte (image + texte)", "Card (image + text)")}</option>
+            <option value="wide">{t("Bannière large (fond image)", "Wide banner (image background)")}</option>
+          </select>
+        </label>
+        <label style={{ display: "block", marginBottom: 8 }}>
+          {t("Emplacement", "Placement")}
+          <select
+            value={footerForm.placement}
+            disabled={saving}
+            onChange={(e) => setFooterForm((f) => ({ ...f, placement: e.target.value }))}
+            style={{ display: "block", marginTop: 6, maxWidth: 360 }}
+          >
+            <option value="after_why">
+              {t("Après « Pourquoi choisir McBuleli… »", "After “Why choose McBuleli…”")}
+            </option>
+            <option value="pre_footer">{t("Bas de page (après la FAQ)", "Page bottom (after FAQ)")}</option>
+          </select>
+        </label>
         <RichAnnouncementEditor
           valueHtml={footerForm.bodyHtml}
           onChange={(html, len) => setFooterForm((f) => ({ ...f, bodyHtml: html, plainLen: len }))}
@@ -412,6 +452,32 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
                   onChange={(e) => setEditingFooter((x) => ({ ...x, sortOrder: e.target.value }))}
                   style={{ maxWidth: 120, marginBottom: 8 }}
                 />
+                <label style={{ display: "block", marginBottom: 8 }}>
+                  {t("Mise en page", "Layout")}
+                  <select
+                    value={editingFooter.layout === "wide" ? "wide" : "card"}
+                    disabled={saving}
+                    onChange={(e) => setEditingFooter((x) => ({ ...x, layout: e.target.value }))}
+                    style={{ display: "block", marginTop: 6, maxWidth: 360 }}
+                  >
+                    <option value="card">{t("Carte (image + texte)", "Card (image + text)")}</option>
+                    <option value="wide">{t("Bannière large (fond image)", "Wide banner (image background)")}</option>
+                  </select>
+                </label>
+                <label style={{ display: "block", marginBottom: 8 }}>
+                  {t("Emplacement", "Placement")}
+                  <select
+                    value={editingFooter.placement === "after_why" ? "after_why" : "pre_footer"}
+                    disabled={saving}
+                    onChange={(e) => setEditingFooter((x) => ({ ...x, placement: e.target.value }))}
+                    style={{ display: "block", marginTop: 6, maxWidth: 360 }}
+                  >
+                    <option value="after_why">
+                      {t("Après « Pourquoi choisir McBuleli… »", "After “Why choose McBuleli…”")}
+                    </option>
+                    <option value="pre_footer">{t("Bas de page (après la FAQ)", "Page bottom (after FAQ)")}</option>
+                  </select>
+                </label>
                 <label style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                   <input
                     type="checkbox"
@@ -450,6 +516,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
                       bodyHtml: item.bodyHtml || "<p></p>",
                       linkUrl: item.linkUrl || "",
                       sortOrder: item.sortOrder ?? 0,
+                      layout: item.layout === "wide" ? "wide" : "card",
+                      placement: item.placement === "after_why" ? "after_why" : "pre_footer",
                       isActive: item.isActive !== false,
                       plainLen: plainTextLength(item.bodyHtml)
                     });
@@ -457,7 +525,11 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
                 >
                   <strong>{item.title || item.id.slice(0, 8)}</strong>
                   <span className="app-meta">
-                    {item.isActive === false ? t("(inactif)", "(inactive)") : ""} · order {item.sortOrder}
+                    {item.isActive === false ? t("(inactif)", "(inactive)") : ""} · order {item.sortOrder} ·{" "}
+                    {item.layout === "wide" ? t("bannière large", "wide") : t("carte", "card")} ·{" "}
+                    {item.placement === "after_why"
+                      ? t("après Pourquoi", "after Why")
+                      : t("bas de page", "page bottom")}
                   </span>
                 </button>
                 <div style={{ padding: "0 14px 14px" }}>

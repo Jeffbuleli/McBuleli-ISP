@@ -798,6 +798,12 @@ export async function initDb() {
   await query(
     "CREATE INDEX IF NOT EXISTS idx_platform_footer_blocks_active ON platform_public_footer_blocks (is_active, sort_order);"
   );
+  await query(
+    "ALTER TABLE platform_public_footer_blocks ADD COLUMN IF NOT EXISTS layout TEXT NOT NULL DEFAULT 'card';"
+  );
+  await query(
+    "ALTER TABLE platform_public_footer_blocks ADD COLUMN IF NOT EXISTS placement TEXT NOT NULL DEFAULT 'pre_footer';"
+  );
 
   await query(`
     CREATE TABLE IF NOT EXISTS platform_dashboard_banners (

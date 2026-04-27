@@ -26,7 +26,12 @@ function Root() {
   if (path === "/signup" || path.startsWith("/signup/")) {
     return <Signup />;
   }
-  if (path === "/wifi" || path.startsWith("/wifi/")) {
+  if (
+    path === "/wifi" ||
+    path.startsWith("/wifi/") ||
+    path === "/buy/packages" ||
+    path.startsWith("/buy/packages/")
+  ) {
     return <WifiPortal />;
   }
   return <App />;
