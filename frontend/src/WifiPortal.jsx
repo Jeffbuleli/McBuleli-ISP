@@ -74,7 +74,8 @@ export default function WifiPortal() {
     setActiveIspId(isp);
     const url = new URL(window.location.href);
     url.searchParams.set("ispId", isp);
-    window.history.replaceState({}, "", url.toString());
+    const next = url.toString();
+    window.history.replaceState({}, "", next);
   }, []);
 
   useEffect(() => {
@@ -97,6 +98,16 @@ export default function WifiPortal() {
     }
   }
 
+  const captiveInfo = useMemo(() => {
+    if (typeof window === "undefined") return { ip: "", router: "", mac: "" };
+    const sp = new URLSearchParams(window.location.search);
+    return {
+      ip: sp.get("ip")?.trim() || "",
+      router: sp.get("router")?.trim() || "",
+      mac: sp.get("mac")?.trim() || ""
+    };
+  }, [activeIspId]);
+
   async function onStartPayment(e) {
     e.preventDefault();
     setError("");
@@ -107,6 +118,13 @@ export default function WifiPortal() {
       setError(t("errPhone"));
       return;
     }
+    const sp = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    const captiveContext = {
+      ip: sp.get("ip")?.trim() || undefined,
+      router: sp.get("router")?.trim() || undefined,
+      mac: sp.get("mac")?.trim() || undefined
+    };
+    const hasCap = Boolean(captiveContext.ip || captiveContext.router || captiveContext.mac);
     try {
       const res = await publicRequest("/public/wifi-purchase/initiate", {
         method: "POST",
@@ -114,7 +132,8 @@ export default function WifiPortal() {
           ispId: activeIspId,
           planId: selectedPlan.id,
           phoneNumber: phone,
-          networkKey: checkout.networkKey
+          networkKey: checkout.networkKey,
+          ...(hasCap ? { captiveContext } : {})
         })
       });
       setDepositId(res.depositId);
@@ -239,6 +258,34 @@ export default function WifiPortal() {
           <p className="app-meta">{t("catalogLead")}</p>
         </div>
       </header>
+
+      {activeIspId && (captiveInfo.ip || captiveInfo.router || captiveInfo.mac) ? (
+        <div className="wifi-captive-banner" role="status">
+          <strong>{t("captiveTitle")}</strong>
+          <div>
+            {captiveInfo.ip ? (
+              <span>
+                {t("captiveIp")}: {captiveInfo.ip}
+                {" · "}
+              </span>
+            ) : null}
+            {captiveInfo.router ? (
+              <span>
+                {t("captiveRouter")}: {captiveInfo.router}
+                {" · "}
+              </span>
+            ) : null}
+            {captiveInfo.mac ? (
+              <span>
+                {t("captiveMac")}: {captiveInfo.mac}
+              </span>
+            ) : null}
+          </div>
+          <p className="app-meta" style={{ margin: "8px 0 0", fontSize: "0.82rem" }}>
+            {t("captiveHelp")}
+          </p>
+        </div>
+      ) : null}
 
       {!activeIspId && (
         <form className="panel" onSubmit={onOpenCatalog}>

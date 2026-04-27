@@ -4442,7 +4442,7 @@ function App() {
                 "Same link for all published plans—share it or the QR code near the access point."
               )}
             </p>
-            <GuestWifiShare ispId={selectedIspId} caption={t("Lien invité Wi‑Fi", "Wi‑Fi guest link")} />
+            <GuestWifiShare ispId={selectedIspId} caption={t("Lien invité Wi‑Fi", "Wi‑Fi guest link")} t={t} />
           </div>
         ) : null}
 

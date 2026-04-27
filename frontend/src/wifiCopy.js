@@ -42,7 +42,13 @@ const STR = {
     contactPhone: "Téléphone",
     contactEmail: "E-mail",
     contactAddress: "Adresse",
-    mcbuleliFooter: "Propulsé par McBuleli — plateforme de gestion pour opérateurs et FAI."
+    mcbuleliFooter: "Propulsé par McBuleli — plateforme de gestion pour opérateurs et FAI.",
+    captiveTitle: "Session hotspot (paramètres de redirection)",
+    captiveIp: "IP",
+    captiveRouter: "Routeur / site",
+    captiveMac: "MAC",
+    captiveHelp:
+      "Ces informations viennent de l’URL (redirection portail captif). Elles sont conservées pendant l’achat."
   },
   en: {
     eyebrow: "Guest Wi‑Fi",
@@ -87,7 +93,12 @@ const STR = {
     contactPhone: "Phone",
     contactEmail: "Email",
     contactAddress: "Address",
-    mcbuleliFooter: "Powered by McBuleli — operations platform for ISPs and providers."
+    mcbuleliFooter: "Powered by McBuleli — operations platform for ISPs and providers.",
+    captiveTitle: "Hotspot session (redirect parameters)",
+    captiveIp: "IP",
+    captiveRouter: "Router / site",
+    captiveMac: "MAC",
+    captiveHelp: "Taken from the URL (captive portal redirect). Kept through checkout."
   }
 };
 

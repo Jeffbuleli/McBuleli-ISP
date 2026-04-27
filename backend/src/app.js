@@ -967,10 +967,18 @@ app.get("/api/public/wifi-plans", rlPublicRead, async (req, res) => {
 });
 
 app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
-  const { ispId, planId, phoneNumber, networkKey } = req.body || {};
+  const { ispId, planId, phoneNumber, networkKey, captiveContext } = req.body || {};
   if (!ispId || !planId || !phoneNumber || !networkKey) {
     return res.status(400).json({ message: "ispId, planId, phoneNumber and networkKey are required" });
   }
+  const captive =
+    captiveContext && typeof captiveContext === "object"
+      ? {
+          ip: captiveContext.ip != null ? String(captiveContext.ip).slice(0, 64) : null,
+          router: captiveContext.router != null ? String(captiveContext.router).slice(0, 64) : null,
+          mac: captiveContext.mac != null ? String(captiveContext.mac).slice(0, 64) : null
+        }
+      : null;
   const pawapayProvider = resolveWifiGuestPawapayProvider(networkKey);
   if (!pawapayProvider) {
     return res.status(400).json({ message: "networkKey must be one of: orange, airtel, mpesa" });
@@ -1027,7 +1035,14 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
       action: "wifi_guest.purchase_initiated",
       entityType: "wifi_guest_purchase",
       entityId: depositId,
-      details: { planId, networkKey }
+      details: {
+        planId,
+        networkKey,
+        captive:
+          captive && (captive.ip || captive.router || captive.mac)
+            ? { ip: captive.ip || undefined, router: captive.router || undefined, mac: captive.mac || undefined }
+            : undefined
+      }
     });
     return res.status(201).json({
       depositId,

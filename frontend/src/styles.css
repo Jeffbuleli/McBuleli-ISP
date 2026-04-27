@@ -806,6 +806,43 @@ button.btn-secondary-outline:hover:not(:disabled) {
   color: var(--mb-muted);
 }
 
+.guest-wifi-share__section-label {
+  margin: 0 0 6px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--mb-primary);
+}
+
+.guest-wifi-share__code-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.guest-wifi-share__url--multiline {
+  white-space: pre-wrap;
+  width: 100%;
+  max-width: 100%;
+}
+
+.wifi-captive-banner {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(93, 64, 55, 0.14);
+  background: rgba(231, 245, 230, 0.45);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.wifi-captive-banner strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--mb-primary);
+}
+
 .app-footer {
   margin-top: 40px;
   padding-top: 20px;
