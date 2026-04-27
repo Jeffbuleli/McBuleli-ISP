@@ -3501,6 +3501,52 @@ a.public-footer-card:hover {
   color: #c62828;
 }
 
+.expense-status-badge--locked {
+  background: #eceff1;
+  border-color: #90a4ae;
+  color: #455a64;
+}
+
+.accounting-closures-panel {
+  margin-bottom: 20px;
+  padding: 16px 18px;
+  border: 1px solid rgba(93, 64, 55, 0.18);
+  border-radius: var(--mb-radius, 14px);
+  background: rgba(255, 253, 249, 0.9);
+}
+
+.accounting-closures-panel h3 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  color: var(--mb-primary);
+}
+
+.accounting-close-form {
+  margin-top: 12px;
+}
+
+.accounting-closures-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.accounting-closures-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--mb-border);
+  font-size: 0.9rem;
+}
+
+.accounting-closures-list li:last-child {
+  border-bottom: none;
+}
+
+.accounting-closure-reopen {
+  margin-left: 10px;
+  margin-top: 6px;
+  font-size: 0.82rem;
+}
+
 .expenses-row-actions {
   display: flex;
   flex-wrap: wrap;

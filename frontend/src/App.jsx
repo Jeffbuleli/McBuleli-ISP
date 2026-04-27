@@ -498,7 +498,8 @@ const LOAD_FAILURE_LABELS_FR = {
   vouchers: "bons",
   telemetry: "télémétrie",
   radiusAccounting: "compta RADIUS",
-  expenses: "dépenses"
+  expenses: "dépenses",
+  accountingPeriodClosures: "clôtures comptables"
 };
 
 function App() {
@@ -559,6 +560,12 @@ function App() {
     fieldAgentId: "",
     agentPayoutPercent: "",
     revenueBasisUsd: ""
+  });
+  const [accountingPeriodClosures, setAccountingPeriodClosures] = useState([]);
+  const [periodCloseForm, setPeriodCloseForm] = useState({
+    periodStart: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
+    periodEnd: new Date().toISOString().slice(0, 10),
+    note: ""
   });
   const [plans, setPlans] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
@@ -894,70 +901,75 @@ function App() {
           i = take(settled, 4, [], "invoices");
           setExpenses([]);
           setExpenseSummary(null);
+          setAccountingPeriodClosures([]);
           setWithdrawals([]);
         } else {
-          const settled = await Promise.allSettled([
-            api.getDashboard(activeIspId),
-            api.getCustomers(activeIspId),
-            api.getUsers(activeIspId),
-            api.getPlans(activeIspId),
-            api.getSubscriptions(activeIspId),
-            api.getInvoices(activeIspId),
-            api.getPaymentMethods(activeIspId),
-            api.getNotificationProviders(activeIspId),
-            api.getNetworkNodes(activeIspId),
-            api.getProvisioningEvents(activeIspId),
-            api.getFreeRadiusSyncEvents(activeIspId),
-            api.getRoleProfiles(activeIspId),
-            api.getPlatformSubscriptions(activeIspId),
+        const settled = await Promise.allSettled([
+          api.getDashboard(activeIspId),
+          api.getCustomers(activeIspId),
+          api.getUsers(activeIspId),
+          api.getPlans(activeIspId),
+          api.getSubscriptions(activeIspId),
+          api.getInvoices(activeIspId),
+          api.getPaymentMethods(activeIspId),
+          api.getNotificationProviders(activeIspId),
+          api.getNetworkNodes(activeIspId),
+          api.getProvisioningEvents(activeIspId),
+          api.getFreeRadiusSyncEvents(activeIspId),
+          api.getRoleProfiles(activeIspId),
+          api.getPlatformSubscriptions(activeIspId),
             currentUser.role === "system_owner" && activeIspId
               ? api.getAuditLogs(activeIspId)
               : Promise.resolve([]),
-            api.getNotificationOutbox(activeIspId),
-            api.getBranding(activeIspId),
-            api.getNetworkStats(activeIspId, statsPeriod.from, statsPeriod.to),
-            api.getTidSubmissions(activeIspId),
-            api.getTidConflicts(activeIspId),
-            api.getVouchers(activeIspId),
-            api.getTelemetrySnapshots(activeIspId),
-            api.getRadiusAccountingIngest(activeIspId, 80),
-            api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to),
-            api.getWithdrawals(activeIspId)
-          ]);
-          dash = take(settled, 0, {}, "dashboard");
-          c = take(settled, 1, [], "customers");
-          u = take(settled, 2, [], "users");
-          p = take(settled, 3, [], "plans");
-          s = take(settled, 4, [], "subscriptions");
-          i = take(settled, 5, [], "invoices");
-          payMethods = take(settled, 6, [], "paymentMethods");
-          notifProviders = take(settled, 7, [], "notificationProviders");
-          nodes = take(settled, 8, [], "networkNodes");
-          provEvents = take(settled, 9, [], "provisioningEvents");
-          radiusEvents = take(settled, 10, [], "radiusSyncEvents");
-          roles = take(settled, 11, [], "roleProfiles");
-          platformSubs = take(settled, 12, [], "platformSubscriptions");
-          logs = take(settled, 13, [], "auditLogs");
-          outbox = take(settled, 14, [], "notificationOutbox");
-          brand = take(settled, 15, null, "branding");
-          stats = take(settled, 16, null, "networkStats");
-          tids = take(settled, 17, [], "tidSubmissions");
-          conflicts = take(settled, 18, [], "tidConflicts");
-          vchs = take(settled, 19, [], "vouchers");
-          telemetry = take(settled, 20, [], "telemetry");
-          radiusAcct = take(settled, 21, [], "radiusAccounting");
-          const expData = take(settled, 22, { items: [], summary: null }, "expenses");
-          withdrawalData = take(settled, 23, { cashbox: null, items: [] }, "withdrawals");
-          setExpenses(Array.isArray(expData?.items) ? expData.items : []);
-          setExpenseSummary(expData?.summary || null);
-          setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
-          if (withdrawalData?.cashbox) {
-            dash = { ...dash, cashbox: withdrawalData.cashbox };
+          api.getNotificationOutbox(activeIspId),
+          api.getBranding(activeIspId),
+          api.getNetworkStats(activeIspId, statsPeriod.from, statsPeriod.to),
+          api.getTidSubmissions(activeIspId),
+          api.getTidConflicts(activeIspId),
+          api.getVouchers(activeIspId),
+          api.getTelemetrySnapshots(activeIspId),
+          api.getRadiusAccountingIngest(activeIspId, 80),
+          api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to),
+          api.getAccountingPeriodClosures(activeIspId),
+          api.getWithdrawals(activeIspId)
+        ]);
+        dash = take(settled, 0, {}, "dashboard");
+        c = take(settled, 1, [], "customers");
+        u = take(settled, 2, [], "users");
+        p = take(settled, 3, [], "plans");
+        s = take(settled, 4, [], "subscriptions");
+        i = take(settled, 5, [], "invoices");
+        payMethods = take(settled, 6, [], "paymentMethods");
+        notifProviders = take(settled, 7, [], "notificationProviders");
+        nodes = take(settled, 8, [], "networkNodes");
+        provEvents = take(settled, 9, [], "provisioningEvents");
+        radiusEvents = take(settled, 10, [], "radiusSyncEvents");
+        roles = take(settled, 11, [], "roleProfiles");
+        platformSubs = take(settled, 12, [], "platformSubscriptions");
+        logs = take(settled, 13, [], "auditLogs");
+        outbox = take(settled, 14, [], "notificationOutbox");
+        brand = take(settled, 15, null, "branding");
+        stats = take(settled, 16, null, "networkStats");
+        tids = take(settled, 17, [], "tidSubmissions");
+        conflicts = take(settled, 18, [], "tidConflicts");
+        vchs = take(settled, 19, [], "vouchers");
+        telemetry = take(settled, 20, [], "telemetry");
+        radiusAcct = take(settled, 21, [], "radiusAccounting");
+        const expData = take(settled, 22, { items: [], summary: null }, "expenses");
+        const closuresList = take(settled, 23, [], "accountingPeriodClosures");
+        withdrawalData = take(settled, 24, { cashbox: null, items: [] }, "withdrawals");
+        setExpenses(Array.isArray(expData?.items) ? expData.items : []);
+        setExpenseSummary(expData?.summary || null);
+        setAccountingPeriodClosures(Array.isArray(closuresList) ? closuresList : []);
+        setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
+        if (withdrawalData?.cashbox) {
+          dash = { ...dash, cashbox: withdrawalData.cashbox };
           }
         }
       } else {
         setExpenses([]);
         setExpenseSummary(null);
+        setAccountingPeriodClosures([]);
         setWithdrawals([]);
       }
 
@@ -1055,7 +1067,7 @@ function App() {
         setUser(null);
         if (typeof window !== "undefined") localStorage.removeItem("token");
       } else {
-        setError(err.message);
+      setError(err.message);
       }
     } finally {
       setLoading(false);
@@ -1592,6 +1604,46 @@ function App() {
     }
   }
 
+  async function onCloseAccountingPeriod(e) {
+    e.preventDefault();
+    if (!selectedIspId) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.createAccountingPeriodClosure(selectedIspId, {
+        periodStart: periodCloseForm.periodStart,
+        periodEnd: periodCloseForm.periodEnd,
+        note: periodCloseForm.note
+      });
+      setNotice(
+        "Période clôturée — les dépenses qui chevauchent ces dates ne pourront plus être créées, modifiées ou supprimées jusqu'à réouverture."
+      );
+      await refresh();
+    } catch (err) {
+      setError(err.message || "Impossible d'enregistrer la clôture comptable.");
+    }
+  }
+
+  async function onReopenAccountingPeriod(closureId) {
+    if (!selectedIspId || !closureId) return;
+    if (
+      !window.confirm(
+        "Lever cette clôture ? Les dépenses sur la période concernée redeviennent modifiables. Cette action est tracée dans le journal d'audit."
+      )
+    ) {
+      return;
+    }
+    setError("");
+    setNotice("");
+    try {
+      await api.deleteAccountingPeriodClosure(selectedIspId, closureId);
+      setNotice("Clôture levée.");
+      await refresh();
+    } catch (err) {
+      setError(err.message || "Impossible de lever la clôture.");
+    }
+  }
+
   async function onIssuePortalToken(e) {
     e.preventDefault();
     setError("");
@@ -1799,7 +1851,7 @@ function App() {
         }));
       }
       setNotice(t("Image de marque enregistrée.", "Branding saved."));
-      refresh();
+    refresh();
     } catch (err) {
       setError(err.message || t("Échec de l'enregistrement.", "Save failed."));
     }
@@ -2503,7 +2555,7 @@ function App() {
             <div className="panel auth-simple-panel" role="dialog" aria-label={isEn ? "Choose workspace" : "Choisir l'entreprise"}>
               <h2 className="auth-simple-panel-title">{isEn ? "Your workspace" : "Votre entreprise"}</h2>
               <p className="app-meta">
-                {isEn
+              {isEn
                   ? "This account is linked to several operators. Pick one to continue."
                   : "Ce compte est rattaché à plusieurs opérateurs. Choisissez l'espace à ouvrir."}
               </p>
@@ -2520,7 +2572,7 @@ function App() {
                     </button>
                   </li>
                 ))}
-              </ul>
+            </ul>
               <button
                 type="button"
                 className="btn-secondary-outline"
@@ -2530,33 +2582,33 @@ function App() {
                 }}
               >
                 {isEn ? "Back" : "Retour"}
-              </button>
-            </div>
+                </button>
+              </div>
           ) : null}
-          {mfaLogin ? (
+            {mfaLogin ? (
             <form className="panel auth-simple-panel" onSubmit={onVerifyLoginMfa}>
               <h2 className="auth-simple-panel-title">{isEn ? "Security code" : "Code de sécurité"}</h2>
               <p className="app-meta">
-                {isEn
+                  {isEn
                   ? "Enter the 6-digit code from your authenticator or notification."
                   : "Saisissez le code à 6 chiffres (application ou notification)."}
-              </p>
-              {mfaLogin.devCode ? (
+                </p>
+                {mfaLogin.devCode ? (
                 <p className="app-meta">
                   {isEn ? "Dev code:" : "Code dev :"} <code>{mfaLogin.devCode}</code>
-                </p>
-              ) : null}
-              <input
+                  </p>
+                ) : null}
+                <input
                 placeholder={isEn ? "6-digit code" : "Code à 6 chiffres"}
-                value={mfaCode}
-                onChange={(e) => setMfaCode(e.target.value)}
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
                 autoComplete="one-time-code"
               />
               <button type="submit">{isEn ? "Continue" : "Continuer"}</button>
               <button type="button" className="btn-secondary-outline" onClick={() => setMfaLogin(null)}>
                 {isEn ? "Cancel" : "Annuler"}
-              </button>
-            </form>
+                </button>
+              </form>
           ) : null}
           {!loginWorkspaces && !mfaLogin && loginAuthStep === "forgot" ? (
             <form className="panel auth-simple-panel" onSubmit={onForgotPassword}>
@@ -2591,10 +2643,10 @@ function App() {
           {!loginWorkspaces && !mfaLogin && loginAuthStep === "reset" ? (
             <form className="panel auth-simple-panel" onSubmit={onResetPasswordSubmit}>
               <h2 className="auth-simple-panel-title">{isEn ? "New password" : "Nouveau mot de passe"}</h2>
-              <p className="app-meta">
+                <p className="app-meta">
                 {isEn ? "Choose a new password for your account." : "Choisissez un nouveau mot de passe."}
-              </p>
-              <input
+                </p>
+                <input
                 type="password"
                 autoComplete="new-password"
                 placeholder={isEn ? "New password (min. 6)" : "Nouveau mot de passe (min. 6)"}
@@ -2625,19 +2677,19 @@ function App() {
                 type="email"
                 autoComplete="username"
                 placeholder={isEn ? "Email" : "E-mail"}
-                value={loginForm.email}
+                  value={loginForm.email}
                 onChange={(e) => {
                   setLoginWorkspaces(null);
                   setLoginForm({ ...loginForm, email: e.target.value });
                 }}
                 required
-              />
-              <input
-                type="password"
+                />
+                <input
+                  type="password"
                 autoComplete="current-password"
                 placeholder={isEn ? "Password" : "Mot de passe"}
-                value={loginForm.password}
-                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
                 required
               />
               <button type="submit">{isEn ? "Sign in" : "Se connecter"}</button>
@@ -2656,8 +2708,8 @@ function App() {
               <p className="auth-simple-footer-links">
                 {isEn ? "No account yet?" : "Pas encore de compte ?"}{" "}
                 <a href="/signup">{isEn ? "Create one" : "Créer un compte"}</a>
-              </p>
-            </form>
+                </p>
+              </form>
           ) : null}
           <a className="auth-simple-back" href="/">
             <IconArrowLeft width={20} height={20} aria-hidden />
@@ -2681,32 +2733,32 @@ function App() {
           />
           <h1 className="auth-simple-title">{tenantSurfaceLogoAlt}</h1>
           <p className="auth-simple-sub">
-            {t(
-              "Vous devez mettre à jour votre mot de passe avant de continuer.",
-              "You must update your password before continuing."
-            )}
-          </p>
+              {t(
+                "Vous devez mettre à jour votre mot de passe avant de continuer.",
+                "You must update your password before continuing."
+              )}
+            </p>
           {error ? <p className="error">{error}</p> : null}
           <form className="panel auth-simple-panel" onSubmit={onChangePassword}>
             <h2 className="auth-simple-panel-title">{t("Nouveau mot de passe", "Change password")}</h2>
-            <input
-              type="password"
+          <input
+            type="password"
               autoComplete="current-password"
-              placeholder={t("Mot de passe actuel", "Current password")}
-              value={passwordForm.currentPassword}
-              onChange={(e) =>
-                setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
-              }
-            />
-            <input
-              type="password"
+            placeholder={t("Mot de passe actuel", "Current password")}
+            value={passwordForm.currentPassword}
+            onChange={(e) =>
+              setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
+            }
+          />
+          <input
+            type="password"
               autoComplete="new-password"
-              placeholder={t("Nouveau mot de passe", "New password")}
-              value={passwordForm.newPassword}
-              onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-            />
-            <button type="submit">{t("Enregistrer", "Save")}</button>
-          </form>
+            placeholder={t("Nouveau mot de passe", "New password")}
+            value={passwordForm.newPassword}
+            onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+          />
+          <button type="submit">{t("Enregistrer", "Save")}</button>
+        </form>
         </div>
       </main>
     );
@@ -2728,9 +2780,9 @@ function App() {
   return (
     <main className="container app-shell">
       <div className="dashboard-sticky-stack">
-        <header className="app-header app-header--dashboard">
+      <header className="app-header app-header--dashboard">
           <div className="dashboard-header-top">
-            <div className="dashboard-brandline">
+        <div className="dashboard-brandline">
               <img
                 className={
                   dashboardTenantLogoSrc ? "dashboard-logo dashboard-logo--tenant" : "dashboard-logo dashboard-logo--mcbuleli"
@@ -2748,9 +2800,9 @@ function App() {
                 <p className="app-meta dashboard-user-role">
                   <strong>{user.fullName}</strong>
                   <span className="dashboard-role-paren"> ({formatStaffRole(user.role, isEn)})</span>
-                </p>
-              </div>
-            </div>
+            </p>
+          </div>
+        </div>
             <div className="dashboard-header-ad">
               {user?.dashboardBanners?.length ? (
                 <DashboardBannerCarousel slides={user.dashboardBanners} layout="inline" />
@@ -2785,11 +2837,11 @@ function App() {
                 aria-label={t("Déconnexion", "Logout")}
               >
                 <IconSignOut width={22} height={22} />
-              </button>
-            </div>
+          </button>
+        </div>
           </div>
           <DashboardHeaderAnnouncements items={ispAnnouncements} t={t} isFieldAgent={isFieldAgent} />
-        </header>
+      </header>
       </div>
       <div
         className={`dashboard-layout${
@@ -4368,12 +4420,12 @@ function App() {
               "Platform owner only: action history for the selected ISP."
             )}
           </p>
-          {auditLogs.slice(0, 12).map((log) => (
-            <p key={log.id}>
+        {auditLogs.slice(0, 12).map((log) => (
+          <p key={log.id}>
               {new Date(log.createdAt).toLocaleString()} — {log.action} ({log.entityType})
-            </p>
-          ))}
-        </section>
+          </p>
+        ))}
+      </section>
       ) : null}
 
       <section className="panel">
@@ -4529,10 +4581,10 @@ function App() {
 
       {!isFieldAgent &&
         (isPlatformSuperRole(user.role) ||
-          user.role === "company_manager" ||
-          user.role === "isp_admin" ||
-          user.role === "billing_agent" ||
-          user.role === "noc_operator") && (
+        user.role === "company_manager" ||
+        user.role === "isp_admin" ||
+        user.role === "billing_agent" ||
+        user.role === "noc_operator") && (
         <section className="expenses-section">
           <h2>Dépenses &amp; suivi des fonds</h2>
           <p className="expenses-lead">
@@ -4548,8 +4600,9 @@ function App() {
             (encaissements − dépenses). Si <strong>au moins deux validateurs</strong> sont inscrits sur l&apos;espace,
             le demandeur ne peut pas approuver ni rejeter sa propre demande. Avec un seul validateur, l&apos;auto-approbation
             reste possible (voir journal d&apos;audit). <strong>Rejet :</strong> motif optionnel ; ligne retirée des
-            totaux jusqu&apos;à nouvelle soumission. Les rôles facturation et NOC consultent ; ils ne valident pas.
-            Création, approbation, rejet et suppression tracent une opération d&apos;audit.
+            totaux jusqu&apos;à nouvelle soumission.             Les rôles facturation et NOC consultent ; ils ne valident pas.
+            Création, approbation, rejet et suppression tracent une opération d&apos;audit. Les{" "}
+            <strong>clôtures de période</strong> (bloc ci-dessous) figent les dépenses après inventaire ou révision.
             {user.role === "system_owner" ? (
               <>
                 {" "}
@@ -4557,6 +4610,95 @@ function App() {
               </>
             ) : null}
           </p>
+          <div className="panel accounting-closures-panel">
+            <h3>Clôtures comptables (révision / inventaire)</h3>
+            <p className="app-meta" style={{ maxWidth: "52rem" }}>
+              Après inventaire ou contrôle, enregistrez une <strong>clôture</strong> sur une plage de dates. Toute
+              dépense dont la période <strong>chevauche</strong> une clôture est figée : pas de nouvelle saisie,
+              approbation, rejet ni suppression tant que la clôture existe. Aucune dépense « en attente » ne doit
+              rester sur la plage au moment de la clôture. La levée d&apos;une clôture est possible pour correction
+              exceptionnelle et est inscrite au journal d&apos;audit.
+            </p>
+            {(isPlatformSuperRole(user.role) ||
+              user.role === "company_manager" ||
+              user.role === "isp_admin") && (
+              <form className="accounting-close-form" onSubmit={onCloseAccountingPeriod}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
+                  <label style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+                    Du (clôture)
+                    <input
+                      type="date"
+                      style={{ display: "block", marginTop: 4 }}
+                      value={periodCloseForm.periodStart}
+                      onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, periodStart: e.target.value })}
+                    />
+                  </label>
+                  <label style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+                    Au (inclus)
+                    <input
+                      type="date"
+                      style={{ display: "block", marginTop: 4 }}
+                      value={periodCloseForm.periodEnd}
+                      onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, periodEnd: e.target.value })}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-secondary-outline"
+                    onClick={() =>
+                      setPeriodCloseForm({
+                        ...periodCloseForm,
+                        periodStart: expenseFilter.from,
+                        periodEnd: expenseFilter.to
+                      })
+                    }
+                  >
+                    Aligner sur le filtre du rapport
+                  </button>
+                </div>
+                <input
+                  placeholder="Référence inventaire ou commentaire (facultatif)"
+                  value={periodCloseForm.note}
+                  onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, note: e.target.value })}
+                  style={{ marginTop: 10, width: "100%", maxWidth: "36rem" }}
+                />
+                <button type="submit" disabled={!selectedIspId} style={{ marginTop: 12 }}>
+                  Clôturer cette période
+                </button>
+              </form>
+            )}
+            <h4 style={{ marginTop: 18, marginBottom: 8, fontSize: "0.95rem" }}>Clôtures enregistrées</h4>
+            {accountingPeriodClosures.length === 0 ? (
+              <p className="app-meta">Aucune clôture pour cet espace — toutes les périodes sont ouvertes à la saisie.</p>
+            ) : (
+              <ul className="accounting-closures-list">
+                {accountingPeriodClosures.map((c) => (
+                  <li key={c.id}>
+                    <strong>
+                      {c.periodStart} → {c.periodEnd}
+                    </strong>
+                    {c.note ? ` — ${c.note}` : ""}
+                    <span className="app-meta">
+                      {" "}
+                      (clôturée le {c.closedAt ? new Date(c.closedAt).toLocaleString() : "—"}
+                      {c.closedByName ? ` · par ${c.closedByName}` : ""})
+                    </span>
+                    {(isPlatformSuperRole(user.role) ||
+                      user.role === "company_manager" ||
+                      user.role === "isp_admin") && (
+                      <button
+                        type="button"
+                        className="btn-secondary-outline accounting-closure-reopen"
+                        onClick={() => onReopenAccountingPeriod(c.id)}
+                      >
+                        Lever la clôture
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <div className="expenses-filter">
             <label>
               Du
@@ -4751,9 +4893,9 @@ function App() {
                 expenses.map((ex) => {
                   const st = ex.status || "pending";
                   return (
-                    <div key={ex.id} className="expenses-row">
+                  <div key={ex.id} className="expenses-row">
                       <div className="expenses-row-title">
-                        <strong>
+                      <strong>
                           {(ex.amountUsd ?? 0).toLocaleString(undefined, {
                             style: "currency",
                             currency: "USD"
@@ -4762,23 +4904,26 @@ function App() {
                         <span className={`expense-status-badge expense-status-badge--${st}`}>
                           {expenseApprovalStatusLabel(st)}
                         </span>
+                        {ex.periodClosed ? (
+                          <span className="expense-status-badge expense-status-badge--locked">Période clôturée</span>
+                        ) : null}
                         <span className="expenses-row-category">— {expenseCategoryLabel(ex.category)}</span>
-                      </div>
-                      {ex.description ? <div>{ex.description}</div> : null}
-                      <div className="expenses-row-meta">
-                        Période {ex.periodStart} → {ex.periodEnd}
-                        {ex.fieldAgentName ? ` · Agent : ${ex.fieldAgentName}` : ""}
-                        {ex.category === "field_agent_percentage" && ex.agentPayoutPercent != null
-                          ? ` · ${ex.agentPayoutPercent}%`
-                          : ""}
-                        {ex.revenueBasisUsd != null
-                          ? ` · Base CA ${Number(ex.revenueBasisUsd).toLocaleString(undefined, {
-                              style: "currency",
-                              currency: "USD"
-                            })}`
-                          : ""}
-                        {ex.createdByName ? ` · Saisi par ${ex.createdByName}` : ""}
-                      </div>
+                    </div>
+                    {ex.description ? <div>{ex.description}</div> : null}
+                    <div className="expenses-row-meta">
+                      Période {ex.periodStart} → {ex.periodEnd}
+                      {ex.fieldAgentName ? ` · Agent : ${ex.fieldAgentName}` : ""}
+                      {ex.category === "field_agent_percentage" && ex.agentPayoutPercent != null
+                        ? ` · ${ex.agentPayoutPercent}%`
+                        : ""}
+                      {ex.revenueBasisUsd != null
+                        ? ` · Base CA ${Number(ex.revenueBasisUsd).toLocaleString(undefined, {
+                            style: "currency",
+                            currency: "USD"
+                          })}`
+                        : ""}
+                      {ex.createdByName ? ` · Saisi par ${ex.createdByName}` : ""}
+                    </div>
                       {st === "approved" && (ex.approvedByName || ex.approvedAt) ? (
                         <div className="expenses-row-meta">
                           Approuvé
@@ -4799,6 +4944,12 @@ function App() {
                       {ex.approvalBlockedSelf && st === "pending" ? (
                         <p className="app-meta expenses-row-pending-hint">
                           En attente d&apos;un autre validateur (vous êtes le demandeur).
+                        </p>
+                      ) : null}
+                      {ex.periodClosed ? (
+                        <p className="app-meta expenses-row-pending-hint">
+                          Cette ligne chevauche une période <strong>clôturée</strong> (inventaire / révision) : aucune
+                          action n&apos;est possible tant que la clôture n&apos;est pas levée.
                         </p>
                       ) : null}
                       <div className="expenses-row-actions">
@@ -4825,7 +4976,8 @@ function App() {
                         {(isPlatformSuperRole(user.role) ||
                           user.role === "company_manager" ||
                           user.role === "isp_admin") &&
-                          (st === "pending" || st === "rejected") && (
+                          (st === "pending" || st === "rejected") &&
+                          !ex.periodClosed && (
                           <button
                             type="button"
                             className="btn-expense-delete"
@@ -4835,7 +4987,7 @@ function App() {
                             Supprimer
                           </button>
                         )}
-                      </div>
+                  </div>
                     </div>
                   );
                 })
@@ -5321,17 +5473,17 @@ function App() {
               : ""}{" "}
             {!isFieldAgent ? (
               <>
-                {subscription.status !== "suspended" ? (
-                  <button onClick={() => onSuspendSubscription(subscription.id)}>Suspendre</button>
-                ) : (
-                  <button onClick={() => onReactivateSubscription(subscription.id)}>Réactiver</button>
-                )}{" "}
-                <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "activate")}>
-                  Sync activer
-                </button>{" "}
-                <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "suspend")}>
-                  Sync suspendre
-                </button>
+            {subscription.status !== "suspended" ? (
+              <button onClick={() => onSuspendSubscription(subscription.id)}>Suspendre</button>
+            ) : (
+              <button onClick={() => onReactivateSubscription(subscription.id)}>Réactiver</button>
+            )}{" "}
+            <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "activate")}>
+              Sync activer
+            </button>{" "}
+            <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "suspend")}>
+              Sync suspendre
+            </button>
               </>
             ) : null}
           </p>

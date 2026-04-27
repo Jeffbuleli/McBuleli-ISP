@@ -713,6 +713,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ...payload, ispId })
     }),
+  getAccountingPeriodClosures: (ispId) => request(withIsp("/accounting/period-closures", ispId)),
+  createAccountingPeriodClosure: (ispId, payload) =>
+    request(withIsp("/accounting/period-closures", ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
+  deleteAccountingPeriodClosure: (ispId, closureId) =>
+    request(withIsp(`/accounting/period-closures/${encodeURIComponent(closureId)}`, ispId), {
+      method: "DELETE"
+    }),
   exportVouchers: (ispId) => request(withIsp("/vouchers/export", ispId)),
   redeemVoucher: (payload) =>
     request("/vouchers/redeem", {

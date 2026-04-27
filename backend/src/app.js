@@ -5902,15 +5902,40 @@ function attachExpenseWorkflowFlags(row, actorUserId, approverCount, actorRole) 
   const sameAsCreator = Boolean(createdBy && createdBy === actorUserId);
   const blockedSelf = multi && sameAsCreator;
   const isApprover = ["super_admin", "company_manager", "isp_admin"].includes(actorRole);
+  const periodClosed = Boolean(row.periodClosed);
   const canApprove =
-    isApprover && !blockedSelf && (status === "pending" || status === "rejected");
-  const canReject = isApprover && !blockedSelf && status === "pending";
+    isApprover &&
+    !blockedSelf &&
+    !periodClosed &&
+    (status === "pending" || status === "rejected");
+  const canReject = isApprover && !blockedSelf && !periodClosed && status === "pending";
   return {
     ...row,
+    periodClosed,
     canApprove,
     canReject,
     approvalBlockedSelf: blockedSelf
   };
+}
+
+async function findAccountingClosureOverlappingExpensePeriod(ispId, periodStart, periodEnd) {
+  const ps = String(periodStart || "").slice(0, 10);
+  const pe = String(periodEnd || "").slice(0, 10);
+  if (!ps || !pe || pe < ps) return null;
+  const r = await query(
+    `SELECT id, period_start AS "periodStart", period_end AS "periodEnd", note
+     FROM isp_accounting_period_closures
+     WHERE isp_id = $1 AND period_start <= $3::date AND period_end >= $2::date
+     LIMIT 1`,
+    [ispId, ps, pe]
+  );
+  return r.rows[0] || null;
+}
+
+function closedAccountingPeriodUserMessage(closure) {
+  const a = closure.periodStart;
+  const b = closure.periodEnd;
+  return `Période comptable clôturée (révision / inventaire) du ${a} au ${b}. Aucune modification des dépenses n'est autorisée sur ce créneau. Rouvrez la clôture depuis la section « Clôtures comptables » si une correction est indispensable.`;
 }
 
 app.get(
@@ -5923,10 +5948,10 @@ app.get(
     const from = String(req.query.from || "").slice(0, 10) || new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
     const to = String(req.query.to || "").slice(0, 10) || new Date().toISOString().slice(0, 10);
     const approverCount = await countExpenseApproversForIsp(ispId);
-    const [rows, sumApproved, sumPending, sumPay] = await Promise.all([
+    const [rows, sumApproved, sumPending, sumPay, closuresRes] = await Promise.all([
       query(
         `SELECT e.id, e.isp_id AS "ispId", e.amount_usd AS "amountUsd", e.category, e.description,
-                e.period_start AS "periodStart", e.period_end AS "periodEnd",
+                e.period_start::text AS "periodStart", e.period_end::text AS "periodEnd",
                 e.field_agent_id AS "fieldAgentId", u.full_name AS "fieldAgentName",
                 e.agent_payout_type AS "agentPayoutType", e.agent_payout_percent AS "agentPayoutPercent",
                 e.revenue_basis_usd AS "revenueBasisUsd", e.metadata, e.created_at AS "createdAt",
@@ -5963,11 +5988,26 @@ app.get(
          WHERE i.isp_id = $1 AND p.status = 'confirmed'
          AND p.paid_at::date BETWEEN $2::date AND $3::date`,
         [ispId, from, to]
+      ),
+      query(
+        `SELECT period_start::text AS "periodStart", period_end::text AS "periodEnd"
+         FROM isp_accounting_period_closures WHERE isp_id = $1`,
+        [ispId]
       )
     ]);
-    const items = rows.rows.map((row) =>
-      attachExpenseWorkflowFlags(row, req.user.sub, approverCount, req.user.role)
-    );
+    const closureRows = closuresRes.rows || [];
+    const items = rows.rows.map((row) => {
+      const locked = closureRows.some(
+        (c) =>
+          String(c.periodStart) <= String(row.periodEnd) && String(c.periodEnd) >= String(row.periodStart)
+      );
+      return attachExpenseWorkflowFlags(
+        { ...row, periodClosed: locked },
+        req.user.sub,
+        approverCount,
+        req.user.role
+      );
+    });
     return res.json({
       items,
       summary: {
@@ -6013,6 +6053,10 @@ app.post(
     const ps = String(periodStart).slice(0, 10);
     const pe = String(periodEnd).slice(0, 10);
     if (pe < ps) return res.status(400).json({ message: "periodEnd must be on or after periodStart" });
+    const closureHit = await findAccountingClosureOverlappingExpensePeriod(ispId, ps, pe);
+    if (closureHit) {
+      return res.status(409).json({ message: closedAccountingPeriodUserMessage(closureHit) });
+    }
     let faid = fieldAgentId || null;
     if (faid) {
       const chk = await query(
@@ -6113,7 +6157,8 @@ app.post(
     if (!isUuidString(expenseId)) return res.status(400).json({ message: "Identifiant de dépense invalide." });
     const approverCount = await countExpenseApproversForIsp(ispId);
     const existing = await query(
-      `SELECT id, created_by AS "createdBy", expense_status AS "status"
+      `SELECT id, created_by AS "createdBy", expense_status AS "status",
+              period_start::text AS "periodStart", period_end::text AS "periodEnd"
        FROM isp_expenses WHERE id = $1 AND isp_id = $2`,
       [expenseId, ispId]
     );
@@ -6131,12 +6176,20 @@ app.post(
           "Au moins deux validateurs sont configurés : une autre personne doit approuver cette dépense (pas le demandeur)."
       });
     }
+    const closureApr = await findAccountingClosureOverlappingExpensePeriod(
+      ispId,
+      ex.periodStart,
+      ex.periodEnd
+    );
+    if (closureApr) {
+      return res.status(409).json({ message: closedAccountingPeriodUserMessage(closureApr) });
+    }
     const updated = await query(
       `UPDATE isp_expenses SET expense_status = 'approved', approved_by = $2, approved_at = NOW(),
         rejected_by = NULL, rejected_at = NULL, rejection_note = NULL
        WHERE id = $1 AND isp_id = $3
        RETURNING id, isp_id AS "ispId", amount_usd AS "amountUsd", category, description,
-         period_start AS "periodStart", period_end AS "periodEnd",
+         period_start::text AS "periodStart", period_end::text AS "periodEnd",
          field_agent_id AS "fieldAgentId", agent_payout_type AS "agentPayoutType",
          agent_payout_percent AS "agentPayoutPercent", revenue_basis_usd AS "revenueBasisUsd",
          metadata, created_at AS "createdAt", created_by AS "createdBy",
@@ -6167,7 +6220,8 @@ app.post(
     if (!isUuidString(expenseId)) return res.status(400).json({ message: "Identifiant de dépense invalide." });
     const approverCount = await countExpenseApproversForIsp(ispId);
     const existing = await query(
-      `SELECT id, created_by AS "createdBy", expense_status AS "status"
+      `SELECT id, created_by AS "createdBy", expense_status AS "status",
+              period_start::text AS "periodStart", period_end::text AS "periodEnd"
        FROM isp_expenses WHERE id = $1 AND isp_id = $2`,
       [expenseId, ispId]
     );
@@ -6184,13 +6238,21 @@ app.post(
           "Au moins deux validateurs : une autre personne doit rejeter ou approuver cette demande (pas le demandeur)."
       });
     }
+    const closureRej = await findAccountingClosureOverlappingExpensePeriod(
+      ispId,
+      ex.periodStart,
+      ex.periodEnd
+    );
+    if (closureRej) {
+      return res.status(409).json({ message: closedAccountingPeriodUserMessage(closureRej) });
+    }
     const rejectionNote = String(req.body?.rejectionNote || "").trim().slice(0, 2000);
     const updated = await query(
       `UPDATE isp_expenses SET expense_status = 'rejected', rejected_by = $2, rejected_at = NOW(),
         rejection_note = $3, approved_by = NULL, approved_at = NULL
        WHERE id = $1 AND isp_id = $4
        RETURNING id, isp_id AS "ispId", amount_usd AS "amountUsd", category, description,
-         period_start AS "periodStart", period_end AS "periodEnd",
+         period_start::text AS "periodStart", period_end::text AS "periodEnd",
          field_agent_id AS "fieldAgentId", agent_payout_type AS "agentPayoutType",
          agent_payout_percent AS "agentPayoutPercent", revenue_basis_usd AS "revenueBasisUsd",
          metadata, created_at AS "createdAt", created_by AS "createdBy",
@@ -6219,7 +6281,8 @@ app.delete(
     if (!ispId) return;
     const { expenseId } = req.params;
     const ex = await query(
-      `SELECT id, expense_status FROM isp_expenses WHERE id = $1 AND isp_id = $2`,
+      `SELECT id, expense_status, period_start::text AS "periodStart", period_end::text AS "periodEnd"
+       FROM isp_expenses WHERE id = $1 AND isp_id = $2`,
       [expenseId, ispId]
     );
     const row = ex.rows[0];
@@ -6228,6 +6291,14 @@ app.delete(
       return res.status(400).json({
         message: "Seules les dépenses en attente ou rejetées peuvent être supprimées. Retirez d’abord l’approbation si besoin."
       });
+    }
+    const closureDel = await findAccountingClosureOverlappingExpensePeriod(
+      ispId,
+      row.periodStart,
+      row.periodEnd
+    );
+    if (closureDel) {
+      return res.status(409).json({ message: closedAccountingPeriodUserMessage(closureDel) });
     }
     await query("DELETE FROM isp_expenses WHERE id = $1", [expenseId]);
     await logAudit({
@@ -6239,6 +6310,121 @@ app.delete(
       details: {}
     });
     return res.json({ message: "Deleted" });
+  }
+);
+
+app.get(
+  "/api/accounting/period-closures",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "noc_operator"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const r = await query(
+      `SELECT c.id, c.isp_id AS "ispId", c.period_start::text AS "periodStart", c.period_end::text AS "periodEnd",
+              c.note, c.closed_at AS "closedAt", c.closed_by AS "closedBy", u.full_name AS "closedByName"
+       FROM isp_accounting_period_closures c
+       LEFT JOIN users u ON u.id = c.closed_by
+       WHERE c.isp_id = $1
+       ORDER BY c.period_start DESC
+       LIMIT 200`,
+      [ispId]
+    );
+    return res.json(r.rows);
+  }
+);
+
+app.post(
+  "/api/accounting/period-closures",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { periodStart, periodEnd, note = "" } = req.body || {};
+    const ps = String(periodStart || "").slice(0, 10);
+    const pe = String(periodEnd || "").slice(0, 10);
+    if (!ps || !pe) {
+      return res.status(400).json({ message: "periodStart et periodEnd sont requis (YYYY-MM-DD)." });
+    }
+    if (pe < ps) return res.status(400).json({ message: "periodEnd doit être postérieur ou égal à periodStart." });
+    const overlap = await query(
+      `SELECT id FROM isp_accounting_period_closures
+       WHERE isp_id = $1 AND period_start <= $3::date AND period_end >= $2::date
+       LIMIT 1`,
+      [ispId, ps, pe]
+    );
+    if (overlap.rows[0]) {
+      return res.status(409).json({
+        message: "Cette plage chevauche une clôture déjà enregistrée pour cet espace."
+      });
+    }
+    const pending = await query(
+      `SELECT EXISTS (
+        SELECT 1 FROM isp_expenses
+        WHERE isp_id = $1 AND expense_status = 'pending'
+          AND period_start <= $3::date AND period_end >= $2::date
+      ) AS x`,
+      [ispId, ps, pe]
+    );
+    if (pending.rows[0]?.x) {
+      return res.status(409).json({
+        message:
+          "Des dépenses sont encore en attente de validation sur cette période. Approuvez-les ou rejetez-les avant la clôture (inventaire / révision)."
+      });
+    }
+    try {
+      const ins = await query(
+        `INSERT INTO isp_accounting_period_closures (isp_id, period_start, period_end, note, closed_by)
+         VALUES ($1, $2::date, $3::date, $4, $5)
+         RETURNING id, isp_id AS "ispId", period_start::text AS "periodStart", period_end::text AS "periodEnd",
+           note, closed_at AS "closedAt", closed_by AS "closedBy"`,
+        [ispId, ps, pe, String(note || "").slice(0, 2000), req.user.sub]
+      );
+      const row = ins.rows[0];
+      await logAudit({
+        ispId,
+        actorUserId: req.user.sub,
+        action: "accounting.period_closed",
+        entityType: "accounting_period_closure",
+        entityId: row.id,
+        details: { periodStart: ps, periodEnd: pe }
+      });
+      return res.status(201).json(row);
+    } catch (err) {
+      if (String(err?.code) === "23505") {
+        return res.status(409).json({
+          message: "Une clôture identique (mêmes dates) existe déjà."
+        });
+      }
+      throw err;
+    }
+  }
+);
+
+app.delete(
+  "/api/accounting/period-closures/:closureId",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { closureId } = req.params;
+    if (!isUuidString(closureId)) return res.status(400).json({ message: "Identifiant de clôture invalide." });
+    const del = await query(
+      `DELETE FROM isp_accounting_period_closures WHERE id = $1 AND isp_id = $2 RETURNING id, period_start::text AS "periodStart", period_end::text AS "periodEnd"`,
+      [closureId, ispId]
+    );
+    if (!del.rows[0]) return res.status(404).json({ message: "Clôture introuvable." });
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "accounting.period_reopened",
+      entityType: "accounting_period_closure",
+      entityId: closureId,
+      details: del.rows[0]
+    });
+    return res.json({ message: "Clôture levée — les dépenses sur cette plage peuvent à nouveau être modifiées.", ...del.rows[0] });
   }
 );
 

@@ -583,6 +583,23 @@ export async function initDb() {
   `);
 
   await query(`
+    CREATE TABLE IF NOT EXISTS isp_accounting_period_closures (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      period_start DATE NOT NULL,
+      period_end DATE NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      closed_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      closed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT isp_accounting_period_closures_period_chk CHECK (period_end >= period_start),
+      UNIQUE (isp_id, period_start, period_end)
+    );
+  `);
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_isp_acct_closures_isp_period ON isp_accounting_period_closures (isp_id, period_start DESC);"
+  );
+
+  await query(`
     CREATE TABLE IF NOT EXISTS network_usage_daily (
       id UUID PRIMARY KEY,
       isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
