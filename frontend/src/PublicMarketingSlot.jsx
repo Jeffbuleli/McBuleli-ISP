@@ -41,9 +41,20 @@ export default function PublicMarketingSlot({ slot, variant = "block", t }) {
 
   if (layoutWide) {
     const plateClass = "public-marketing-slot__wide-plate" + (imgSrc ? "" : " public-marketing-slot__wide-plate--no-image");
-    const plateStyle = imgSrc ? { backgroundImage: `url(${JSON.stringify(imgSrc)})` } : undefined;
+    const bgImg =
+      imgSrc != null ? (
+        <img
+          src={imgSrc}
+          alt=""
+          className="public-marketing-slot__wide-bg"
+          loading="lazy"
+          decoding="async"
+          sizes="100vw"
+        />
+      ) : null;
     const inner = (
       <>
+        {bgImg}
         <div className="public-marketing-slot__wide-shade" aria-hidden="true" />
         <div className="public-marketing-slot__wide-content">
           {title ? <h2 className="public-marketing-slot__wide-title">{title}</h2> : null}
@@ -54,13 +65,11 @@ export default function PublicMarketingSlot({ slot, variant = "block", t }) {
     return (
       <aside className="public-marketing-slot public-marketing-slot--wide" aria-label={title || undefined}>
         {linkUrl ? (
-          <a href={linkUrl} className={plateClass} style={plateStyle} target="_blank" rel="noopener noreferrer">
+          <a href={linkUrl} className={plateClass} target="_blank" rel="noopener noreferrer">
             {inner}
           </a>
         ) : (
-          <div className={plateClass} style={plateStyle}>
-            {inner}
-          </div>
+          <div className={plateClass}>{inner}</div>
         )}
       </aside>
     );
