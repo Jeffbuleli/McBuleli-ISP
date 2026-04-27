@@ -2235,6 +2235,57 @@ button.wifi-plan-card:focus-visible {
   color: rgba(255, 255, 255, 0.72);
 }
 
+.public-footer-founder {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+@media (min-width: 520px) {
+  .public-footer-founder {
+    flex-direction: row;
+    align-items: center;
+    gap: 18px;
+  }
+}
+
+.public-footer-founder-photoWrap {
+  flex-shrink: 0;
+  padding: 4px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.public-footer-founder-photo {
+  display: block;
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  object-fit: cover;
+}
+
+@media (min-width: 900px) {
+  .public-footer-founder-photo {
+    width: 80px;
+    height: 80px;
+    border-radius: 18px;
+  }
+}
+
+.public-footer-founder-caption {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.92);
+  max-width: 22rem;
+}
+
 .public-footer-cards {
   display: grid;
   gap: 12px;

@@ -27,6 +27,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
   });
   const [editingFooterId, setEditingFooterId] = useState(null);
   const [editingFooter, setEditingFooter] = useState(null);
+  const [founder, setFounder] = useState({ caption: "", imageUrl: null });
+  const [founderCaptionEdit, setFounderCaptionEdit] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const footerCreateImageInputRef = useRef(null);
@@ -53,14 +55,23 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     setFooterItems(data.items || []);
   }, []);
 
+  const loadFounder = useCallback(async () => {
+    const data = await api.getSystemOwnerFounderShowcase();
+    setFounder({
+      caption: data.caption ?? "",
+      imageUrl: data.imageUrl ?? null
+    });
+    setFounderCaptionEdit(data.caption ?? "");
+  }, []);
+
   const loadAll = useCallback(async () => {
     setError("");
     try {
-      await Promise.all([loadPromos(), loadFooter()]);
+      await Promise.all([loadPromos(), loadFooter(), loadFounder()]);
     } catch (err) {
       setError(err.message || "Error");
     }
-  }, [loadPromos, loadFooter]);
+  }, [loadPromos, loadFooter, loadFounder]);
 
   useEffect(() => {
     loadAll();
@@ -89,6 +100,50 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     try {
       await api.deleteSystemOwnerHomePromoImage(slot);
       await loadPromos();
+    } catch (err) {
+      setError(err.message || "Error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onFounderSaveCaption() {
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await api.patchSystemOwnerFounderShowcase({ caption: founderCaptionEdit });
+      setFounder({ caption: updated.caption ?? "", imageUrl: updated.imageUrl ?? founder.imageUrl });
+      setFounderCaptionEdit(updated.caption ?? "");
+    } catch (err) {
+      setError(err.message || "Error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onFounderUpload(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await api.uploadSystemOwnerFounderShowcaseImage(f);
+      e.target.value = "";
+      setFounder({ caption: updated.caption ?? founder.caption, imageUrl: updated.imageUrl ?? null });
+    } catch (err) {
+      setError(err.message || "Error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onFounderClearImage() {
+    if (!window.confirm(t("Supprimer la photo du pied de page ?", "Remove the footer portrait photo?"))) return;
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await api.deleteSystemOwnerFounderShowcaseImage();
+      setFounder({ caption: updated.caption ?? founder.caption, imageUrl: null });
     } catch (err) {
       setError(err.message || "Error");
     } finally {
@@ -252,6 +307,59 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
         )}
       </p>
       {error ? <p className="error">{error}</p> : null}
+
+      <h3 style={{ marginTop: 20 }}>
+        {t("Signature sous le texte d’intro (pied de page)", "Signature under the footer intro line")}
+      </h3>
+      <div className="panel" style={{ marginTop: 12 }}>
+        <p className="app-meta" style={{ marginTop: 0 }}>
+          {t(
+            "Photo et ligne de texte (ex. « PDG — Jeff Buleli ») affichées sous le slogan McBuleli dans le pied de page public, alignées sur le bloc marque à gauche. Laisser vide pour ne rien afficher.",
+            "Portrait and one line (e.g. “CEO — Jeff Buleli”) shown under the McBuleli tagline in the public footer, aligned with the brand block on the left. Leave empty to hide this block."
+          )}
+        </p>
+        <label style={{ display: "block", marginBottom: 8 }}>
+          {t("Texte affiché", "Displayed line")}
+          <input
+            type="text"
+            maxLength={320}
+            value={founderCaptionEdit}
+            disabled={saving}
+            placeholder={t("ex. PDG — Jeff Buleli", "e.g. CEO — Jeff Buleli")}
+            onChange={(e) => setFounderCaptionEdit(e.target.value)}
+            style={{ display: "block", marginTop: 6, width: "100%", maxWidth: "28rem" }}
+          />
+        </label>
+        <p>
+          <button type="button" className="btn-primary" disabled={saving} onClick={onFounderSaveCaption}>
+            {t("Enregistrer le texte", "Save caption")}
+          </button>
+        </p>
+        {founder.imageUrl ? (
+          <p style={{ margin: "12px 0" }}>
+            <img src={founder.imageUrl} alt="" style={{ maxWidth: 120, maxHeight: 120, objectFit: "cover", borderRadius: 12 }} />
+          </p>
+        ) : (
+          <p className="app-meta">{t("Aucune photo pour l’instant", "No portrait uploaded yet")}</p>
+        )}
+        <label style={{ display: "block", marginBottom: 8 }}>
+          {t("Photo (carré ou portrait recommandé)", "Photo (square or portrait works best)")}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            disabled={saving}
+            onChange={onFounderUpload}
+            style={{ display: "block", marginTop: 6 }}
+          />
+        </label>
+        {founder.imageUrl ? (
+          <p>
+            <button type="button" className="btn-secondary-outline" disabled={saving} onClick={onFounderClearImage}>
+              {t("Supprimer la photo", "Remove photo")}
+            </button>
+          </p>
+        ) : null}
+      </div>
 
       <h3 style={{ marginTop: 20 }}>{t("Les trois encarts (Offres / WhatsApp)", "The three offer tiles")}</h3>
       <div className="grid">

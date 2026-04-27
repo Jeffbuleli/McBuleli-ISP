@@ -356,7 +356,11 @@ function PublicLogo() {
 
 export default function PublicSite() {
   const [uiLang, setUiLang] = useState(getStoredUiLang);
-  const [homeMarketing, setHomeMarketing] = useState({ homePromos: [], footerBlocks: [] });
+  const [homeMarketing, setHomeMarketing] = useState({
+    homePromos: [],
+    footerBlocks: [],
+    founderShowcase: { caption: "", imageUrl: null }
+  });
   const isEn = uiLang === "en";
   const t = (fr, en) => (isEn ? en : fr);
   const statRows = useMemo(
@@ -395,6 +399,11 @@ export default function PublicSite() {
     [sortedMarketingBlocks]
   );
 
+  const founderShowcase = homeMarketing.founderShowcase || { caption: "", imageUrl: null };
+  const showFounderBlock = Boolean(
+    String(founderShowcase.caption || "").trim() || founderShowcase.imageUrl
+  );
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("ui_lang", uiLang);
@@ -409,12 +418,19 @@ export default function PublicSite() {
         if (!cancelled) {
           setHomeMarketing({
             homePromos: data.homePromos || [],
-            footerBlocks: data.footerBlocks || []
+            footerBlocks: data.footerBlocks || [],
+            founderShowcase: data.founderShowcase || { caption: "", imageUrl: null }
           });
         }
       })
       .catch(() => {
-        if (!cancelled) setHomeMarketing({ homePromos: [], footerBlocks: [] });
+        if (!cancelled) {
+          setHomeMarketing({
+            homePromos: [],
+            footerBlocks: [],
+            founderShowcase: { caption: "", imageUrl: null }
+          });
+        }
       });
     return () => {
       cancelled = true;
@@ -668,6 +684,26 @@ export default function PublicSite() {
                 "Operations suite for ISPs: billing, collections, subscriber portal and network."
               )}
             </p>
+            {showFounderBlock ? (
+              <div className="public-footer-founder">
+                {founderShowcase.imageUrl ? (
+                  <div className="public-footer-founder-photoWrap">
+                    <img
+                      className="public-footer-founder-photo"
+                      src={founderShowcase.imageUrl}
+                      alt={String(founderShowcase.caption || "").trim() || ""}
+                      width={80}
+                      height={80}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </div>
+                ) : null}
+                {String(founderShowcase.caption || "").trim() ? (
+                  <p className="public-footer-founder-caption">{String(founderShowcase.caption).trim()}</p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="public-footer-cards" role="group" aria-label={t("Coordonnées", "Contact details")}>
             <a

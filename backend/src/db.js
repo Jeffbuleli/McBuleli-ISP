@@ -850,6 +850,19 @@ export async function initDb() {
   );
 
   await query(`
+    CREATE TABLE IF NOT EXISTS platform_public_founder_showcase (
+      id SMALLINT PRIMARY KEY CHECK (id = 1),
+      caption VARCHAR(320) NOT NULL DEFAULT '',
+      image_bytes BYTEA NULL,
+      image_mime TEXT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(
+    `INSERT INTO platform_public_founder_showcase (id, caption) VALUES (1, '') ON CONFLICT (id) DO NOTHING`
+  );
+
+  await query(`
     CREATE TABLE IF NOT EXISTS platform_dashboard_banners (
       slot_index SMALLINT PRIMARY KEY CHECK (slot_index >= 0 AND slot_index <= 2),
       image_url TEXT NULL,

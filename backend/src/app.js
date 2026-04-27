@@ -420,6 +420,22 @@ function mapFooterBlockRow(row) {
   };
 }
 
+function normalizeFounderCaption(raw) {
+  const s = raw != null ? String(raw).trim() : "";
+  return s.slice(0, 320);
+}
+
+function mapFounderShowcaseRow(row) {
+  if (!row) return { caption: "", imageUrl: null, updatedAt: null };
+  const mime = row.image_mime ?? row.imageMime;
+  const bytes = row.image_bytes ?? row.imageBytes;
+  return {
+    caption: normalizeFounderCaption(row.caption),
+    imageUrl: bufferToDataUrl(mime, bytes),
+    updatedAt: row.updated_at ?? row.updatedAt ?? null
+  };
+}
+
 function normalizePromoAlt(raw) {
   const s = raw != null ? String(raw).trim() : "";
   return s ? s.slice(0, 400) : null;
@@ -509,7 +525,7 @@ app.get("/api/public/platform-banner/:slot", rlPublicRead, async (req, res) => {
 
 app.get("/api/public/home-marketing", rlPublicRead, async (_req, res) => {
   try {
-    const [promosR, blocksR] = await Promise.all([
+    const [promosR, blocksR, founderR] = await Promise.all([
       query(
         `SELECT slot_index, link_url, alt_text_fr, alt_text_en, orientation, image_bytes, image_mime, is_active, updated_at
          FROM platform_home_promos
@@ -522,6 +538,9 @@ app.get("/api/public/home-marketing", rlPublicRead, async (_req, res) => {
          WHERE is_active = TRUE
          ORDER BY sort_order ASC, updated_at DESC
          LIMIT 24`
+      ),
+      query(
+        `SELECT caption, image_bytes, image_mime, updated_at FROM platform_public_founder_showcase WHERE id = 1`
       )
     ]);
     const homePromos = promosR.rows.map(mapHomePromoRow);
@@ -532,7 +551,8 @@ app.get("/api/public/home-marketing", rlPublicRead, async (_req, res) => {
         const plain = String(b.bodyHtml || "").replace(/<[^>]+>/g, " ").trim();
         return Boolean(plain.length || b.imageUrl || String(b.title || "").trim());
       });
-    res.json({ homePromos, footerBlocks });
+    const founderShowcase = mapFounderShowcaseRow(founderR.rows[0]);
+    res.json({ homePromos, footerBlocks, founderShowcase });
   } catch (_err) {
     res.status(500).json({ message: "Could not load public marketing content." });
   }
@@ -5325,6 +5345,88 @@ app.delete("/api/system-owner/home-promos/:slot/image", authenticate, requireRol
     [slot]
   );
   res.json(mapHomePromoRow(row.rows[0]));
+});
+
+app.get("/api/system-owner/founder-showcase", authenticate, requireRoles("system_owner"), async (_req, res) => {
+  const r = await query(
+    `SELECT caption, image_bytes, image_mime, updated_at FROM platform_public_founder_showcase WHERE id = 1`
+  );
+  res.json(mapFounderShowcaseRow(r.rows[0]));
+});
+
+app.patch("/api/system-owner/founder-showcase", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const b = req.body || {};
+  if (!Object.prototype.hasOwnProperty.call(b, "caption")) {
+    return res.status(400).json({ message: "Provide caption." });
+  }
+  const caption = normalizeFounderCaption(b.caption);
+  await query(
+    `INSERT INTO platform_public_founder_showcase (id, caption, updated_at) VALUES (1, $1, NOW())
+     ON CONFLICT (id) DO UPDATE SET caption = EXCLUDED.caption, updated_at = NOW()`,
+    [caption]
+  );
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_founder_showcase.updated",
+    entityType: "platform_public_founder_showcase",
+    entityId: "1",
+    details: { fields: ["caption"] }
+  });
+  const row = await query(
+    `SELECT caption, image_bytes, image_mime, updated_at FROM platform_public_founder_showcase WHERE id = 1`
+  );
+  res.json(mapFounderShowcaseRow(row.rows[0]));
+});
+
+app.post(
+  "/api/system-owner/founder-showcase/image",
+  authenticate,
+  requireRoles("system_owner"),
+  uploadLogoMemory.single("banner"),
+  async (req, res) => {
+    if (!req.file?.buffer) {
+      return res.status(400).json({ message: "Choose an image file (form field name: banner)." });
+    }
+    const allowed = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
+    if (!allowed.has(req.file.mimetype)) {
+      return res.status(400).json({ message: "Image must be PNG, JPEG, WebP or GIF." });
+    }
+    await query(
+      `INSERT INTO platform_public_founder_showcase (id, image_bytes, image_mime, updated_at)
+       VALUES (1, $1, $2, NOW())
+       ON CONFLICT (id) DO UPDATE SET image_bytes = EXCLUDED.image_bytes, image_mime = EXCLUDED.image_mime, updated_at = NOW()`,
+      [req.file.buffer, req.file.mimetype]
+    );
+    await logAudit({
+      actorUserId: req.user.sub,
+      action: "platform_founder_showcase.image_uploaded",
+      entityType: "platform_public_founder_showcase",
+      entityId: "1",
+      details: { mime: req.file.mimetype }
+    });
+    const row = await query(
+      `SELECT caption, image_bytes, image_mime, updated_at FROM platform_public_founder_showcase WHERE id = 1`
+    );
+    res.json(mapFounderShowcaseRow(row.rows[0]));
+  }
+);
+
+app.delete("/api/system-owner/founder-showcase/image", authenticate, requireRoles("system_owner"), async (_req, res) => {
+  await query(
+    `INSERT INTO platform_public_founder_showcase (id, updated_at) VALUES (1, NOW())
+     ON CONFLICT (id) DO UPDATE SET image_bytes = NULL, image_mime = NULL, updated_at = NOW()`
+  );
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_founder_showcase.image_cleared",
+    entityType: "platform_public_founder_showcase",
+    entityId: "1",
+    details: {}
+  });
+  const row = await query(
+    `SELECT caption, image_bytes, image_mime, updated_at FROM platform_public_founder_showcase WHERE id = 1`
+  );
+  res.json(mapFounderShowcaseRow(row.rows[0]));
 });
 
 app.get("/api/system-owner/footer-blocks", authenticate, requireRoles("system_owner"), async (_req, res) => {
