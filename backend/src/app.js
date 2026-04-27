@@ -5391,12 +5391,27 @@ app.post(
     if (!allowed.has(req.file.mimetype)) {
       return res.status(400).json({ message: "Image must be PNG, JPEG, WebP or GIF." });
     }
-    await query(
-      `INSERT INTO platform_public_founder_showcase (id, image_bytes, image_mime, updated_at)
-       VALUES (1, $1, $2, NOW())
-       ON CONFLICT (id) DO UPDATE SET image_bytes = EXCLUDED.image_bytes, image_mime = EXCLUDED.image_mime, updated_at = NOW()`,
-      [req.file.buffer, req.file.mimetype]
-    );
+    const shouldPatchCaption = req.body != null && Object.prototype.hasOwnProperty.call(req.body, "caption");
+    const nextCaption = shouldPatchCaption ? normalizeFounderCaption(req.body.caption) : null;
+    if (shouldPatchCaption) {
+      await query(
+        `INSERT INTO platform_public_founder_showcase (id, caption, image_bytes, image_mime, updated_at)
+         VALUES (1, $3, $1, $2, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           caption = EXCLUDED.caption,
+           image_bytes = EXCLUDED.image_bytes,
+           image_mime = EXCLUDED.image_mime,
+           updated_at = NOW()`,
+        [req.file.buffer, req.file.mimetype, nextCaption]
+      );
+    } else {
+      await query(
+        `INSERT INTO platform_public_founder_showcase (id, image_bytes, image_mime, updated_at)
+         VALUES (1, $1, $2, NOW())
+         ON CONFLICT (id) DO UPDATE SET image_bytes = EXCLUDED.image_bytes, image_mime = EXCLUDED.image_mime, updated_at = NOW()`,
+        [req.file.buffer, req.file.mimetype]
+      );
+    }
     await logAudit({
       actorUserId: req.user.sub,
       action: "platform_founder_showcase.image_uploaded",

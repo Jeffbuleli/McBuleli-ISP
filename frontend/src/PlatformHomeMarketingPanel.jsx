@@ -29,6 +29,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
   const [editingFooter, setEditingFooter] = useState(null);
   const [founder, setFounder] = useState({ caption: "", imageUrl: null });
   const [founderCaptionEdit, setFounderCaptionEdit] = useState("");
+  const [founderLoadError, setFounderLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const footerCreateImageInputRef = useRef(null);
@@ -66,10 +67,16 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
 
   const loadAll = useCallback(async () => {
     setError("");
+    setFounderLoadError("");
     try {
-      await Promise.all([loadPromos(), loadFooter(), loadFounder()]);
+      await Promise.all([loadPromos(), loadFooter()]);
     } catch (err) {
       setError(err.message || "Error");
+    }
+    try {
+      await loadFounder();
+    } catch (err) {
+      setFounderLoadError(err.message || "Error");
     }
   }, [loadPromos, loadFooter, loadFounder]);
 
@@ -127,9 +134,10 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     setSaving(true);
     setError("");
     try {
-      const updated = await api.uploadSystemOwnerFounderShowcaseImage(f);
+      const updated = await api.uploadSystemOwnerFounderShowcaseImage(f, founderCaptionEdit);
       e.target.value = "";
       setFounder({ caption: updated.caption ?? founder.caption, imageUrl: updated.imageUrl ?? null });
+      setFounderCaptionEdit(updated.caption ?? founderCaptionEdit);
     } catch (err) {
       setError(err.message || "Error");
     } finally {
@@ -311,11 +319,12 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       <h3 style={{ marginTop: 20 }}>
         {t("Signature sous le texte d’intro (pied de page)", "Signature under the footer intro line")}
       </h3>
+      {founderLoadError ? <p className="error">{founderLoadError}</p> : null}
       <div className="panel" style={{ marginTop: 12 }}>
         <p className="app-meta" style={{ marginTop: 0 }}>
           {t(
-            "Photo et ligne de texte (ex. « PDG — Jeff Buleli ») affichées sous le slogan McBuleli dans le pied de page public, alignées sur le bloc marque à gauche. Laisser vide pour ne rien afficher.",
-            "Portrait and one line (e.g. “CEO — Jeff Buleli”) shown under the McBuleli tagline in the public footer, aligned with the brand block on the left. Leave empty to hide this block."
+            "Photo et ligne de texte (ex. « PDG — Jeff Buleli ») affichées sous le slogan McBuleli dans le pied de page public, alignées sur le bloc marque à gauche. Laisser vide pour ne rien afficher. En choisissant une photo, le texte du champ ci-dessous est enregistré en même temps (inutile de cliquer « Enregistrer le texte » avant).",
+            "Portrait and one line (e.g. “CEO — Jeff Buleli”) under the McBuleli tagline in the public footer, aligned with the brand block on the left. Leave both empty to hide. When you upload a photo, the line above is saved at the same time—you don’t have to click “Save caption” first."
           )}
         </p>
         <label style={{ display: "block", marginBottom: 8 }}>

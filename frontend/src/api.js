@@ -219,6 +219,12 @@ async function extractErrorPayload(response) {
   const text = await response.text().catch(() => "");
   const clean = String(text || "").trim();
   if (!clean) return {};
+  if (/^\s*<!doctype html>/i.test(clean)) {
+    return {
+      message:
+        "Réponse HTML au lieu de JSON : la route API est introuvable ou le proxy renvoie la page du site (déploiement backend à jour ? URL /api correcte ?). Les autres sections peuvent fonctionner si elles utilisent une autre route."
+    };
+  }
   const firstLine = clean.split("\n")[0].trim();
   return { message: firstLine.slice(0, 200) };
 }
@@ -375,9 +381,12 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body)
     }),
-  uploadSystemOwnerFounderShowcaseImage: async (file) => {
+  uploadSystemOwnerFounderShowcaseImage: async (file, caption) => {
     const form = new FormData();
     form.append("banner", file);
+    if (caption !== undefined) {
+      form.append("caption", caption == null ? "" : String(caption));
+    }
     const headers = {};
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
     let response;
