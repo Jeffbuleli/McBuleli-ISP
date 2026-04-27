@@ -665,6 +665,19 @@ function App() {
     return m === "invalid token" || m.includes("invalid token") || m === "missing bearer token";
   }
 
+  /** On /login bootstrap, avoid showing a red banner when the token is fine but the API is briefly down. */
+  function shouldSilentClearSessionOnLoginPath(msg) {
+    if (isStaleSessionErrorMessage(msg)) return true;
+    const m = String(msg || "");
+    if (/\(502\)|\(503\)|\(504\)/.test(m)) return true;
+    const low = m.toLowerCase();
+    if (low.includes("service indisponible") || low.includes("service unavailable")) return true;
+    if (low.includes("passerelle invalide") || low.includes("bad gateway")) return true;
+    if (low.includes("délai dépassé") || low.includes("gateway timeout")) return true;
+    if (low.includes("impossible de joindre l'api") || low.includes("failed to fetch")) return true;
+    return false;
+  }
+
   async function refresh(selectedTenantId = selectedIspId, options = {}) {
     const silentInvalidSession = Boolean(options.silentInvalidSession);
     syncAuthTokenFromStorage();
@@ -937,7 +950,7 @@ function App() {
         });
       }
     } catch (err) {
-      if (silentInvalidSession && isStaleSessionErrorMessage(err.message)) {
+      if (silentInvalidSession && shouldSilentClearSessionOnLoginPath(err.message)) {
         setAuthToken("");
         setUser(null);
         if (typeof window !== "undefined") localStorage.removeItem("token");

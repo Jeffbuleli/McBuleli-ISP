@@ -190,6 +190,15 @@ function buildApiErrorMessage(status, errorPayload) {
   if (status === 500) {
     return "Erreur serveur (500). Vérifiez la configuration backend (DATABASE_URL, JWT_SECRET, NETWORK_NODE_SECRET_KEY) et les logs Render.";
   }
+  if (status === 503) {
+    return "Service indisponible (503). L’API est souvent en redémarrage (Render) ou surchargée — réessayez dans une minute. Vérifiez aussi les logs du backend et la connexion à la base.";
+  }
+  if (status === 502) {
+    return "Passerelle invalide (502). Le proxy (ex. Vercel) n’a pas pu joindre l’API — vérifiez que le service backend répond.";
+  }
+  if (status === 504) {
+    return "Délai dépassé (504). L’API n’a pas répondu à temps (cold start ou base lente). Réessayez.";
+  }
   return `Échec de la requête (${status})`;
 }
 
