@@ -68,7 +68,7 @@ import {
   purgeHostedBrandingAssets,
   putBrandingLogoInS3
 } from "./brandingLogoStorage.js";
-import { validateAnnouncementContent } from "./announcementHtml.js";
+import { validateAnnouncementContent, validatePublicPageSlot } from "./announcementHtml.js";
 
 function authenticate(req, res, next) {
   authenticateJwt(req, res, () => enforcePlatformAccess(req, res, next));
@@ -346,6 +346,32 @@ function mapAnnouncementRow(row) {
   };
 }
 
+const PUBLIC_PAGE_SLOT_KEYS = new Set(["hero_top", "after_why", "after_services", "footer_strip"]);
+
+function parsePublicPageSlotKey(param) {
+  const k = String(param || "").trim();
+  return PUBLIC_PAGE_SLOT_KEYS.has(k) ? k : null;
+}
+
+function mapPublicPageSlotRow(row) {
+  if (!row) return null;
+  const mime = row.image_mime ?? row.imageMime;
+  const bytes = row.image_bytes ?? row.imageBytes;
+  const dataUrl = bufferToDataUrl(mime, bytes);
+  const out = {
+    slotKey: row.slot_key ?? row.slotKey,
+    title: row.title != null ? String(row.title) : "",
+    bodyHtml: row.body_html ?? row.bodyHtml ?? "",
+    imageUrl: dataUrl,
+    linkUrl: row.link_url ?? row.linkUrl ?? null,
+    isActive: row.is_active ?? row.isActive !== false
+  };
+  if (row.updated_at != null || row.updatedAt != null) {
+    out.updatedAt = row.updated_at ?? row.updatedAt;
+  }
+  return out;
+}
+
 app.get("/api/public/branding-logo/:ispId", rlPublicRead, async (req, res) => {
   const { ispId } = req.params;
   if (!isUuidString(ispId)) return res.status(400).end();
@@ -426,6 +452,33 @@ app.get("/api/public/platform-banner/:slot", rlPublicRead, async (req, res) => {
     }
   }
   return res.status(404).end();
+});
+
+app.get("/api/public/platform-public-page-slots", rlPublicRead, async (_req, res) => {
+  try {
+    const r = await query(
+      `SELECT slot_key, title, body_html, image_bytes, image_mime, link_url, is_active, updated_at
+       FROM platform_public_page_slots
+       WHERE is_active = TRUE
+       ORDER BY CASE slot_key
+         WHEN 'hero_top' THEN 1
+         WHEN 'after_why' THEN 2
+         WHEN 'after_services' THEN 3
+         WHEN 'footer_strip' THEN 4
+         ELSE 9
+       END`
+    );
+    const slots = r.rows
+      .map(mapPublicPageSlotRow)
+      .filter((s) => {
+        if (!s) return false;
+        const plain = String(s.bodyHtml || "").replace(/<[^>]+>/g, " ").trim();
+        return Boolean(plain.length || s.imageUrl);
+      });
+    res.json({ slots });
+  } catch (_err) {
+    res.status(500).json({ message: "Could not load public page content." });
+  }
 });
 
 const TRIAL_DAYS = Math.min(Math.max(Number(process.env.PLATFORM_TRIAL_DAYS || 30), 1), 90);
@@ -4557,6 +4610,149 @@ app.delete(
       [slot]
     );
     res.json(mapPlatformBannerSlideRow(row.rows[0]));
+  }
+);
+
+app.get("/api/system-owner/platform-public-page-slots", authenticate, requireRoles("system_owner"), async (_req, res) => {
+  const r = await query(
+    `SELECT slot_key, title, body_html, image_bytes, image_mime, link_url, is_active, updated_at
+     FROM platform_public_page_slots
+     ORDER BY CASE slot_key
+       WHEN 'hero_top' THEN 1
+       WHEN 'after_why' THEN 2
+       WHEN 'after_services' THEN 3
+       WHEN 'footer_strip' THEN 4
+       ELSE 9
+     END`
+  );
+  res.json({ slots: r.rows.map(mapPublicPageSlotRow) });
+});
+
+app.patch(
+  "/api/system-owner/platform-public-page-slots/:slotKey",
+  authenticate,
+  requireRoles("system_owner"),
+  async (req, res) => {
+    const slotKey = parsePublicPageSlotKey(req.params.slotKey);
+    if (!slotKey) return res.status(400).json({ message: "Invalid slot key." });
+    const b = req.body || {};
+    const cur = await query(`SELECT title, body_html FROM platform_public_page_slots WHERE slot_key = $1`, [slotKey]);
+    if (!cur.rows[0]) return res.status(404).json({ message: "Slot not found." });
+    const pieces = [];
+    const vals = [];
+    let i = 1;
+    let nextTitle = cur.rows[0].title;
+    let nextBody = cur.rows[0].body_html;
+    if (Object.prototype.hasOwnProperty.call(b, "title")) nextTitle = b.title;
+    if (Object.prototype.hasOwnProperty.call(b, "bodyHtml")) nextBody = b.bodyHtml;
+    if (Object.prototype.hasOwnProperty.call(b, "title") || Object.prototype.hasOwnProperty.call(b, "bodyHtml")) {
+      const v = validatePublicPageSlot(nextTitle, nextBody);
+      if (!v.ok) return res.status(400).json({ message: v.message });
+      pieces.push(`title = $${i++}`);
+      vals.push(v.title);
+      pieces.push(`body_html = $${i++}`);
+      vals.push(v.bodyHtml);
+    }
+    if (Object.prototype.hasOwnProperty.call(b, "linkUrl")) {
+      const norm = normalizeBannerLinkUrl(b.linkUrl);
+      if (norm === undefined) {
+        return res.status(400).json({ message: "linkUrl must be a valid http(s) URL or empty." });
+      }
+      pieces.push(`link_url = $${i++}`);
+      vals.push(norm);
+    }
+    if (Object.prototype.hasOwnProperty.call(b, "isActive")) {
+      pieces.push(`is_active = $${i++}`);
+      vals.push(Boolean(b.isActive));
+    }
+    if (pieces.length === 0) {
+      return res.status(400).json({ message: "Provide title, bodyHtml, linkUrl, and/or isActive." });
+    }
+    pieces.push("updated_at = NOW()");
+    vals.push(slotKey);
+    await query(`UPDATE platform_public_page_slots SET ${pieces.join(", ")} WHERE slot_key = $${i}`, vals);
+    await logAudit({
+      actorUserId: req.user.sub,
+      action: "platform_public_page_slot.updated",
+      entityType: "platform_public_page_slot",
+      entityId: slotKey,
+      details: { fields: Object.keys(b) }
+    });
+    const row = await query(
+      `SELECT slot_key, title, body_html, image_bytes, image_mime, link_url, is_active, updated_at
+       FROM platform_public_page_slots WHERE slot_key = $1`,
+      [slotKey]
+    );
+    res.json(mapPublicPageSlotRow(row.rows[0]));
+  }
+);
+
+app.post(
+  "/api/system-owner/platform-public-page-slots/:slotKey/image",
+  authenticate,
+  requireRoles("system_owner"),
+  uploadLogoMemory.single("banner"),
+  async (req, res) => {
+    const slotKey = parsePublicPageSlotKey(req.params.slotKey);
+    if (!slotKey) return res.status(400).json({ message: "Invalid slot key." });
+    if (!req.file?.buffer) {
+      return res.status(400).json({ message: "Choose an image file (form field name: banner)." });
+    }
+    const mimeToExt = {
+      "image/png": ".png",
+      "image/jpeg": ".jpg",
+      "image/jpg": ".jpg",
+      "image/webp": ".webp",
+      "image/gif": ".gif"
+    };
+    const ext = mimeToExt[req.file.mimetype];
+    if (!ext) {
+      return res.status(400).json({ message: "Image must be PNG, JPEG, WebP or GIF." });
+    }
+    await query(
+      `UPDATE platform_public_page_slots SET image_bytes = $1, image_mime = $2, updated_at = NOW() WHERE slot_key = $3`,
+      [req.file.buffer, req.file.mimetype, slotKey]
+    );
+    await logAudit({
+      actorUserId: req.user.sub,
+      action: "platform_public_page_slot.image_uploaded",
+      entityType: "platform_public_page_slot",
+      entityId: slotKey,
+      details: { mime: req.file.mimetype }
+    });
+    const row = await query(
+      `SELECT slot_key, title, body_html, image_bytes, image_mime, link_url, is_active, updated_at
+       FROM platform_public_page_slots WHERE slot_key = $1`,
+      [slotKey]
+    );
+    res.json(mapPublicPageSlotRow(row.rows[0]));
+  }
+);
+
+app.delete(
+  "/api/system-owner/platform-public-page-slots/:slotKey/image",
+  authenticate,
+  requireRoles("system_owner"),
+  async (req, res) => {
+    const slotKey = parsePublicPageSlotKey(req.params.slotKey);
+    if (!slotKey) return res.status(400).json({ message: "Invalid slot key." });
+    await query(
+      `UPDATE platform_public_page_slots SET image_bytes = NULL, image_mime = NULL, updated_at = NOW() WHERE slot_key = $1`,
+      [slotKey]
+    );
+    await logAudit({
+      actorUserId: req.user.sub,
+      action: "platform_public_page_slot.image_cleared",
+      entityType: "platform_public_page_slot",
+      entityId: slotKey,
+      details: {}
+    });
+    const row = await query(
+      `SELECT slot_key, title, body_html, image_bytes, image_mime, link_url, is_active, updated_at
+       FROM platform_public_page_slots WHERE slot_key = $1`,
+      [slotKey]
+    );
+    res.json(mapPublicPageSlotRow(row.rows[0]));
   }
 );
 

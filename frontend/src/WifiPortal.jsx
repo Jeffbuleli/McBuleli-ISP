@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { API_URL, publicRequest } from "./api";
+import { API_URL, publicAssetUrl, publicRequest } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import LangSwitch from "./LangSwitch.jsx";
 import { IconAntenna, IconWallet, IconZap } from "./icons.jsx";
@@ -171,6 +171,11 @@ export default function WifiPortal() {
     };
   }, [polling, depositId, redirectUrl, uiLang]);
 
+  const wifiLogoSrc =
+    branding?.logoUrl != null && String(branding.logoUrl).trim()
+      ? publicAssetUrl(branding.logoUrl)
+      : mcbuleliLogoUrl;
+
   return (
     <main className="container">
       <section className="wifi-hero" aria-label={uiLang === "en" ? "Wi‑Fi guest overview" : "Présentation Wi‑Fi"}>
@@ -228,7 +233,7 @@ export default function WifiPortal() {
         </div>
       </section>
       <header className="app-header" style={{ alignItems: "center" }}>
-        <img src={mcbuleliLogoUrl} alt="McBuleli" style={{ height: 40, width: "auto", objectFit: "contain" }} />
+        <img src={wifiLogoSrc} alt="" style={{ height: 40, width: "auto", objectFit: "contain" }} />
         <div>
           <h1 style={{ margin: 0 }}>{wifiDisplayName(branding?.displayName, uiLang)}</h1>
           <p className="app-meta">{t("catalogLead")}</p>

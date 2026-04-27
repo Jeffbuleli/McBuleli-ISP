@@ -246,6 +246,7 @@ async function authFetchBlob(path) {
 
 export const api = {
   getPublicPlatformPackages: () => publicRequest("/public/platform-packages"),
+  getPublicPlatformPageSlots: () => publicRequest("/public/platform-public-page-slots"),
   signupTenant: (payload) =>
     publicRequest("/public/signup", { method: "POST", body: JSON.stringify(payload) }),
   subscriberLogin: (payload) =>
@@ -327,6 +328,42 @@ export const api = {
     }),
   deleteSystemOwnerDashboardBannerImage: (slot) =>
     request(`/system-owner/dashboard-banners/${slot}/image`, {
+      method: "DELETE"
+    }),
+  getSystemOwnerPublicPageSlots: () => request("/system-owner/platform-public-page-slots"),
+  patchSystemOwnerPublicPageSlot: (slotKey, body) =>
+    request(`/system-owner/platform-public-page-slots/${encodeURIComponent(slotKey)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }),
+  uploadSystemOwnerPublicPageSlotImage: async (slotKey, file) => {
+    const form = new FormData();
+    form.append("banner", file);
+    const headers = {};
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    let response;
+    try {
+      response = await fetch(
+        `${API_URL}/system-owner/platform-public-page-slots/${encodeURIComponent(slotKey)}/image`,
+        {
+          method: "POST",
+          headers,
+          body: form
+        }
+      );
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
+    if (!response.ok) {
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
+    }
+    return response.json();
+  },
+  deleteSystemOwnerPublicPageSlotImage: (slotKey) =>
+    request(`/system-owner/platform-public-page-slots/${encodeURIComponent(slotKey)}/image`, {
       method: "DELETE"
     }),
   getBranding: (ispId) => request(withIsp("/branding", ispId)),

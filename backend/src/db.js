@@ -744,6 +744,24 @@ export async function initDb() {
   );
 
   await query(`
+    CREATE TABLE IF NOT EXISTS platform_public_page_slots (
+      slot_key TEXT PRIMARY KEY CHECK (slot_key IN ('hero_top', 'after_why', 'after_services', 'footer_strip')),
+      title VARCHAR(200) NOT NULL DEFAULT '',
+      body_html TEXT NOT NULL DEFAULT '',
+      image_bytes BYTEA NULL,
+      image_mime TEXT NULL,
+      link_url TEXT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT FALSE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  for (const key of ["hero_top", "after_why", "after_services", "footer_strip"]) {
+    await query(`INSERT INTO platform_public_page_slots (slot_key) VALUES ($1) ON CONFLICT (slot_key) DO NOTHING`, [
+      key
+    ]);
+  }
+
+  await query(`
     CREATE TABLE IF NOT EXISTS platform_dashboard_banners (
       slot_index SMALLINT PRIMARY KEY CHECK (slot_index >= 0 AND slot_index <= 2),
       image_url TEXT NULL,

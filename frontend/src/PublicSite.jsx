@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { api } from "./api.js";
 import LangSwitch from "./LangSwitch.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
+import PublicMarketingSlot from "./PublicMarketingSlot.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import { IconBuilding, IconPresentation, IconReceipt, IconUserCheck } from "./icons.jsx";
 
@@ -344,6 +346,7 @@ function PublicLogo() {
 
 export default function PublicSite() {
   const [uiLang, setUiLang] = useState(getStoredUiLang);
+  const [publicSlots, setPublicSlots] = useState([]);
   const isEn = uiLang === "en";
   const t = (fr, en) => (isEn ? en : fr);
   const statRows = useMemo(
@@ -366,11 +369,34 @@ export default function PublicSite() {
 
   const year = useMemo(() => new Date().getFullYear(), []);
 
+  const slotByKey = useMemo(() => {
+    const m = {};
+    for (const s of publicSlots) {
+      if (s?.slotKey) m[s.slotKey] = s;
+    }
+    return m;
+  }, [publicSlots]);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("ui_lang", uiLang);
     }
   }, [uiLang]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getPublicPlatformPageSlots()
+      .then((data) => {
+        if (!cancelled) setPublicSlots(data.slots || []);
+      })
+      .catch(() => {
+        if (!cancelled) setPublicSlots([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <main className="public-site">
@@ -380,17 +406,22 @@ export default function PublicSite() {
             <PublicLogo />
             <span>McBuleli</span>
           </a>
-          <nav className="public-nav" aria-label="Navigation principale">
-            <a href="#services">{t("Services", "Services")}</a>
-            <a href="#promos">{t("Offres", "Offers")}</a>
-            <a href="#interfaces">{t("Interfaces", "Workspaces")}</a>
-            <a href="#pricing">{t("Tarifs", "Pricing")}</a>
-            <a href="#testimonials">{t("Témoignages", "Testimonials")}</a>
-            <a href="#faq">{t("FAQ", "FAQ")}</a>
-            <a href="/wifi">{t("Wi‑Fi invité", "Guest Wi‑Fi")}</a>
-            <a href="#contact">Contact</a>
-          </nav>
-          <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="public" />
+          {slotByKey.hero_top ? (
+            <PublicMarketingSlot slot={slotByKey.hero_top} variant="hero" t={t} />
+          ) : null}
+          <div className="public-hero-top-right">
+            <nav className="public-nav" aria-label="Navigation principale">
+              <a href="#services">{t("Services", "Services")}</a>
+              <a href="#promos">{t("Offres", "Offers")}</a>
+              <a href="#interfaces">{t("Interfaces", "Workspaces")}</a>
+              <a href="#pricing">{t("Tarifs", "Pricing")}</a>
+              <a href="#testimonials">{t("Témoignages", "Testimonials")}</a>
+              <a href="#faq">{t("FAQ", "FAQ")}</a>
+              <a href="/wifi">{t("Wi‑Fi invité", "Guest Wi‑Fi")}</a>
+              <a href="#contact">Contact</a>
+            </nav>
+            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="public" />
+          </div>
         </div>
         <div className="public-hero-grid">
           <section>
@@ -484,6 +515,10 @@ export default function PublicSite() {
         ))}
       </section>
 
+      {slotByKey.after_services ? (
+        <PublicMarketingSlot slot={slotByKey.after_services} variant="banner" t={t} />
+      ) : null}
+
       <section className="public-section" id="interfaces">
         <p className="eyebrow">{t("Interfaces", "Workspaces")}</p>
         <h2>{t("Des interfaces propres pour chaque usage.", "Clean workspaces for every use case.")}</h2>
@@ -557,6 +592,10 @@ export default function PublicSite() {
         </ul>
       </section>
 
+      {slotByKey.after_why ? (
+        <PublicMarketingSlot slot={slotByKey.after_why} variant="banner" t={t} />
+      ) : null}
+
       <section className="public-section" id="testimonials">
         <p className="eyebrow">{t("Ils utilisent McBuleli", "Teams using McBuleli")}</p>
         <h2>{t("Ce que disent les opérateurs", "What operators say")}</h2>
@@ -591,6 +630,10 @@ export default function PublicSite() {
           ))}
         </div>
       </section>
+
+      {slotByKey.footer_strip ? (
+        <PublicMarketingSlot slot={slotByKey.footer_strip} variant="footer" t={t} />
+      ) : null}
 
       <footer className="public-footer" id="contact">
         <div className="public-footer-main">

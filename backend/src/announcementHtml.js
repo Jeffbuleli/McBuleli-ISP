@@ -2,6 +2,8 @@ import sanitizeHtml from "sanitize-html";
 
 export const ANNOUNCE_TITLE_MAX = 120;
 export const ANNOUNCE_BODY_PLAIN_MAX = 2000;
+export const PUBLIC_PAGE_TITLE_MAX = 200;
+export const PUBLIC_PAGE_BODY_PLAIN_MAX = 4000;
 
 export function plainTextLength(html) {
   return String(html || "")
@@ -51,6 +53,23 @@ export function validateAnnouncementContent(title, bodyHtml) {
     return {
       ok: false,
       message: `Message text must be at most ${ANNOUNCE_BODY_PLAIN_MAX} characters (plain text length).`
+    };
+  }
+  return { ok: true, title: t, bodyHtml: cleaned };
+}
+
+/** Contenu éditable page d’accueil publique (system_owner). */
+export function validatePublicPageSlot(title, bodyHtml) {
+  const t = String(title || "").trim();
+  if (t.length > PUBLIC_PAGE_TITLE_MAX) {
+    return { ok: false, message: `Title must be at most ${PUBLIC_PAGE_TITLE_MAX} characters.` };
+  }
+  const cleaned = sanitizeAnnouncementHtml(bodyHtml);
+  const len = plainTextLength(cleaned);
+  if (len > PUBLIC_PAGE_BODY_PLAIN_MAX) {
+    return {
+      ok: false,
+      message: `Body must be at most ${PUBLIC_PAGE_BODY_PLAIN_MAX} characters (plain text length).`
     };
   }
   return { ok: true, title: t, bodyHtml: cleaned };

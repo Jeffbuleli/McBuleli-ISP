@@ -3,7 +3,7 @@ import { publicAssetUrl } from "./api";
 
 const ROTATE_MS = 6000;
 
-export default function DashboardBannerCarousel({ slides }) {
+export default function DashboardBannerCarousel({ slides, layout = "full" }) {
   const list = useMemo(
     () =>
       Array.isArray(slides)
@@ -47,7 +47,11 @@ export default function DashboardBannerCarousel({ slides }) {
   );
 
   return (
-    <div className="dashboard-banner-carousel" role="region" aria-label="Annonces">
+    <div
+      className={`dashboard-banner-carousel${layout === "inline" ? " dashboard-banner-carousel--inline" : ""}`}
+      role="region"
+      aria-label="Annonces"
+    >
       <div className="dashboard-banner-carousel__frame">
         {s.linkUrl ? (
           <a

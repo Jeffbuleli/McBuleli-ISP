@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef } from "react";
 
 export const ANNOUNCE_TITLE_MAX = 120;
 export const ANNOUNCE_BODY_PLAIN_MAX = 2000;
+export const PUBLIC_PAGE_TITLE_MAX = 200;
+export const PUBLIC_PAGE_BODY_PLAIN_MAX = 4000;
 
 function plainLen(html) {
   const d = typeof document !== "undefined" ? document.createElement("div") : null;

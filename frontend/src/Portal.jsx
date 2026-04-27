@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { API_URL, api } from "./api";
+import { API_URL, api, publicAssetUrl } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import LangSwitch from "./LangSwitch.jsx";
 import { portalBrandTitle, portalT } from "./portalCopy.js";
@@ -297,6 +297,10 @@ export default function Portal() {
   }
 
   const brand = session?.branding;
+  const portalLogoSrc =
+    brand?.logoUrl != null && String(brand.logoUrl).trim()
+      ? publicAssetUrl(brand.logoUrl)
+      : mcbuleliLogoUrl;
 
   return (
     <main
@@ -318,8 +322,8 @@ export default function Portal() {
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <img
               className="portal-hero-logo"
-              src={mcbuleliLogoUrl}
-              alt="McBuleli"
+              src={portalLogoSrc}
+              alt=""
               height={48}
               width={48}
               style={{ height: 48, width: "auto", objectFit: "contain" }}

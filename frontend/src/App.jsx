@@ -6,6 +6,7 @@ import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
 import DashboardAnnouncementStrip from "./DashboardAnnouncementStrip.jsx";
 import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
+import PlatformPublicPagePanel from "./PlatformPublicPagePanel.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
 import { IconAntenna, IconHome, IconPeople, IconSignOut, IconSliders, IconWallet } from "./icons.jsx";
@@ -2197,6 +2198,14 @@ function App() {
   const canPrivateCustomDomain = Boolean(workspaceBillingForDomain?.package?.featureFlags?.customDomain);
   const isFieldAgent = user.role === "field_agent";
   const fieldTeamUsers = users.filter((u) => u.role === "field_agent");
+  const dashboardTenantLogoSrc =
+    branding?.logoUrl != null && String(branding.logoUrl).trim()
+      ? publicAssetUrl(branding.logoUrl)
+      : null;
+  const showDashboardHeaderPromos =
+    !user?.dashboardBanners?.length &&
+    !user?.dashboardBannerHtml &&
+    !ispAnnouncements.length;
 
   return (
     <main className="container app-shell">
@@ -2205,9 +2214,11 @@ function App() {
           <div className="dashboard-header-top">
             <div className="dashboard-brandline">
               <img
-                className="dashboard-logo dashboard-logo--mcbuleli"
-                src={mcbuleliLogoUrl}
-                alt="McBuleli"
+                className={
+                  dashboardTenantLogoSrc ? "dashboard-logo dashboard-logo--tenant" : "dashboard-logo dashboard-logo--mcbuleli"
+                }
+                src={dashboardTenantLogoSrc || mcbuleliLogoUrl}
+                alt={dashboardTenantLogoSrc ? "" : "McBuleli"}
                 width={44}
                 height={44}
               />
@@ -2221,6 +2232,18 @@ function App() {
                   <span className="dashboard-role-paren"> ({formatStaffRole(user.role, isEn)})</span>
                 </p>
               </div>
+            </div>
+            <div className="dashboard-header-ad">
+              {user?.dashboardBanners?.length ? (
+                <DashboardBannerCarousel slides={user.dashboardBanners} layout="inline" />
+              ) : user?.dashboardBannerHtml ? (
+                <div
+                  className="dashboard-ad-slot dashboard-ad-slot--inline"
+                  dangerouslySetInnerHTML={{ __html: user.dashboardBannerHtml }}
+                />
+              ) : showDashboardHeaderPromos ? (
+                <PublicHomePromos t={t} isEn={isEn} variant="dashboard" />
+              ) : null}
             </div>
             <div
               className="dashboard-toolbar dashboard-toolbar--icons"
@@ -2247,24 +2270,14 @@ function App() {
               </button>
             </div>
           </div>
-          {user?.dashboardBanners?.length ? (
-            <DashboardBannerCarousel slides={user.dashboardBanners} />
-          ) : user?.dashboardBannerHtml ? (
-            <div
-              className="dashboard-ad-slot"
-              dangerouslySetInnerHTML={{ __html: user.dashboardBannerHtml }}
-            />
-          ) : null}
-          {ispAnnouncements.length ? (
-            <DashboardAnnouncementStrip items={ispAnnouncements} t={t} />
-          ) : !(user?.dashboardBanners?.length || user?.dashboardBannerHtml) ? (
-            <PublicHomePromos t={t} isEn={isEn} variant="dashboard" />
-          ) : null}
         </header>
         <nav className="dashboard-subnav" aria-label="Navigation tableau de bord">
           <a href="#dashboard-overview">{t("Vue d'ensemble", "Overview")}</a>
           {user.role === "system_owner" ? (
             <a href="#platform-banners">{t("Bannières publiques", "Public banners")}</a>
+          ) : null}
+          {user.role === "system_owner" ? (
+            <a href="#platform-public-home">{t("Accueil public", "Public home")}</a>
           ) : null}
           {!isFieldAgent &&
           (user.role === "system_owner" ||
@@ -2286,6 +2299,9 @@ function App() {
           )}
         </nav>
       </div>
+      {ispAnnouncements.length ? (
+        <DashboardAnnouncementStrip items={ispAnnouncements} t={t} variant="wide" />
+      ) : null}
       {!isFieldAgent ? (
       <section className="dashboard-quick-actions" aria-label="Raccourcis tableau de bord">
         <a href="#workspace-settings">
@@ -2548,6 +2564,8 @@ function App() {
           </div>
         </section>
       ) : null}
+
+      {user.role === "system_owner" ? <PlatformPublicPagePanel t={t} isEn={isEn} /> : null}
 
       {user.role === "system_owner" && superDashboard?.tenants ? (
         <section className="panel">
