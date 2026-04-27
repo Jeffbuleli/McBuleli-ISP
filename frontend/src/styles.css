@@ -1509,6 +1509,156 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.btn-icon-toolbar--social {
+  color: #0f1419;
+}
+
+/* —— Auth simple (login / signup) —— */
+.auth-simple {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 20px 18px 48px;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.auth-simple-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.auth-simple-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.auth-simple-logo {
+  display: block;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 10px;
+  border-radius: 18px;
+  object-fit: contain;
+}
+
+.auth-simple-title {
+  text-align: center;
+  margin: 0 0 6px;
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: var(--mb-primary);
+  letter-spacing: -0.02em;
+}
+
+.auth-simple-sub {
+  text-align: center;
+  margin: 0 0 18px;
+  font-size: 0.95rem;
+  color: var(--mb-muted);
+}
+
+.auth-simple-notice {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(200, 230, 201, 0.35);
+  border: 1px solid rgba(93, 64, 55, 0.12);
+  color: var(--mb-text);
+  font-size: 0.92rem;
+}
+
+.auth-simple-panel {
+  margin: 0;
+}
+
+.auth-simple-panel input,
+.auth-simple-panel select,
+.auth-simple-panel button[type="submit"] {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.auth-simple-panel-title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.auth-simple-label {
+  display: block;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--mb-muted);
+}
+
+.auth-simple-link-btn {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--mb-primary);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-align: center;
+}
+
+.auth-simple-link-btn:hover {
+  color: var(--mb-primary-hover);
+}
+
+.auth-simple-footer-links {
+  text-align: center;
+  margin: 16px 0 0;
+  font-size: 0.95rem;
+  color: var(--mb-muted);
+}
+
+.auth-simple-footer-links a {
+  font-weight: 600;
+}
+
+.auth-simple-workspace-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+
+.auth-simple-workspace-list li + li {
+  margin-top: 8px;
+}
+
+.auth-simple-workspace-btn {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.auth-simple-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 28px;
+  color: var(--mb-muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.auth-simple-back:hover {
+  color: var(--mb-primary);
+}
+
 .isp-enduser-brand-head {
   display: flex;
   align-items: center;

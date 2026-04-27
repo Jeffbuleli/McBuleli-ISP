@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api.js";
 import LangSwitch from "./LangSwitch.jsx";
-import HomeShortcut from "./HomeShortcut.jsx";
+import PublicSocialLinks from "./PublicSocialLinks.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
 import PublicMarketingSlot from "./PublicMarketingSlot.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
@@ -456,10 +456,7 @@ export default function PublicSite() {
             <a href="#contact">Contact</a>
           </nav>
           <div className="public-hero-toolbar">
-            <HomeShortcut
-              title={t("Accueil — site public McBuleli", "Home — McBuleli public site")}
-              idPrefix="public"
-            />
+            <PublicSocialLinks idPrefix="public" isEn={isEn} />
             <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="public" />
           </div>
         </div>

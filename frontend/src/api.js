@@ -270,6 +270,16 @@ export const api = {
   getPublicHomeMarketing: () => publicRequest("/public/home-marketing"),
   signupTenant: (payload) =>
     publicRequest("/public/signup", { method: "POST", body: JSON.stringify(payload) }),
+  forgotPassword: (email) =>
+    publicRequest("/public/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email })
+    }),
+  resetPasswordWithToken: (token, newPassword) =>
+    publicRequest("/public/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, newPassword })
+    }),
   subscriberLogin: (payload) =>
     publicRequest("/subscriber/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   subscriberSetupPassword: (payload) =>

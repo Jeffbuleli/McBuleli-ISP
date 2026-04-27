@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
 import LangSwitch from "./LangSwitch.jsx";
-import HomeShortcut from "./HomeShortcut.jsx";
+import PublicSocialLinks from "./PublicSocialLinks.jsx";
 import DashboardHistograms from "./DashboardHistograms.jsx";
 import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
@@ -10,7 +10,7 @@ import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
 import PlatformHomeMarketingPanel from "./PlatformHomeMarketingPanel.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
-import { IconAntenna, IconHome, IconPeople, IconSignOut, IconSliders, IconWallet } from "./icons.jsx";
+import { IconAntenna, IconArrowLeft, IconHome, IconPeople, IconSignOut, IconSliders, IconWallet } from "./icons.jsx";
 
 function isPlatformSuperRole(role) {
   return role === "super_admin" || role === "system_owner";
@@ -425,6 +425,12 @@ function App() {
   const [loginWorkspaces, setLoginWorkspaces] = useState(null);
   const [mfaLogin, setMfaLogin] = useState(null);
   const [mfaCode, setMfaCode] = useState("");
+  const [loginAuthStep, setLoginAuthStep] = useState("signin");
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotNotice, setForgotNotice] = useState("");
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [resetTokenState, setResetTokenState] = useState("");
+  const [resetPasswordForm, setResetPasswordForm] = useState({ password: "", confirm: "" });
   const [teamRowDraft, setTeamRowDraft] = useState({});
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
   const [isps, setIsps] = useState([]);
@@ -1023,6 +1029,17 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const path = window.location.pathname || "";
+    if (path !== "/login" && !path.startsWith("/login/")) return;
+    const token = new URLSearchParams(window.location.search).get("reset");
+    if (token && token.length >= 32) {
+      setResetTokenState(token);
+      setLoginAuthStep("reset");
+    }
+  }, []);
+
+  useEffect(() => {
     if (user?.role !== "system_owner") {
       setPlatformBannerSlots([]);
       setPlatformBannerEdits({});
@@ -1080,6 +1097,54 @@ function App() {
       setAuthToken(payload.token);
       setUser(payload.user);
       refresh(payload.user.ispId || "");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function onForgotPassword(e) {
+    e.preventDefault();
+    setForgotBusy(true);
+    setError("");
+    setForgotNotice("");
+    try {
+      await api.forgotPassword(forgotEmail.trim());
+      setForgotNotice(
+        isEn
+          ? "If this email is registered, you will receive a link within a few minutes (check spam). It expires in one hour."
+          : "Si cette adresse est enregistrée, vous recevrez un lien sous peu (vérifiez les courriers indésirables). Il expire dans une heure."
+      );
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setForgotBusy(false);
+    }
+  }
+
+  async function onResetPasswordSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    const pwd = resetPasswordForm.password;
+    if (pwd.length < 6) {
+      setError(isEn ? "Password must be at least 6 characters." : "Le mot de passe doit faire au moins 6 caractères.");
+      return;
+    }
+    if (pwd !== resetPasswordForm.confirm) {
+      setError(isEn ? "Passwords do not match." : "Les mots de passe ne correspondent pas.");
+      return;
+    }
+    try {
+      await api.resetPasswordWithToken(resetTokenState, pwd);
+      setNotice(
+        isEn ? "Password updated. You can sign in below." : "Mot de passe mis à jour. Vous pouvez vous connecter ci-dessous."
+      );
+      setResetPasswordForm({ password: "", confirm: "" });
+      setLoginAuthStep("signin");
+      setResetTokenState("");
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, "", "/login");
+      }
     } catch (err) {
       setError(err.message);
     }
@@ -2235,150 +2300,192 @@ function App() {
   const tenantSurfaceLogoAlt = resolvePublicBrandName(tenantContext?.displayName) || "McBuleli";
 
   if (!user) {
-    const loginTitle = resolvePublicBrandName(tenantContext?.displayName);
     return (
-      <main className="container container--login">
-        <div className="login-layout">
-          <section className="login-poster" aria-label="Présentation">
-            <img
-              className="login-poster-logo-img"
-              src={tenantSurfaceLogoSrc}
-              alt={tenantSurfaceLogoAlt}
-              width={72}
-              height={72}
-            />
-            <p className="login-poster-lead">
-              {isEn
-                ? "Billing, Mobile Money collections, customer portal, agents, MikroTik and reporting in one professional ISP workspace."
-                : "Facturation, encaissements Mobile Money, portail client, agents, MikroTik et reporting dans un espace FAI professionnel."}
-            </p>
-            <ul className="login-poster-list">
-              <li>{isEn ? "Company dashboard for leaders and managers" : "Tableau entreprise pour dirigeants et managers"}</li>
-              <li>{isEn ? "Agent access with roles, audit and field actions" : "Accès agents avec rôles, audit et actions terrain"}</li>
-              <li>{isEn ? "Invoices, subscriptions and customer payments" : "Factures, abonnements et paiements clients"}</li>
-            </ul>
-          </section>
-          <div className="login-stack">
-            <header className="app-header app-header--login">
-              <div className="login-brand-row">
-                <img
-                  className="login-brand-logo"
-                  src={tenantSurfaceLogoSrc}
-                  alt={tenantSurfaceLogoAlt}
-                  width={44}
-                  height={44}
-                />
-                <div>
-                <h1>{loginTitle}</h1>
+      <main className="auth-simple">
+        <div className="auth-simple-toolbar">
+          <PublicSocialLinks idPrefix="login" isEn={isEn} />
+          <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="login" />
+        </div>
+        <div className="auth-simple-card">
+          <img
+            className="auth-simple-logo"
+            src={tenantSurfaceLogoSrc}
+            alt={tenantSurfaceLogoAlt}
+            width={80}
+            height={80}
+          />
+          <h1 className="auth-simple-title">McBuleli</h1>
+          {notice ? <p className="auth-simple-notice">{notice}</p> : null}
+          {error ? <p className="error">{error}</p> : null}
+          {forgotNotice && loginAuthStep === "forgot" ? (
+            <p className="auth-simple-notice">{forgotNotice}</p>
+          ) : null}
+          {loginWorkspaces && !mfaLogin ? (
+            <div className="panel auth-simple-panel" role="dialog" aria-label={isEn ? "Choose workspace" : "Choisir l'entreprise"}>
+              <h2 className="auth-simple-panel-title">{isEn ? "Your workspace" : "Votre entreprise"}</h2>
+              <p className="app-meta">
+                {isEn
+                  ? "This account is linked to several operators. Pick one to continue."
+                  : "Ce compte est rattaché à plusieurs opérateurs. Choisissez l'espace à ouvrir."}
+              </p>
+              <ul className="auth-simple-workspace-list">
+                {loginWorkspaces.map((w) => (
+                  <li key={w.ispId}>
+                    <button
+                      type="button"
+                      className="btn-secondary auth-simple-workspace-btn"
+                      onClick={() => completeLoginWithWorkspace(w.ispId)}
+                    >
+                      <strong>{w.name}</strong>
+                      <span className="app-meta">{w.role}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className="btn-secondary-outline"
+                onClick={() => {
+                  setLoginWorkspaces(null);
+                  setError("");
+                }}
+              >
+                {isEn ? "Back" : "Retour"}
+              </button>
+            </div>
+          ) : null}
+          {mfaLogin ? (
+            <form className="panel auth-simple-panel" onSubmit={onVerifyLoginMfa}>
+              <h2 className="auth-simple-panel-title">{isEn ? "Security code" : "Code de sécurité"}</h2>
+              <p className="app-meta">
+                {isEn
+                  ? "Enter the 6-digit code from your authenticator or notification."
+                  : "Saisissez le code à 6 chiffres (application ou notification)."}
+              </p>
+              {mfaLogin.devCode ? (
                 <p className="app-meta">
-                  {tenantContext?.displayName
-                    ? isEn
-                      ? "Sign in to your workspace."
-                      : "Connexion à votre espace opérateur."
-                    : isEn
-                      ? "McBuleli team workspace — enter your credentials below."
-                      : "Espace équipe McBuleli — saisissez vos identifiants ci-dessous."}
+                  {isEn ? "Dev code:" : "Code dev :"} <code>{mfaLogin.devCode}</code>
                 </p>
-                </div>
-              </div>
-              <div className="login-toolbar-icons">
-                <HomeShortcut
-                  title={isEn ? "Home — McBuleli public site" : "Accueil — site public McBuleli"}
-                  idPrefix="login"
-                />
-                <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="login" />
-              </div>
-            </header>
-            {error && <p className="error">{error}</p>}
-            {loginWorkspaces && !mfaLogin ? (
-              <div className="panel" role="dialog" aria-label={isEn ? "Choose workspace" : "Choisir l'entreprise"}>
-                <h2>{isEn ? "Choose your company" : "Choisissez votre entreprise"}</h2>
-                <p className="app-meta">
-                  {isEn
-                    ? "This account is linked to several operators. Pick the workspace you want to open."
-                    : "Ce compte est rattaché à plusieurs opérateurs. Sélectionnez l'espace à ouvrir."}
-                </p>
-                <ul style={{ listStyle: "none", padding: 0, margin: "12px 0" }}>
-                  {loginWorkspaces.map((w) => (
-                    <li key={w.ispId} style={{ marginBottom: 8 }}>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        style={{ width: "100%", textAlign: "left" }}
-                        onClick={() => completeLoginWithWorkspace(w.ispId)}
-                      >
-                        <strong>{w.name}</strong>
-                        <span className="app-meta" style={{ display: "block" }}>
-                          {w.role}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoginWorkspaces(null);
-                    setError("");
-                  }}
-                >
-                  {isEn ? "Back" : "Retour"}
-                </button>
-              </div>
-            ) : null}
-            {mfaLogin ? (
-              <form className="panel" onSubmit={onVerifyLoginMfa}>
-                <h2>{isEn ? "MFA verification" : "Vérification MFA"}</h2>
-                <p>
-                  {isEn
-                    ? "Enter the 6-digit code sent to the internal notification outbox or SMS provider."
-                    : "Saisissez le code à 6 chiffres envoyé dans la file de notifications interne ou par SMS."}
-                </p>
-                {mfaLogin.devCode ? (
-                  <p style={{ fontSize: "0.9rem", color: "var(--mb-muted)" }}>
-                    {isEn ? "Development code:" : "Code développement :"} <code>{mfaLogin.devCode}</code>
-                  </p>
-                ) : null}
-                <input
-                  placeholder={isEn ? "MFA code" : "Code MFA"}
-                  value={mfaCode}
-                  onChange={(e) => setMfaCode(e.target.value)}
-                />
-                <button type="submit">{isEn ? "Verify" : "Valider"}</button>
-                <button type="button" onClick={() => setMfaLogin(null)}>
-                  {isEn ? "Back to login" : "Retour connexion"}
-                </button>
-              </form>
-            ) : !loginWorkspaces ? (
-              <form className="panel" onSubmit={onLogin}>
-                <h2>{isEn ? "Login" : "Connexion"}</h2>
-                <p className="app-meta">
-                  {isEn
-                    ? "Access the business interface, demo workspaces, billing, agents and customer operations."
-                    : "Accédez à l'interface entreprise, aux espaces démo, à la facturation, aux agents et aux opérations clients."}
-                </p>
-                <input
-                  placeholder={isEn ? "Email address" : "Adresse e-mail"}
-                  value={loginForm.email}
-                  onChange={(e) => {
-                    setLoginWorkspaces(null);
-                    setLoginForm({ ...loginForm, email: e.target.value });
-                  }}
-                />
-                <input
-                  placeholder={isEn ? "Password" : "Mot de passe"}
-                  type="password"
-                  value={loginForm.password}
-                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                />
-                <button type="submit">{isEn ? "Login" : "Se connecter"}</button>
-                <p>
-                  <a href="/signup">{isEn ? "Create a McBuleli account" : "Créer un compte entreprise McBuleli"}</a>{" "}
-                  ({isEn ? "1-month trial, Mobile Money billing" : "essai 1 mois, facturation Mobile Money"})
-                </p>
-              </form>
-            ) : null}
-          </div>
+              ) : null}
+              <input
+                placeholder={isEn ? "6-digit code" : "Code à 6 chiffres"}
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                autoComplete="one-time-code"
+              />
+              <button type="submit">{isEn ? "Continue" : "Continuer"}</button>
+              <button type="button" className="btn-secondary-outline" onClick={() => setMfaLogin(null)}>
+                {isEn ? "Cancel" : "Annuler"}
+              </button>
+            </form>
+          ) : null}
+          {!loginWorkspaces && !mfaLogin && loginAuthStep === "forgot" ? (
+            <form className="panel auth-simple-panel" onSubmit={onForgotPassword}>
+              <h2 className="auth-simple-panel-title">{isEn ? "Reset password" : "Mot de passe oublié"}</h2>
+              <p className="app-meta">
+                {isEn
+                  ? "We will email you a link (if this address is registered). Cost-free: uses your platform SMTP when configured."
+                  : "Nous enverrons un lien par e-mail (si l'adresse est enregistrée). Sans service payant : SMTP de la plateforme si configuré."}
+              </p>
+              <input
+                type="email"
+                autoComplete="email"
+                placeholder={isEn ? "Your login email" : "Votre e-mail de connexion"}
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                required
+              />
+              <button type="submit" disabled={forgotBusy}>
+                {isEn ? "Send link" : "Envoyer le lien"}
+              </button>
+              <button
+                type="button"
+                className="auth-simple-link-btn"
+                onClick={() => {
+                  setLoginAuthStep("signin");
+                  setForgotNotice("");
+                  setError("");
+                }}
+              >
+                {isEn ? "Back to sign in" : "Retour à la connexion"}
+              </button>
+            </form>
+          ) : null}
+          {!loginWorkspaces && !mfaLogin && loginAuthStep === "reset" ? (
+            <form className="panel auth-simple-panel" onSubmit={onResetPasswordSubmit}>
+              <h2 className="auth-simple-panel-title">{isEn ? "New password" : "Nouveau mot de passe"}</h2>
+              <p className="app-meta">
+                {isEn ? "Choose a new password for your account." : "Choisissez un nouveau mot de passe."}
+              </p>
+              <input
+                type="password"
+                autoComplete="new-password"
+                placeholder={isEn ? "New password (min. 6)" : "Nouveau mot de passe (min. 6)"}
+                value={resetPasswordForm.password}
+                onChange={(e) =>
+                  setResetPasswordForm({ ...resetPasswordForm, password: e.target.value })
+                }
+                required
+                minLength={6}
+              />
+              <input
+                type="password"
+                autoComplete="new-password"
+                placeholder={isEn ? "Confirm password" : "Confirmer le mot de passe"}
+                value={resetPasswordForm.confirm}
+                onChange={(e) =>
+                  setResetPasswordForm({ ...resetPasswordForm, confirm: e.target.value })
+                }
+                required
+                minLength={6}
+              />
+              <button type="submit">{isEn ? "Update password" : "Mettre à jour"}</button>
+            </form>
+          ) : null}
+          {!loginWorkspaces && !mfaLogin && loginAuthStep === "signin" ? (
+            <form className="panel auth-simple-panel" onSubmit={onLogin}>
+              <input
+                type="email"
+                autoComplete="username"
+                placeholder={isEn ? "Email" : "E-mail"}
+                value={loginForm.email}
+                onChange={(e) => {
+                  setLoginWorkspaces(null);
+                  setLoginForm({ ...loginForm, email: e.target.value });
+                }}
+                required
+              />
+              <input
+                type="password"
+                autoComplete="current-password"
+                placeholder={isEn ? "Password" : "Mot de passe"}
+                value={loginForm.password}
+                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                required
+              />
+              <button type="submit">{isEn ? "Sign in" : "Se connecter"}</button>
+              <button
+                type="button"
+                className="auth-simple-link-btn"
+                onClick={() => {
+                  setLoginAuthStep("forgot");
+                  setForgotEmail(loginForm.email || "");
+                  setForgotNotice("");
+                  setError("");
+                }}
+              >
+                {isEn ? "Forgot password?" : "Mot de passe oublié ?"}
+              </button>
+              <p className="auth-simple-footer-links">
+                {isEn ? "No account yet?" : "Pas encore de compte ?"}{" "}
+                <a href="/signup">{isEn ? "Create one" : "Créer un compte"}</a>
+              </p>
+            </form>
+          ) : null}
+          <a className="auth-simple-back" href="/">
+            <IconArrowLeft width={20} height={20} aria-hidden />
+            {isEn ? "Homepage" : "Accueil"}
+          </a>
         </div>
       </main>
     );
@@ -2407,10 +2514,7 @@ function App() {
             </div>
           </div>
           <div className="login-toolbar-icons">
-            <HomeShortcut
-              title={isEn ? "Home — McBuleli public site" : "Accueil — site public McBuleli"}
-              idPrefix="pwd"
-            />
+            <PublicSocialLinks idPrefix="pwd" isEn={isEn} />
             <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="pwd" />
           </div>
         </header>

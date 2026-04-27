@@ -215,6 +215,14 @@ const rlSubscriberAuth = createPublicRateLimiter("subscriber_auth", {
   windowMs: Number(process.env.PUBLIC_RL_SUBSCRIBER_AUTH_WINDOW_MS) || 900_000,
   max: Number(process.env.PUBLIC_RL_SUBSCRIBER_AUTH_MAX) || 45
 });
+const rlForgotPassword = createPublicRateLimiter("forgot_password", {
+  windowMs: Number(process.env.PUBLIC_RL_FORGOT_PASSWORD_WINDOW_MS) || 3_600_000,
+  max: Number(process.env.PUBLIC_RL_FORGOT_PASSWORD_MAX) || 8
+});
+const rlResetPasswordToken = createPublicRateLimiter("reset_password_token", {
+  windowMs: Number(process.env.PUBLIC_RL_RESET_PASSWORD_WINDOW_MS) || 3_600_000,
+  max: Number(process.env.PUBLIC_RL_RESET_PASSWORD_MAX) || 24
+});
 const rlRadiusAcct = createPublicRateLimiter("radius_acct_webhook", {
   windowMs: Number(process.env.PUBLIC_RL_RADIUS_ACCT_WINDOW_MS) || 60_000,
   max: Number(process.env.PUBLIC_RL_RADIUS_ACCT_MAX) || 400
@@ -247,6 +255,56 @@ async function logAudit({ ispId = null, actorUserId = null, action, entityType, 
     "INSERT INTO audit_logs (id, isp_id, actor_user_id, action, entity_type, entity_id, details) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6::jsonb)",
     [ispId, actorUserId, action, entityType, entityId, JSON.stringify(details)]
   );
+}
+
+function resolvePlatformPublicOrigin() {
+  const raw = String(
+    process.env.PLATFORM_PUBLIC_BASE_URL || process.env.PLATFORM_PUBLIC_APP_URL || PLATFORM_PUBLIC_BASE_URL || ""
+  ).trim();
+  return raw.replace(/\/$/, "") || "http://localhost:5173";
+}
+
+/** Optional PLATFORM_SMTP_* env — no third-party API; link is logged in dev if SMTP is unset. */
+async function sendPlatformPasswordResetEmail(toEmail, resetUrl) {
+  const host = String(process.env.PLATFORM_SMTP_HOST || "").trim();
+  const from = String(process.env.PLATFORM_SMTP_FROM || "").trim();
+  if (!host || !from) {
+    if (process.env.NODE_ENV !== "production") {
+      // eslint-disable-next-line no-console
+      console.info("[password-reset] Set PLATFORM_SMTP_HOST and PLATFORM_SMTP_FROM to send email; URL:", resetUrl);
+    } else {
+      // eslint-disable-next-line no-console
+      console.warn("[password-reset] PLATFORM_SMTP_* not set — reset email not sent. Configure SMTP or check logs.");
+    }
+    return { ok: false, skipped: true };
+  }
+  let nodemailer;
+  try {
+    nodemailer = await import("nodemailer");
+  } catch (_e) {
+    return { ok: false, error: "nodemailer unavailable" };
+  }
+  const transport = nodemailer.createTransport({
+    host,
+    port: Number(process.env.PLATFORM_SMTP_PORT) || 587,
+    secure: String(process.env.PLATFORM_SMTP_SECURE || "").toLowerCase() === "true",
+    auth:
+      process.env.PLATFORM_SMTP_USER && process.env.PLATFORM_SMTP_PASS
+        ? {
+            user: String(process.env.PLATFORM_SMTP_USER).trim(),
+            pass: String(process.env.PLATFORM_SMTP_PASS).trim()
+          }
+        : undefined
+  });
+  const subject = "McBuleli — password reset / réinitialisation du mot de passe";
+  const text = `McBuleli — password reset\n\nOpen this link (valid 1 hour):\n${resetUrl}\n\nIf you did not request this, ignore this email.\n\n---\nMcBuleli — réinitialisation\nOuvrez ce lien (valable 1 h) :\n${resetUrl}\n\nSi vous n'avez pas demandé cette réinitialisation, ignorez ce message.`;
+  await transport.sendMail({
+    from,
+    to: toEmail,
+    subject,
+    text: String(text).slice(0, 50000)
+  });
+  return { ok: true };
 }
 
 app.use(async (req, _res, next) => {
@@ -965,6 +1023,78 @@ app.post("/api/public/signup", rlSignup, async (req, res) => {
     console.error("signup error", err?.message || err);
     return res.status(500).json({ message: "Could not complete signup. Please try again." });
   }
+});
+
+app.post("/api/public/forgot-password", rlForgotPassword, async (req, res) => {
+  const email = req.body?.email != null ? String(req.body.email).toLowerCase().trim() : "";
+  if (!email || !email.includes("@")) {
+    return res.status(400).json({ message: "A valid email address is required." });
+  }
+  try {
+    const result = await query("SELECT id FROM users WHERE email = $1 AND is_active = TRUE", [email]);
+    const user = result.rows[0];
+    if (user) {
+      await query("DELETE FROM password_reset_tokens WHERE user_id = $1", [user.id]);
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+      await query(
+        `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+        [user.id, tokenHash, expiresAt.toISOString()]
+      );
+      const origin = resolvePlatformPublicOrigin();
+      const resetUrl = `${origin}/login?reset=${encodeURIComponent(rawToken)}`;
+      try {
+        await sendPlatformPasswordResetEmail(email, resetUrl);
+      } catch (mailErr) {
+        // eslint-disable-next-line no-console
+        console.error("password reset mail error", mailErr?.message || mailErr);
+      }
+    }
+  } catch (_err) {
+    /* generic response below */
+  }
+  return res.json({
+    ok: true,
+    message:
+      "If an account exists for this email, we sent a link to choose a new password (check spam). The link expires in one hour."
+  });
+});
+
+app.post("/api/public/reset-password", rlResetPasswordToken, async (req, res) => {
+  const token = req.body?.token != null ? String(req.body.token).trim() : "";
+  const newPassword = req.body?.newPassword != null ? String(req.body.newPassword) : "";
+  if (!token || token.length < 32) {
+    return res.status(400).json({ message: "Invalid or missing reset token." });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ message: "Password must be at least 6 characters." });
+  }
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const row = await query(
+    `SELECT id, user_id FROM password_reset_tokens WHERE token_hash = $1 AND expires_at > NOW()`,
+    [tokenHash]
+  );
+  const t = row.rows[0];
+  if (!t) {
+    return res.status(400).json({
+      message: "This reset link is invalid or has expired. Request a new password reset from the login page."
+    });
+  }
+  const hash = await bcrypt.hash(newPassword, 10);
+  await query(`UPDATE users SET password_hash = $1, must_change_password = FALSE WHERE id = $2`, [
+    hash,
+    t.user_id
+  ]);
+  await query(`DELETE FROM password_reset_tokens WHERE user_id = $1`, [t.user_id]);
+  await logAudit({
+    actorUserId: t.user_id,
+    action: "user.password_reset_via_token",
+    entityType: "user",
+    entityId: t.user_id,
+    details: {}
+  });
+  return res.json({ ok: true, message: "Password updated. You can sign in with your new password." });
 });
 
 async function handleUnifiedPawapayWebhook(req, res) {
