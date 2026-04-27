@@ -9,7 +9,6 @@ import DashboardSideNav from "./DashboardSideNav.jsx";
 import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
 import PlatformHomeMarketingPanel from "./PlatformHomeMarketingPanel.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
-import { COMPANY_CONTACT } from "./companyContact.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
 import {
   IconArrowLeft,
@@ -80,6 +79,15 @@ function workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) {
   const tc = tenantContext?.displayName != null ? String(tenantContext.displayName).trim() : "";
   if (tc && tc !== "AA") return tc;
   return "";
+}
+
+/** Lien tel: à partir du numéro saisi dans l’image de marque (conserve + et chiffres). */
+function telHrefFromBrandingPhone(phone) {
+  const s = String(phone || "").trim();
+  if (!s) return null;
+  const cleaned = s.replace(/[^\d+]/g, "");
+  if (!cleaned) return null;
+  return `tel:${cleaned}`;
 }
 
 /** Replace placeholder tenant names (e.g. "AA") with McBuleli for public-facing titles. */
@@ -5088,27 +5096,55 @@ function App() {
 
       <footer className="app-footer app-footer--dashboard">
         <div className="app-footer-inner">
-          <div className="app-footer-row app-footer-row--brand">
-            <span className="app-footer-brand">{COMPANY_CONTACT.legalName}</span>
-            <span className="app-footer-note">
-              {t("Facturation FAI & opérations réseau", "ISP billing & network operations")}
-            </span>
-          </div>
-          <p className="app-footer-legal">
-            RCCM : <strong>{COMPANY_CONTACT.rccm}</strong>
-            {" — "}
-            {COMPANY_CONTACT.address}
-          </p>
-          <div className="app-footer-contact-row">
-            <a className="app-footer-contact-pill" href={`tel:${COMPANY_CONTACT.phoneTel}`}>
-              <IconPhone width={18} height={18} aria-hidden />
-              <span>{COMPANY_CONTACT.phoneDisplay}</span>
-            </a>
-            <a className="app-footer-contact-pill" href={`mailto:${COMPANY_CONTACT.email}`}>
-              <IconMail width={18} height={18} aria-hidden />
-              <span>{COMPANY_CONTACT.email}</span>
-            </a>
-          </div>
+          {(() => {
+            const orgTitle =
+              workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
+              String(branding?.displayName || "").trim();
+            const addr = String(branding?.address || "").trim();
+            const portalLeg = String(branding?.portalFooterText || "").trim();
+            const invFoot = String(branding?.invoiceFooter || "").trim();
+            const email = String(branding?.contactEmail || "").trim();
+            const phone = String(branding?.contactPhone || "").trim();
+            const telHref = telHrefFromBrandingPhone(phone);
+            return (
+              <>
+                {orgTitle ? (
+                  <div className="app-footer-row app-footer-row--brand">
+                    <span className="app-footer-brand">{orgTitle}</span>
+                  </div>
+                ) : null}
+                {addr ? <p className="app-footer-address">{addr}</p> : null}
+                {portalLeg ? (
+                  <p className="app-footer-legal app-footer-legal--pre">{portalLeg}</p>
+                ) : null}
+                {invFoot ? (
+                  <p
+                    className={`app-footer-legal app-footer-legal--pre${
+                      portalLeg ? " app-footer-legal--secondary" : ""
+                    }`}
+                  >
+                    {invFoot}
+                  </p>
+                ) : null}
+                {email || telHref ? (
+                  <div className="app-footer-contact-row">
+                    {telHref ? (
+                      <a className="app-footer-contact-pill" href={telHref}>
+                        <IconPhone width={18} height={18} aria-hidden />
+                        <span>{phone}</span>
+                      </a>
+                    ) : null}
+                    {email ? (
+                      <a className="app-footer-contact-pill" href={`mailto:${email}`}>
+                        <IconMail width={18} height={18} aria-hidden />
+                        <span>{email}</span>
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            );
+          })()}
           <p className="app-footer-powered">Powered by McBuleli</p>
         </div>
       </footer>

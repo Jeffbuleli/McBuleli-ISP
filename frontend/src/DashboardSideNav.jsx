@@ -173,6 +173,7 @@ export default function DashboardSideNav({
           className={`dashboard-nav-category-link${
             activeHash === item.href ? " dashboard-nav-category-link--active" : ""
           }${flyout ? " dashboard-nav-category-link--flyout" : ""}`}
+          aria-current={activeHash === item.href ? "page" : undefined}
           onClick={() => {
             setActiveHash(item.href);
             setExpandedCategory(cat.id);
@@ -225,9 +226,19 @@ export default function DashboardSideNav({
                   title={compact ? cat.label : undefined}
                   onClick={() => {
                     if (open) {
+                      const containsActive = cat.items.some((it) => it.href === activeHash);
+                      if (containsActive) return;
                       setExpandedCategory("");
                     } else {
+                      const inThis = cat.items.some((it) => it.href === activeHash);
                       setExpandedCategory(cat.id);
+                      if (!inThis && cat.items[0]) {
+                        const h = cat.items[0].href;
+                        setActiveHash(h);
+                        if (typeof window !== "undefined" && window.location.hash !== h) {
+                          window.location.hash = h;
+                        }
+                      }
                     }
                   }}
                 >

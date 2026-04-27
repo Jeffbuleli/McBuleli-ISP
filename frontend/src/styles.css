@@ -519,10 +519,10 @@ a:hover {
 
 .dashboard-header-announcements__label {
   flex-shrink: 0;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
   color: var(--mb-muted);
 }
 
@@ -1261,6 +1261,17 @@ button.btn-secondary-outline:hover:not(:disabled) {
   margin-top: 48px;
 }
 
+.app-footer--dashboard .app-footer-inner {
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
 .app-footer-inner {
   max-width: 900px;
   display: flex;
@@ -1272,7 +1283,16 @@ button.btn-secondary-outline:hover:not(:disabled) {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
+  justify-content: center;
   gap: 8px 14px;
+}
+
+.app-footer-address {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--mb-muted);
+  max-width: 42rem;
 }
 
 .app-footer-legal {
@@ -1281,6 +1301,15 @@ button.btn-secondary-outline:hover:not(:disabled) {
   line-height: 1.5;
   color: var(--mb-muted);
   max-width: 52rem;
+}
+
+.app-footer-legal--pre {
+  white-space: pre-wrap;
+}
+
+.app-footer-legal--secondary {
+  font-size: 0.8rem;
+  opacity: 0.92;
 }
 
 .app-footer-legal strong {
@@ -1293,6 +1322,7 @@ button.btn-secondary-outline:hover:not(:disabled) {
   flex-wrap: wrap;
   gap: 10px 14px;
   align-items: center;
+  justify-content: center;
 }
 
 .app-footer-contact-pill {
@@ -1316,12 +1346,14 @@ button.btn-secondary-outline:hover:not(:disabled) {
 }
 
 .app-footer-powered {
-  margin: 4px 0 0;
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  margin: 12px 0 0;
+  width: 100%;
+  font-size: 0.82rem;
+  letter-spacing: normal;
+  text-transform: none;
   color: var(--mb-muted);
-  opacity: 0.85;
+  opacity: 0.88;
+  text-align: center;
 }
 
 .app-footer-brand {
