@@ -532,6 +532,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ...payload, ispId })
     }),
+  patchTeamUser: (ispId, userId, payload) =>
+    request(withIsp(`/users/${encodeURIComponent(userId)}`, ispId), {
+      method: "PATCH",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
   resetUserPassword: (ispId, userId, newPassword) =>
     request(withIsp(`/users/${userId}/reset-password`, ispId), {
       method: "POST",

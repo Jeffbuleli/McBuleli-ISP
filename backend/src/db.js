@@ -99,6 +99,48 @@ export async function initDb() {
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_site TEXT NULL;");
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS seeded_account_key TEXT UNIQUE NULL;");
 
+  /** Membres d’équipe par FAI : même compte (email / mot de passe) peut avoir plusieurs lignes (multi-entreprise). */
+  await query(`
+    CREATE TABLE IF NOT EXISTS user_isp_memberships (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      accreditation_level TEXT NOT NULL DEFAULT 'basic',
+      phone TEXT NULL,
+      address TEXT NULL,
+      assigned_site TEXT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id, isp_id)
+    );
+  `);
+  await query("ALTER TABLE user_isp_memberships DROP CONSTRAINT IF EXISTS user_isp_memberships_role_check;");
+  await query(`
+    ALTER TABLE user_isp_memberships
+    ADD CONSTRAINT user_isp_memberships_role_check
+    CHECK (
+      role IN (
+        'super_admin',
+        'company_manager',
+        'isp_admin',
+        'billing_agent',
+        'noc_operator',
+        'field_agent'
+      )
+    );
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_user_isp_memberships_isp ON user_isp_memberships (isp_id);");
+  await query("CREATE INDEX IF NOT EXISTS idx_user_isp_memberships_user ON user_isp_memberships (user_id);");
+  await query(`
+    INSERT INTO user_isp_memberships (user_id, isp_id, role, is_active, accreditation_level, phone, address, assigned_site)
+    SELECT u.id, u.isp_id, u.role, u.is_active, u.accreditation_level, u.phone, u.address, u.assigned_site
+    FROM users u
+    WHERE u.isp_id IS NOT NULL
+      AND u.role IS DISTINCT FROM 'system_owner'
+    ON CONFLICT (user_id, isp_id) DO NOTHING
+  `);
+
   await query(`
     CREATE TABLE IF NOT EXISTS user_mfa_challenges (
       id UUID PRIMARY KEY,
@@ -912,6 +954,13 @@ export async function initDb() {
      VALUES (gen_random_uuid(), $1, 'Compte Démo McBuleli', 'demo@mcbuleli.live', $2, 'isp_admin', TRUE, FALSE)
      ON CONFLICT (email) DO UPDATE SET isp_id = $1, role = 'isp_admin', is_active = TRUE`,
     [demoIspId, demoHash]
+  );
+  await query(
+    `INSERT INTO user_isp_memberships (user_id, isp_id, role, is_active, accreditation_level)
+     SELECT u.id, $1::uuid, 'isp_admin', TRUE, 'basic'
+     FROM users u WHERE u.email = 'demo@mcbuleli.live'
+     ON CONFLICT (user_id, isp_id) DO NOTHING`,
+    [demoIspId]
   );
 
   await query(`

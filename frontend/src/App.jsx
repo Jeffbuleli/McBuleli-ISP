@@ -422,8 +422,10 @@ function App() {
   const [user, setUser] = useState(null);
   const [tenantContext, setTenantContext] = useState(null);
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  const [loginWorkspaces, setLoginWorkspaces] = useState(null);
   const [mfaLogin, setMfaLogin] = useState(null);
   const [mfaCode, setMfaCode] = useState("");
+  const [teamRowDraft, setTeamRowDraft] = useState({});
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
   const [isps, setIsps] = useState([]);
   const [selectedIspId, setSelectedIspId] = useState("");
@@ -1027,6 +1029,20 @@ function App() {
 
   useEffect(() => {
     const next = {};
+    for (const u of users) {
+      next[u.id] = {
+        role: u.role,
+        phone: u.phone || "",
+        address: u.address || "",
+        assignedSite: u.assignedSite || "",
+        accreditationLevel: u.accreditationLevel || "basic"
+      };
+    }
+    setTeamRowDraft(next);
+  }, [users]);
+
+  useEffect(() => {
+    const next = {};
     for (const s of platformBannerSlots) {
       next[s.slotIndex] = {
         linkUrl: s.linkUrl ?? "",
@@ -1037,11 +1053,35 @@ function App() {
     setPlatformBannerEdits(next);
   }, [platformBannerSlots]);
 
+  async function completeLoginWithWorkspace(ispId) {
+    setError("");
+    try {
+      const payload = await api.login({ ...loginForm, ispId });
+      setLoginWorkspaces(null);
+      if (payload.mfaRequired) {
+        setMfaLogin(payload);
+        setMfaCode("");
+        setNotice(payload.message || "Code MFA requis.");
+        return;
+      }
+      setAuthToken(payload.token);
+      setUser(payload.user);
+      refresh(payload.user.ispId || "");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function onLogin(e) {
     e.preventDefault();
     setError("");
+    setLoginWorkspaces(null);
     try {
       const payload = await api.login(loginForm);
+      if (payload.needWorkspaceChoice && Array.isArray(payload.workspaces)) {
+        setLoginWorkspaces(payload.workspaces);
+        return;
+      }
       if (payload.mfaRequired) {
         setMfaLogin(payload);
         setMfaCode("");
@@ -1080,6 +1120,7 @@ function App() {
     setUser(null);
     setMfaLogin(null);
     setMfaCode("");
+    setLoginWorkspaces(null);
     setIsps([]);
     setSelectedIspId("");
     setSuperDashboard(null);
@@ -1682,7 +1723,11 @@ function App() {
 
   async function onCreateUser(e) {
     e.preventDefault();
-    await api.createUser(selectedIspId, userForm);
+    const payload = { ...userForm };
+    if (!payload.password || !String(payload.password).trim()) {
+      delete payload.password;
+    }
+    await api.createUser(selectedIspId, payload);
     setUserForm({
       fullName: "",
       email: "",
@@ -1694,6 +1739,26 @@ function App() {
       assignedSite: ""
     });
     refresh();
+  }
+
+  async function onSaveTeamUser(userId) {
+    setError("");
+    setNotice("");
+    const d = teamRowDraft[userId];
+    if (!d || !selectedIspId) return;
+    try {
+      await api.patchTeamUser(selectedIspId, userId, {
+        role: d.role,
+        phone: d.phone,
+        address: d.address,
+        assignedSite: d.assignedSite,
+        accreditationLevel: d.accreditationLevel
+      });
+      setNotice(t("Membre d'équipe enregistré.", "Team member saved."));
+      refresh();
+    } catch (err) {
+      setError(err.message || t("Échec de la mise à jour.", "Update failed."));
+    }
   }
 
   async function onResetPassword(userId) {
@@ -2178,6 +2243,42 @@ function App() {
               </div>
             </header>
             {error && <p className="error">{error}</p>}
+            {loginWorkspaces && !mfaLogin ? (
+              <div className="panel" role="dialog" aria-label={isEn ? "Choose workspace" : "Choisir l'entreprise"}>
+                <h2>{isEn ? "Choose your company" : "Choisissez votre entreprise"}</h2>
+                <p className="app-meta">
+                  {isEn
+                    ? "This account is linked to several operators. Pick the workspace you want to open."
+                    : "Ce compte est rattaché à plusieurs opérateurs. Sélectionnez l'espace à ouvrir."}
+                </p>
+                <ul style={{ listStyle: "none", padding: 0, margin: "12px 0" }}>
+                  {loginWorkspaces.map((w) => (
+                    <li key={w.ispId} style={{ marginBottom: 8 }}>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ width: "100%", textAlign: "left" }}
+                        onClick={() => completeLoginWithWorkspace(w.ispId)}
+                      >
+                        <strong>{w.name}</strong>
+                        <span className="app-meta" style={{ display: "block" }}>
+                          {w.role}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginWorkspaces(null);
+                    setError("");
+                  }}
+                >
+                  {isEn ? "Back" : "Retour"}
+                </button>
+              </div>
+            ) : null}
             {mfaLogin ? (
               <form className="panel" onSubmit={onVerifyLoginMfa}>
                 <h2>{isEn ? "MFA verification" : "Vérification MFA"}</h2>
@@ -2201,7 +2302,7 @@ function App() {
                   {isEn ? "Back to login" : "Retour connexion"}
                 </button>
               </form>
-            ) : (
+            ) : !loginWorkspaces ? (
               <form className="panel" onSubmit={onLogin}>
                 <h2>{isEn ? "Login" : "Connexion"}</h2>
                 <p className="app-meta">
@@ -2212,7 +2313,10 @@ function App() {
                 <input
                   placeholder={isEn ? "Email address" : "Adresse e-mail"}
                   value={loginForm.email}
-                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                  onChange={(e) => {
+                    setLoginWorkspaces(null);
+                    setLoginForm({ ...loginForm, email: e.target.value });
+                  }}
                 />
                 <input
                   placeholder={isEn ? "Password" : "Mot de passe"}
@@ -2226,7 +2330,7 @@ function App() {
                   ({isEn ? "1-month trial, Mobile Money billing" : "essai 1 mois, facturation Mobile Money"})
                 </p>
               </form>
-            )}
+            ) : null}
           </div>
         </div>
       </main>
@@ -2433,6 +2537,7 @@ function App() {
       {(() => {
         const billing = isPlatformSuperRole(user.role) ? platformBillingStatus : user.platformBilling;
         if (!selectedIspId || !billing || billing.legacyWorkspace) return null;
+        if (user.role === "field_agent") return null;
         const locked = billing.accessAllowed === false;
         return (
           <section className={`panel ${locked ? "error" : ""}`} id="mcbuleli-billing">
@@ -3670,10 +3775,28 @@ function App() {
               onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
             />
             <input
-              placeholder="Mot de passe temporaire"
+              placeholder="Mot de passe (obligatoire seulement pour un nouvel e-mail)"
               type="password"
               value={userForm.password}
               onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+            />
+            <p className="app-meta">
+              Si l’e-mail existe déjà sur McBuleli, le compte est rattaché à ce FAI sans changer le mot de passe.
+            </p>
+            <input
+              placeholder="Téléphone (facultatif)"
+              value={userForm.phone}
+              onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
+            />
+            <input
+              placeholder="Adresse (facultatif)"
+              value={userForm.address}
+              onChange={(e) => setUserForm({ ...userForm, address: e.target.value })}
+            />
+            <input
+              placeholder="Site / zone affectée (facultatif)"
+              value={userForm.assignedSite}
+              onChange={(e) => setUserForm({ ...userForm, assignedSite: e.target.value })}
             />
             <select
               value={userForm.role}
@@ -3767,24 +3890,107 @@ function App() {
               <p>Expire : {generatedInvite.expiresIn}</p>
             </div>
           )}
-          {users.map((item) => (
-            <p key={item.id}>
-              {item.fullName} ({item.role}) — {item.email} [{item.isActive ? "actif" : "inactif"}]{" "}
-              {item.accreditationLevel ? `(${item.accreditationLevel})` : ""}{" "}
-              {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
-                <>
-                  <button onClick={() => onResetPassword(item.id)}>Réinitialiser le mot de passe</button>{" "}
-                  <button onClick={() => onCreateInvite(item.id)}>Créer une invitation</button>{" "}
-                  {item.isActive && (
-                    <button onClick={() => onDeactivateUser(item.id)}>Désactiver</button>
-                  )}
-                  {!item.isActive && (
-                    <button onClick={() => onReactivateUser(item.id)}>Réactiver</button>
-                  )}
-                </>
-              )}
-            </p>
-          ))}
+          {users.map((item) => {
+            const d =
+              teamRowDraft[item.id] || {
+                role: item.role,
+                phone: item.phone || "",
+                address: item.address || "",
+                assignedSite: item.assignedSite || "",
+                accreditationLevel: item.accreditationLevel || "basic"
+              };
+            const canManageTeam =
+              isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin";
+            return (
+              <div key={item.id} className="panel" style={{ marginBottom: 12 }}>
+                <p style={{ marginTop: 0 }}>
+                  <strong>{item.fullName}</strong> — {item.email}{" "}
+                  <span className="app-meta">[{item.isActive ? "actif dans ce FAI" : "inactif dans ce FAI"}]</span>
+                </p>
+                {canManageTeam ? (
+                  <div className="grid" style={{ gap: 8 }}>
+                    <select
+                      value={d.role}
+                      onChange={(e) =>
+                        setTeamRowDraft({
+                          ...teamRowDraft,
+                          [item.id]: { ...d, role: e.target.value }
+                        })
+                      }
+                    >
+                      {isPlatformSuperRole(user.role) && (
+                        <option value="company_manager">Dirigeant entreprise</option>
+                      )}
+                      <option value="isp_admin">Administrateur FAI</option>
+                      <option value="billing_agent">Agent facturation</option>
+                      <option value="noc_operator">Opérateur NOC</option>
+                      <option value="field_agent">Agent terrain</option>
+                    </select>
+                    <select
+                      value={d.accreditationLevel}
+                      onChange={(e) =>
+                        setTeamRowDraft({
+                          ...teamRowDraft,
+                          [item.id]: { ...d, accreditationLevel: e.target.value }
+                        })
+                      }
+                    >
+                      <option value="basic">Accréditation : basique</option>
+                      <option value="standard">Standard</option>
+                      <option value="senior">Senior</option>
+                      <option value="manager">Manager</option>
+                    </select>
+                    <input
+                      placeholder="Téléphone"
+                      value={d.phone}
+                      onChange={(e) =>
+                        setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, phone: e.target.value } })
+                      }
+                    />
+                    <input
+                      placeholder="Adresse"
+                      value={d.address}
+                      onChange={(e) =>
+                        setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, address: e.target.value } })
+                      }
+                    />
+                    <input
+                      placeholder="Site / zone"
+                      value={d.assignedSite}
+                      onChange={(e) =>
+                        setTeamRowDraft({
+                          ...teamRowDraft,
+                          [item.id]: { ...d, assignedSite: e.target.value }
+                        })
+                      }
+                    />
+                    <button type="button" onClick={() => onSaveTeamUser(item.id)}>
+                      Enregistrer fiche & rôle
+                    </button>
+                  </div>
+                ) : null}
+                {canManageTeam ? (
+                  <p style={{ marginBottom: 0 }}>
+                    <button type="button" onClick={() => onResetPassword(item.id)}>
+                      Réinitialiser le mot de passe
+                    </button>{" "}
+                    <button type="button" onClick={() => onCreateInvite(item.id)}>
+                      Créer une invitation
+                    </button>{" "}
+                    {item.isActive ? (
+                      <button type="button" onClick={() => onDeactivateUser(item.id)}>
+                        Désactiver dans ce FAI
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => onReactivateUser(item.id)}>
+                        Réactiver dans ce FAI
+                      </button>
+                    )}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })}
         </section>
       </section>
 

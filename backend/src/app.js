@@ -567,6 +567,69 @@ function publicUserPayload(user, extra = {}) {
   };
 }
 
+async function fetchLoginWorkspaceRows(userId) {
+  const r = await query(
+    `SELECT m.isp_id AS "ispId", m.role,
+            m.accreditation_level AS "accreditationLevel", m.phone AS "membershipPhone",
+            m.address AS "membershipAddress", m.assigned_site AS "membershipAssignedSite",
+            i.name AS "ispName", b.display_name AS "ispDisplayName"
+     FROM user_isp_memberships m
+     JOIN isps i ON i.id = m.isp_id
+     LEFT JOIN isp_branding b ON b.isp_id = m.isp_id
+     WHERE m.user_id = $1 AND m.is_active = TRUE
+     ORDER BY COALESCE(b.display_name, i.name) ASC`,
+    [userId]
+  );
+  return r.rows;
+}
+
+/** Fusionne la ligne user (table users) et le contexte espace (membership) pour JWT + payload. */
+function sessionUserFromWorkspaceRow(user, ws) {
+  return {
+    ...user,
+    role: ws.role,
+    isp_id: ws.ispId,
+    phone: ws.membershipPhone != null ? ws.membershipPhone : user.phone,
+    address: ws.membershipAddress != null ? ws.membershipAddress : user.address,
+    assigned_site:
+      ws.membershipAssignedSite != null ? ws.membershipAssignedSite : user.assigned_site,
+    accreditation_level: ws.accreditationLevel || user.accreditation_level
+  };
+}
+
+async function countActiveStaffInIsp(ispId) {
+  const r = await query(
+    `SELECT COUNT(DISTINCT m.user_id)::int AS count
+     FROM user_isp_memberships m
+     JOIN users u ON u.id = m.user_id
+     WHERE m.isp_id = $1 AND m.is_active = TRUE AND u.is_active = TRUE`,
+    [ispId]
+  );
+  return r.rows[0]?.count ?? 0;
+}
+
+async function fetchTeamUserRow(ispId, userId) {
+  const r = await query(
+    `SELECT u.id,
+            m.isp_id AS "ispId",
+            u.full_name AS "fullName",
+            u.email,
+            m.role,
+            m.accreditation_level AS "accreditationLevel",
+            m.is_active AS "isActive",
+            u.must_change_password AS "mustChangePassword",
+            m.phone AS "phone",
+            m.address AS "address",
+            m.assigned_site AS "assignedSite",
+            u.created_at AS "createdAt"
+     FROM user_isp_memberships m
+     JOIN users u ON u.id = m.user_id
+     WHERE m.isp_id = $1 AND u.id = $2`,
+    [ispId, userId]
+  );
+  return r.rows[0] || null;
+}
+
 async function dashboardPayloadFromDb() {
   const r = await query(
     `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", image_bytes AS "imageBytes", image_mime AS "imageMime",
@@ -627,12 +690,13 @@ async function createMfaChallenge({ user, purpose, metadata = {} }) {
      RETURNING id, purpose, expires_at AS "expiresAt"`,
     [user.id, purpose, hashOtpCode(code), JSON.stringify(metadata), expiresAt.toISOString()]
   );
-  if (user.isp_id) {
+  const outboxIspId = metadata.ispId || user.isp_id;
+  if (outboxIspId) {
     await query(
       `INSERT INTO notification_outbox (id, isp_id, channel, recipient, template_key, payload, status)
        VALUES (gen_random_uuid(), $1, 'internal', $2, $3, $4::jsonb, 'queued')`,
       [
-        user.isp_id,
+        outboxIspId,
         user.email,
         purpose === "withdrawal" ? "withdrawal_mfa_code" : "login_mfa_code",
         JSON.stringify({
@@ -644,7 +708,7 @@ async function createMfaChallenge({ user, purpose, metadata = {} }) {
       ]
     );
   }
-  const delivery = user.isp_id ? "notification_outbox" : "response_dev";
+  const delivery = outboxIspId ? "notification_outbox" : "response_dev";
   return {
     ...inserted.rows[0],
     delivery,
@@ -672,7 +736,12 @@ async function verifyMfaChallenge({ userId = null, challengeId, purpose, code })
     params
   );
   if (result.rows[0]) {
-    return { ok: true, userId: result.rows[0].userId, challenge: result.rows[0] };
+    return {
+      ok: true,
+      userId: result.rows[0].userId,
+      challenge: result.rows[0],
+      metadata: result.rows[0].metadata || {}
+    };
   }
   const expireParams = [challengeId, purpose];
   let expireUserPredicate = "";
@@ -827,6 +896,12 @@ app.post("/api/public/signup", rlSignup, async (req, res) => {
        VALUES (gen_random_uuid(), $1, $2, $3, $4, 'isp_admin', 'basic', TRUE, FALSE)
        RETURNING id, isp_id AS "ispId", full_name AS "fullName", email, role`,
       [ispId, adminFullName, email, hash]
+    );
+    await query(
+      `INSERT INTO user_isp_memberships (user_id, isp_id, role, is_active, accreditation_level)
+       VALUES ($1, $2, 'isp_admin', TRUE, 'basic')
+       ON CONFLICT (user_id, isp_id) DO NOTHING`,
+      [insertedUser.rows[0].id, ispId]
     );
     const insertedSub = await query(
       `INSERT INTO isp_platform_subscriptions (id, isp_id, package_id, status, starts_at, ends_at)
@@ -1452,19 +1527,96 @@ app.get("/api/tenant/context", async (req, res) => {
 });
 
 app.post("/api/auth/login", async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, ispId: requestedIspIdRaw } = req.body || {};
   if (!email || !password) return res.status(400).json({ message: "email and password are required" });
-  const result = await query("SELECT * FROM users WHERE email = $1", [email.toLowerCase()]);
+  const requestedIspId =
+    requestedIspIdRaw != null && String(requestedIspIdRaw).trim() ? String(requestedIspIdRaw).trim() : null;
+
+  const result = await query("SELECT * FROM users WHERE email = $1", [String(email).toLowerCase()]);
   const user = result.rows[0];
   if (!user) return res.status(401).json({ message: "Invalid credentials" });
+  const okPass = await bcrypt.compare(password, user.password_hash);
+  if (!okPass) return res.status(401).json({ message: "Invalid credentials" });
   if (!user.is_active) return res.status(403).json({ message: "User account is deactivated" });
-  if (req.tenantIspId && user.role !== "super_admin" && user.isp_id !== req.tenantIspId) {
-    return res.status(403).json({ message: "This account does not belong to this ISP workspace." });
+
+  if (user.role === "system_owner") {
+    if (req.tenantIspId) {
+      return res.status(403).json({ message: "This account does not belong to this ISP workspace." });
+    }
+    if (MFA_REQUIRED_ROLES.has(user.role) && user.mfa_totp_enabled) {
+      const challenge = await createMfaChallenge({ user, purpose: "login", metadata: {} });
+      return res.status(202).json({
+        mfaRequired: true,
+        challengeId: challenge.id,
+        delivery: challenge.delivery,
+        expiresAt: challenge.expiresAt,
+        devCode: challenge.code,
+        message: "MFA code required. Check the notification outbox or configured SMS provider."
+      });
+    }
+    const token = signToken(user);
+    return res.json({ token, user: await attachDashboardPayload(publicUserPayload(user)) });
   }
-  const ok = await bcrypt.compare(password, user.password_hash);
-  if (!ok) return res.status(401).json({ message: "Invalid credentials" });
-  if (MFA_REQUIRED_ROLES.has(user.role) && user.mfa_totp_enabled) {
-    const challenge = await createMfaChallenge({ user, purpose: "login" });
+
+  const workspaces = await fetchLoginWorkspaceRows(user.id);
+  if (!workspaces.length && user.role === "super_admin" && !user.isp_id) {
+    if (req.tenantIspId) {
+      return res.status(403).json({ message: "This account does not belong to this ISP workspace." });
+    }
+    if (MFA_REQUIRED_ROLES.has(user.role) && user.mfa_totp_enabled) {
+      const challenge = await createMfaChallenge({
+        user,
+        purpose: "login",
+        metadata: { superAdminGlobal: true }
+      });
+      return res.status(202).json({
+        mfaRequired: true,
+        challengeId: challenge.id,
+        delivery: challenge.delivery,
+        expiresAt: challenge.expiresAt,
+        devCode: challenge.code,
+        message: "MFA code required. Check the notification outbox or configured SMS provider."
+      });
+    }
+    const token = signToken(user);
+    return res.json({ token, user: await attachDashboardPayload(publicUserPayload(user)) });
+  }
+
+  if (!workspaces.length) {
+    return res.status(403).json({ message: "No active workspace for this account." });
+  }
+
+  let selected = null;
+  if (requestedIspId) {
+    selected = workspaces.find((m) => String(m.ispId) === requestedIspId);
+    if (!selected) {
+      return res.status(403).json({ message: "This account is not part of the selected workspace." });
+    }
+  } else if (req.tenantIspId) {
+    selected = workspaces.find((m) => String(m.ispId) === String(req.tenantIspId));
+    if (!selected) {
+      return res.status(403).json({ message: "This account does not belong to this ISP workspace." });
+    }
+  } else if (workspaces.length === 1) {
+    selected = workspaces[0];
+  } else {
+    return res.status(200).json({
+      needWorkspaceChoice: true,
+      workspaces: workspaces.map((m) => ({
+        ispId: m.ispId,
+        role: m.role,
+        name: m.ispDisplayName || m.ispName || m.ispId
+      }))
+    });
+  }
+
+  const sessionUser = sessionUserFromWorkspaceRow(user, selected);
+  if (MFA_REQUIRED_ROLES.has(sessionUser.role) && user.mfa_totp_enabled) {
+    const challenge = await createMfaChallenge({
+      user: { ...user, isp_id: selected.ispId },
+      purpose: "login",
+      metadata: { ispId: selected.ispId, role: selected.role }
+    });
     return res.status(202).json({
       mfaRequired: true,
       challengeId: challenge.id,
@@ -1474,8 +1626,14 @@ app.post("/api/auth/login", async (req, res) => {
       message: "MFA code required. Check the notification outbox or configured SMS provider."
     });
   }
-  const token = signToken(user);
-  return res.json({ token, user: await attachDashboardPayload(publicUserPayload(user)) });
+
+  await query(`UPDATE users SET isp_id = $1, role = $2 WHERE id = $3`, [
+    selected.ispId,
+    selected.role,
+    user.id
+  ]);
+  const token = signToken(sessionUser);
+  return res.json({ token, user: await attachDashboardPayload(publicUserPayload(sessionUser)) });
 });
 
 app.post("/api/auth/mfa/verify-login", async (req, res) => {
@@ -1488,25 +1646,69 @@ app.post("/api/auth/mfa/verify-login", async (req, res) => {
   if (!userId) return res.status(400).json({ message: "Invalid MFA challenge" });
   const verified = await verifyMfaChallenge({ userId, challengeId, code, purpose: "login" });
   if (!verified.ok) return res.status(400).json({ message: "Invalid or expired MFA code" });
+  const meta = verified.metadata || verified.challenge?.metadata || {};
   const result = await query("SELECT * FROM users WHERE id = $1", [verified.userId]);
   const user = result.rows[0];
   if (!user || !user.is_active) return res.status(403).json({ message: "User account is inactive" });
-  const token = signToken(user);
-  return res.json({ token, user: await attachDashboardPayload(publicUserPayload(user)) });
+
+  if (user.role === "system_owner" || meta.superAdminGlobal) {
+    const token = signToken(user);
+    return res.json({ token, user: await attachDashboardPayload(publicUserPayload(user)) });
+  }
+
+  const ispId = meta.ispId;
+  const roleFromChallenge = meta.role;
+  if (!ispId || !roleFromChallenge) {
+    return res.status(400).json({ message: "Workspace context missing; please sign in again." });
+  }
+  const mem = await query(
+    `SELECT isp_id AS "ispId", role, accreditation_level AS "accreditationLevel",
+            phone AS "membershipPhone", address AS "membershipAddress", assigned_site AS "membershipAssignedSite"
+     FROM user_isp_memberships WHERE user_id = $1 AND isp_id = $2::uuid AND is_active = TRUE`,
+    [user.id, ispId]
+  );
+  if (!mem.rows[0]) {
+    return res.status(403).json({ message: "Workspace access is no longer active." });
+  }
+  const ws = mem.rows[0];
+  if (String(ws.role) !== String(roleFromChallenge)) {
+    return res.status(400).json({ message: "Workspace context outdated; please sign in again." });
+  }
+  const sessionUser = sessionUserFromWorkspaceRow(user, ws);
+  await query(`UPDATE users SET isp_id = $1, role = $2 WHERE id = $3`, [ws.ispId, ws.role, user.id]);
+  const token = signToken(sessionUser);
+  return res.json({ token, user: await attachDashboardPayload(publicUserPayload(sessionUser)) });
 });
 
 app.get("/api/auth/me", authenticate, async (req, res) => {
-  const result = await query(
-    "SELECT id, email, full_name, role, isp_id, is_active, must_change_password, mfa_totp_enabled FROM users WHERE id = $1",
-    [req.user.sub]
-  );
+  const result = await query("SELECT * FROM users WHERE id = $1", [req.user.sub]);
   const user = result.rows[0];
   if (!user) return res.status(404).json({ message: "User not found" });
-  let platformBilling = null;
-  if (user.isp_id) {
-    platformBilling = await getPlatformBillingSnapshot(user.isp_id);
+
+  let sessionUser = user;
+  if (
+    user.role !== "system_owner" &&
+    !(user.role === "super_admin" && !req.user.ispId) &&
+    req.user.ispId
+  ) {
+    const mem = await query(
+      `SELECT isp_id AS "ispId", role, accreditation_level AS "accreditationLevel",
+              phone AS "membershipPhone", address AS "membershipAddress", assigned_site AS "membershipAssignedSite"
+       FROM user_isp_memberships
+       WHERE user_id = $1 AND isp_id = $2::uuid AND is_active = TRUE`,
+      [user.id, req.user.ispId]
+    );
+    if (!mem.rows[0]) {
+      return res.status(403).json({ message: "Workspace access revoked or inactive." });
+    }
+    sessionUser = sessionUserFromWorkspaceRow(user, mem.rows[0]);
   }
-  return res.json(await attachDashboardPayload(publicUserPayload(user, { platformBilling })));
+
+  let platformBilling = null;
+  if (sessionUser.isp_id) {
+    platformBilling = await getPlatformBillingSnapshot(sessionUser.isp_id);
+  }
+  return res.json(await attachDashboardPayload(publicUserPayload(sessionUser, { platformBilling })));
 });
 
 app.post("/api/auth/mfa/totp/setup", authenticate, async (req, res) => {
@@ -3016,7 +3218,22 @@ app.get(
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const result = await query(
-    "SELECT id, isp_id AS \"ispId\", full_name AS \"fullName\", email, role, accreditation_level AS \"accreditationLevel\", is_active AS \"isActive\", must_change_password AS \"mustChangePassword\", created_at AS \"createdAt\" FROM users WHERE isp_id = $1 ORDER BY created_at DESC",
+    `SELECT u.id,
+            m.isp_id AS "ispId",
+            u.full_name AS "fullName",
+            u.email,
+            m.role,
+            m.accreditation_level AS "accreditationLevel",
+            m.is_active AS "isActive",
+            u.must_change_password AS "mustChangePassword",
+            m.phone AS "phone",
+            m.address AS "address",
+            m.assigned_site AS "assignedSite",
+            u.created_at AS "createdAt"
+     FROM user_isp_memberships m
+     JOIN users u ON u.id = m.user_id
+     WHERE m.isp_id = $1
+     ORDER BY u.created_at DESC`,
     [ispId]
   );
     return res.json(result.rows);
@@ -3031,9 +3248,12 @@ app.get(
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
     const result = await query(
-      `SELECT full_name AS "fullName", email, role, accreditation_level AS "accreditationLevel",
-              is_active AS "isActive", created_at AS "createdAt"
-       FROM users WHERE isp_id = $1 ORDER BY created_at DESC`,
+      `SELECT u.full_name AS "fullName", u.email, m.role, m.accreditation_level AS "accreditationLevel",
+              m.is_active AS "isActive", u.created_at AS "createdAt"
+       FROM user_isp_memberships m
+       JOIN users u ON u.id = m.user_id
+       WHERE m.isp_id = $1
+       ORDER BY u.created_at DESC`,
       [ispId]
     );
     const headers = ["fullName", "email", "role", "accreditationLevel", "isActive", "createdAt"];
@@ -3107,6 +3327,36 @@ app.post(
         errors.push({ line: lineNo, message: `Role not allowed for your account: ${c.role || ""}` });
         continue;
       }
+      const exists = await query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [emailLower]);
+      if (exists.rows[0]) {
+        const uid = exists.rows[0].id;
+        const memExists = await query(
+          "SELECT 1 FROM user_isp_memberships WHERE user_id = $1 AND isp_id = $2",
+          [uid, targetIspId]
+        );
+        if (memExists.rows[0]) {
+          skipped.push({ line: lineNo, email: emailLower, reason: "already_in_workspace" });
+          continue;
+        }
+        if (Number.isFinite(maxUsers) && (await countActiveStaffInIsp(targetIspId)) >= maxUsers) {
+          errors.push({ line: lineNo, message: `Active user limit reached (${maxUsers}).` });
+          continue;
+        }
+        try {
+          await query("UPDATE users SET full_name = $1 WHERE id = $2", [c.fullName, uid]);
+          await query(
+            `INSERT INTO user_isp_memberships (user_id, isp_id, role, accreditation_level, is_active)
+             VALUES ($1, $2, $3, $4, TRUE)`,
+            [uid, targetIspId, role, c.accreditationLevel || "basic"]
+          );
+          const row = await fetchTeamUserRow(targetIspId, uid);
+          if (row) created.push(row);
+        } catch (err) {
+          errors.push({ line: lineNo, message: err?.message || "Insert failed" });
+        }
+        continue;
+      }
+
       const password = c.password && c.password.length >= 6 ? c.password : defPass;
       if (!password || password.length < 6) {
         errors.push({
@@ -3116,30 +3366,25 @@ app.post(
         continue;
       }
 
-      const exists = await query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [emailLower]);
-      if (exists.rows[0]) {
-        skipped.push({ line: lineNo, email: emailLower, reason: "duplicate_email" });
+      if (Number.isFinite(maxUsers) && (await countActiveStaffInIsp(targetIspId)) >= maxUsers) {
+        errors.push({ line: lineNo, message: `Active user limit reached (${maxUsers}).` });
         continue;
-      }
-
-      if (Number.isFinite(maxUsers)) {
-        const activeUsers = await query(
-          "SELECT COUNT(*)::int AS count FROM users WHERE isp_id = $1 AND is_active = TRUE",
-          [targetIspId]
-        );
-        if (activeUsers.rows[0].count >= maxUsers) {
-          errors.push({ line: lineNo, message: `Active user limit reached (${maxUsers}).` });
-          continue;
-        }
       }
 
       try {
         const hash = await bcrypt.hash(password, 10);
         const inserted = await query(
-          "INSERT INTO users (id, isp_id, full_name, email, password_hash, role, accreditation_level, is_active, must_change_password) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, TRUE, TRUE) RETURNING id, isp_id AS \"ispId\", full_name AS \"fullName\", email, role, accreditation_level AS \"accreditationLevel\", is_active AS \"isActive\", must_change_password AS \"mustChangePassword\", created_at AS \"createdAt\"",
+          "INSERT INTO users (id, isp_id, full_name, email, password_hash, role, accreditation_level, is_active, must_change_password) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, TRUE, TRUE) RETURNING id",
           [targetIspId, c.fullName, emailLower, hash, role, c.accreditationLevel || "basic"]
         );
-        created.push(inserted.rows[0]);
+        const newId = inserted.rows[0].id;
+        await query(
+          `INSERT INTO user_isp_memberships (user_id, isp_id, role, accreditation_level, is_active)
+           VALUES ($1, $2, $3, $4, TRUE)`,
+          [newId, targetIspId, role, c.accreditationLevel || "basic"]
+        );
+        const row = await fetchTeamUserRow(targetIspId, newId);
+        if (row) created.push(row);
       } catch (err) {
         errors.push({ line: lineNo, message: err?.message || "Insert failed" });
       }
@@ -3172,8 +3417,8 @@ app.post(
   if (!targetIspId) return;
 
   const { fullName, email, password, role, accreditationLevel = "basic", phone, address, assignedSite } = req.body;
-  if (!fullName || !email || !password || !role) {
-    return res.status(400).json({ message: "fullName, email, password and role are required" });
+  if (!fullName || !email || !role) {
+    return res.status(400).json({ message: "fullName, email and role are required" });
   }
 
   const allowedRolesByRequester = {
@@ -3191,34 +3436,65 @@ app.post(
     return res.status(403).json({ message: "Forbidden role assignment" });
   }
 
-  const hash = await bcrypt.hash(password, 10);
+  const emailLower = String(email).toLowerCase();
   const limits = await query(
     "SELECT p.feature_flags AS \"featureFlags\" FROM isp_platform_subscriptions s JOIN platform_packages p ON p.id = s.package_id WHERE s.isp_id = $1 AND s.status IN ('trialing', 'active') AND s.ends_at >= NOW() ORDER BY s.ends_at DESC LIMIT 1",
     [targetIspId]
   );
   const maxUsers = limits.rows[0]?.featureFlags?.maxUsers;
-  if (Number.isFinite(maxUsers)) {
-    const activeUsers = await query(
-      "SELECT COUNT(*)::int AS count FROM users WHERE isp_id = $1 AND is_active = TRUE",
-      [targetIspId]
+
+  const existingUser = await query("SELECT id FROM users WHERE email = $1", [emailLower]);
+  if (existingUser.rows[0]) {
+    const uid = existingUser.rows[0].id;
+    const dupMem = await query(
+      "SELECT 1 FROM user_isp_memberships WHERE user_id = $1 AND isp_id = $2",
+      [uid, targetIspId]
     );
-    if (activeUsers.rows[0].count >= maxUsers) {
+    if (dupMem.rows[0]) {
+      return res.status(409).json({ message: "This user is already in this workspace." });
+    }
+    if (Number.isFinite(maxUsers) && (await countActiveStaffInIsp(targetIspId)) >= maxUsers) {
       return res.status(403).json({
         message: `User limit reached for current package (${maxUsers} active users).`
       });
     }
+    await query("UPDATE users SET full_name = $1 WHERE id = $2", [fullName, uid]);
+    await query(
+      `INSERT INTO user_isp_memberships (user_id, isp_id, role, accreditation_level, phone, address, assigned_site, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)`,
+      [uid, targetIspId, role, accreditationLevel, phone || null, address || null, assignedSite || null]
+    );
+    await logAudit({
+      ispId: targetIspId,
+      actorUserId: req.user.sub,
+      action: "user.workspace_linked",
+      entityType: "user",
+      entityId: uid,
+      details: { role, accreditationLevel, email: emailLower }
+    });
+    const row = await fetchTeamUserRow(targetIspId, uid);
+    return res.status(201).json(row);
   }
+
+  if (!password || String(password).length < 6) {
+    return res.status(400).json({ message: "password is required (min 6 characters) for new accounts" });
+  }
+  if (Number.isFinite(maxUsers) && (await countActiveStaffInIsp(targetIspId)) >= maxUsers) {
+    return res.status(403).json({
+      message: `User limit reached for current package (${maxUsers} active users).`
+    });
+  }
+
+  const hash = await bcrypt.hash(password, 10);
   const inserted = await query(
     `INSERT INTO users
      (id, isp_id, full_name, email, password_hash, role, accreditation_level, phone, address, assigned_site, is_active, must_change_password)
      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, TRUE)
-     RETURNING id, isp_id AS "ispId", full_name AS "fullName", email, role,
-               accreditation_level AS "accreditationLevel", phone, address, assigned_site AS "assignedSite",
-               is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"`,
+     RETURNING id`,
     [
       targetIspId,
       fullName,
-      email.toLowerCase(),
+      emailLower,
       hash,
       role,
       accreditationLevel,
@@ -3227,15 +3503,22 @@ app.post(
       assignedSite || null
     ]
   );
+  const newId = inserted.rows[0].id;
+  await query(
+    `INSERT INTO user_isp_memberships (user_id, isp_id, role, accreditation_level, phone, address, assigned_site, is_active)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)`,
+    [newId, targetIspId, role, accreditationLevel, phone || null, address || null, assignedSite || null]
+  );
   await logAudit({
     ispId: targetIspId,
     actorUserId: req.user.sub,
     action: "user.created",
     entityType: "user",
-    entityId: inserted.rows[0].id,
-    details: { role, accreditationLevel, email: email.toLowerCase() }
+    entityId: newId,
+    details: { role, accreditationLevel, email: emailLower }
   });
-  return res.status(201).json(inserted.rows[0]);
+  const row = await fetchTeamUserRow(targetIspId, newId);
+  return res.status(201).json(row);
   }
 );
 
@@ -3252,12 +3535,14 @@ app.post(
     return res.status(400).json({ message: "newPassword must be at least 6 characters" });
   }
 
-  const existing = await query("SELECT id, role, isp_id FROM users WHERE id = $1", [userId]);
+  const existing = await query(
+    `SELECT u.id, m.role FROM users u
+     JOIN user_isp_memberships m ON m.user_id = u.id AND m.isp_id = $2
+     WHERE u.id = $1`,
+    [userId, targetIspId]
+  );
   const targetUser = existing.rows[0];
   if (!targetUser) return res.status(404).json({ message: "User not found" });
-  if (targetUser.isp_id !== targetIspId) {
-    return res.status(403).json({ message: "Cross-tenant operation forbidden" });
-  }
   if (req.user.role !== "super_admin" && targetUser.role === "super_admin") {
     return res.status(403).json({ message: "Forbidden target user" });
   }
@@ -3286,16 +3571,19 @@ app.post(
   const targetIspId = resolveIspId(req, res);
   if (!targetIspId) return;
   const { userId } = req.params;
-  const existing = await query("SELECT id, role, isp_id FROM users WHERE id = $1", [userId]);
-  const targetUser = existing.rows[0];
-  if (!targetUser) return res.status(404).json({ message: "User not found" });
-  if (targetUser.isp_id !== targetIspId) {
-    return res.status(403).json({ message: "Cross-tenant operation forbidden" });
-  }
-  if (targetUser.role === "super_admin") {
+  const existing = await query(
+    `SELECT m.role FROM user_isp_memberships m WHERE m.user_id = $1 AND m.isp_id = $2`,
+    [userId, targetIspId]
+  );
+  const targetMem = existing.rows[0];
+  if (!targetMem) return res.status(404).json({ message: "User not found" });
+  if (targetMem.role === "super_admin") {
     return res.status(403).json({ message: "Cannot deactivate super admin" });
   }
-  await query("UPDATE users SET is_active = FALSE WHERE id = $1", [userId]);
+  await query(
+    `UPDATE user_isp_memberships SET is_active = FALSE WHERE user_id = $1 AND isp_id = $2`,
+    [userId, targetIspId]
+  );
   await logAudit({
     ispId: targetIspId,
     actorUserId: req.user.sub,
@@ -3303,7 +3591,7 @@ app.post(
     entityType: "user",
     entityId: userId
   });
-  return res.json({ message: "User deactivated" });
+  return res.json({ message: "User deactivated for this workspace" });
   }
 );
 
@@ -3315,13 +3603,15 @@ app.post(
     const targetIspId = resolveIspId(req, res);
     if (!targetIspId) return;
     const { userId } = req.params;
-    const existing = await query("SELECT id, role, isp_id FROM users WHERE id = $1", [userId]);
-    const targetUser = existing.rows[0];
-    if (!targetUser) return res.status(404).json({ message: "User not found" });
-    if (targetUser.isp_id !== targetIspId) {
-      return res.status(403).json({ message: "Cross-tenant operation forbidden" });
-    }
-    await query("UPDATE users SET is_active = TRUE WHERE id = $1", [userId]);
+    const existing = await query(
+      `SELECT 1 FROM user_isp_memberships m WHERE m.user_id = $1 AND m.isp_id = $2`,
+      [userId, targetIspId]
+    );
+    if (!existing.rows[0]) return res.status(404).json({ message: "User not found" });
+    await query(
+      `UPDATE user_isp_memberships SET is_active = TRUE WHERE user_id = $1 AND isp_id = $2`,
+      [userId, targetIspId]
+    );
     await logAudit({
       ispId: targetIspId,
       actorUserId: req.user.sub,
@@ -3329,7 +3619,96 @@ app.post(
       entityType: "user",
       entityId: userId
     });
-    return res.json({ message: "User reactivated" });
+    return res.json({ message: "User reactivated for this workspace" });
+  }
+);
+
+app.patch(
+  "/api/users/:userId",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const targetIspId = resolveIspId(req, res);
+    if (!targetIspId) return;
+    const { userId } = req.params;
+    const body = req.body || {};
+    const { fullName, role, phone, address, assignedSite, accreditationLevel } = body;
+
+    const memRow = await query(
+      `SELECT m.role FROM user_isp_memberships m WHERE m.user_id = $1 AND m.isp_id = $2`,
+      [userId, targetIspId]
+    );
+    if (!memRow.rows[0]) return res.status(404).json({ message: "User not found" });
+    const currentRole = memRow.rows[0].role;
+
+    const allowedRolesByRequester = {
+      super_admin: ["company_manager", "isp_admin", "billing_agent", "noc_operator", "field_agent"],
+      company_manager: ["isp_admin", "billing_agent", "noc_operator", "field_agent"],
+      isp_admin: ["billing_agent", "noc_operator", "field_agent"]
+    };
+    const allowed = allowedRolesByRequester[req.user.role] || [];
+
+    if (role != null && String(role).trim()) {
+      const nextRole = String(role).trim();
+      if (!allowed.includes(nextRole)) {
+        return res.status(403).json({ message: "You cannot assign this role" });
+      }
+      if (req.user.role !== "super_admin" && nextRole === "super_admin") {
+        return res.status(403).json({ message: "Forbidden role assignment" });
+      }
+      if (req.user.role !== "super_admin" && currentRole === "super_admin") {
+        return res.status(403).json({ message: "Forbidden target user" });
+      }
+    }
+
+    if (fullName != null && String(fullName).trim()) {
+      await query("UPDATE users SET full_name = $1 WHERE id = $2", [String(fullName).trim(), userId]);
+    }
+
+    const mSets = [];
+    const mVals = [];
+    let pi = 1;
+    if (role != null && String(role).trim()) {
+      mSets.push(`role = $${pi++}`);
+      mVals.push(String(role).trim());
+    }
+    if (accreditationLevel != null && String(accreditationLevel).trim()) {
+      mSets.push(`accreditation_level = $${pi++}`);
+      mVals.push(String(accreditationLevel).trim());
+    }
+    if (phone !== undefined) {
+      mSets.push(`phone = $${pi++}`);
+      mVals.push(phone != null && String(phone).trim() ? String(phone).trim() : null);
+    }
+    if (address !== undefined) {
+      mSets.push(`address = $${pi++}`);
+      mVals.push(address != null && String(address).trim() ? String(address).trim() : null);
+    }
+    if (assignedSite !== undefined) {
+      mSets.push(`assigned_site = $${pi++}`);
+      mVals.push(assignedSite != null && String(assignedSite).trim() ? String(assignedSite).trim() : null);
+    }
+
+    if (mSets.length) {
+      const uidPos = pi;
+      const ispPos = pi + 1;
+      await query(
+        `UPDATE user_isp_memberships SET ${mSets.join(", ")} WHERE user_id = $${uidPos}::uuid AND isp_id = $${ispPos}::uuid`,
+        [...mVals, userId, targetIspId]
+      );
+    }
+
+    await logAudit({
+      ispId: targetIspId,
+      actorUserId: req.user.sub,
+      action: "user.updated",
+      entityType: "user",
+      entityId: userId,
+      details: { fields: Object.keys(body) }
+    });
+
+    const row = await fetchTeamUserRow(targetIspId, userId);
+    return res.json(row);
   }
 );
 
@@ -3341,12 +3720,14 @@ app.post(
   const targetIspId = resolveIspId(req, res);
   if (!targetIspId) return;
   const { userId } = req.params;
-  const existing = await query("SELECT id, isp_id FROM users WHERE id = $1", [userId]);
+  const existing = await query(
+    `SELECT u.id FROM users u
+     JOIN user_isp_memberships m ON m.user_id = u.id AND m.isp_id = $2
+     WHERE u.id = $1`,
+    [userId, targetIspId]
+  );
   const targetUser = existing.rows[0];
   if (!targetUser) return res.status(404).json({ message: "User not found" });
-  if (targetUser.isp_id !== targetIspId) {
-    return res.status(403).json({ message: "Cross-tenant operation forbidden" });
-  }
   const token = crypto.randomBytes(24).toString("hex");
   await query(
     "INSERT INTO invite_tokens (id, user_id, token, expires_at, created_by) VALUES (gen_random_uuid(), $1, $2, NOW() + INTERVAL '7 days', $3)",
