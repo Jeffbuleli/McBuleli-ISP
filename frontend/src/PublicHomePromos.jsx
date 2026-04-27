@@ -80,17 +80,19 @@ export default function PublicHomePromos({ t, isEn, variant = "marketing", apiPr
       <div className="public-home-promos-head">
         {!dash ? (
           <>
-            <p className="eyebrow">{t("Internet à Kinshasa", "Internet in Kinshasa")}</p>
+            <p className="eyebrow">
+              {t("Fournisseurs & matériel réseau", "Network hardware partners")}
+            </p>
             <h2 id="public-promos-title">
               {t(
-                "Équipements et connexion — contactez McBuleli sur WhatsApp",
-                "Equipment and connectivity — reach McBuleli on WhatsApp"
+                "Le meilleur du matériel pro — antennes, routeurs, accès internet",
+                "Pro-grade gear that delivers — antennas, routers, connectivity"
               )}
             </h2>
             <p className="public-home-promos-lead">
               {t(
-                "Trois visuels : sur téléphone ils s’affichent les uns sous les autres ; sur ordinateur, côte à côte. Cliquez pour ouvrir WhatsApp.",
-                "Three promos: stacked on phones; side by side on desktop. Tap or click to open WhatsApp."
+                "PUB — encarts réservés aux annonces de fournisseurs de matériel réseau. Sur mobile : un sous l’autre ; sur grand écran : trois visuels alignés. Clic = WhatsApp McBuleli.",
+                "Ads — slots reserved for network hardware supplier promos. Stacked on mobile; three tiles on desktop. Tap/click opens WhatsApp with McBuleli."
               )}
             </p>
           </>
@@ -98,7 +100,10 @@ export default function PublicHomePromos({ t, isEn, variant = "marketing", apiPr
           <>
             <p className="eyebrow">{t("McBuleli", "McBuleli")}</p>
             <h2 className="public-home-promos-dashboard-title">
-              {t("Offres internet & équipements — WhatsApp", "Internet offers & equipment — WhatsApp")}
+              {t(
+                "Partenaires matériel réseau — pub & WhatsApp",
+                "Network hardware partners — ads & WhatsApp"
+              )}
             </h2>
           </>
         )}

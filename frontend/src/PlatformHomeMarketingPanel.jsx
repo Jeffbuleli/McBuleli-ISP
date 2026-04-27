@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import RichAnnouncementEditor, {
   PUBLIC_PAGE_BODY_PLAIN_MAX,
@@ -29,6 +29,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
   const [editingFooter, setEditingFooter] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const footerCreateImageInputRef = useRef(null);
 
   const loadPromos = useCallback(async () => {
     const data = await api.getSystemOwnerHomePromos();
@@ -129,8 +130,9 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     }
     setSaving(true);
     setError("");
+    const imageFile = footerCreateImageInputRef.current?.files?.[0] || null;
     try {
-      await api.createSystemOwnerFooterBlock({
+      const created = await api.createSystemOwnerFooterBlock({
         title: tit,
         bodyHtml: footerForm.bodyHtml,
         linkUrl: footerForm.linkUrl.trim() || null,
@@ -139,6 +141,9 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
         placement: footerForm.placement,
         isActive: true
       });
+      if (imageFile && created?.id) {
+        await api.uploadSystemOwnerFooterBlockImage(created.id, imageFile);
+      }
       setFooterForm({
         title: "",
         bodyHtml: "<p></p>",
@@ -148,6 +153,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
         layout: "wide",
         placement: "after_why"
       });
+      if (footerCreateImageInputRef.current) footerCreateImageInputRef.current.value = "";
       await loadFooter();
     } catch (err) {
       setError(err.message || "Error");
@@ -413,6 +419,22 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
             <option value="pre_footer">{t("Bas de page (après la FAQ)", "Page bottom (after FAQ)")}</option>
           </select>
         </label>
+        <label style={{ display: "block", marginBottom: 8 }}>
+          {t("Photo d’annonce (image du bloc)", "Announcement image (block photo)")}
+          <input
+            ref={footerCreateImageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            disabled={saving}
+            style={{ display: "block", marginTop: 6 }}
+          />
+        </label>
+        <p className="app-meta" style={{ margin: "0 0 10px", maxWidth: "52rem" }}>
+          {t(
+            "Pour une bannière large, utilisez une image paysage (ex. 1200×400). Le fichier est envoyé juste après la création du bloc.",
+            "For a wide banner, use a landscape image (e.g. 1200×400). The file is uploaded right after the block is created."
+          )}
+        </p>
         <RichAnnouncementEditor
           valueHtml={footerForm.bodyHtml}
           onChange={(html, len) => setFooterForm((f) => ({ ...f, bodyHtml: html, plainLen: len }))}

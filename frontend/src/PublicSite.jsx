@@ -5,7 +5,16 @@ import HomeShortcut from "./HomeShortcut.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
 import PublicMarketingSlot from "./PublicMarketingSlot.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
-import { IconBuilding, IconPresentation, IconReceipt, IconUserCheck } from "./icons.jsx";
+import {
+  IconBuilding,
+  IconMail,
+  IconMapPin,
+  IconPhone,
+  IconPresentation,
+  IconReceipt,
+  IconUserCheck,
+  IconWhatsApp
+} from "./icons.jsx";
 
 function getStoredUiLang() {
   if (typeof window === "undefined") return "fr";
@@ -661,20 +670,45 @@ export default function PublicSite() {
             </p>
           </div>
           <div className="public-footer-cards" role="group" aria-label={t("Coordonnées", "Contact details")}>
-            <a className="public-footer-card" href={`mailto:${COMPANY_CONTACT.email}`}>
-              <span className="public-footer-card-label">{t("Courriel", "Email")}</span>
+            <a
+              className="public-footer-card"
+              href={`mailto:${COMPANY_CONTACT.email}`}
+              aria-label={`${t("Courriel", "Email")}: ${COMPANY_CONTACT.email}`}
+            >
+              <span className="public-footer-card-icon" aria-hidden="true">
+                <IconMail width={24} height={24} />
+              </span>
               <span className="public-footer-card-value">{COMPANY_CONTACT.email}</span>
             </a>
-            <a className="public-footer-card" href={`tel:${COMPANY_CONTACT.phone.replace(/\s/g, "")}`}>
-              <span className="public-footer-card-label">{t("Téléphone", "Phone")}</span>
+            <a
+              className="public-footer-card"
+              href={`tel:${COMPANY_CONTACT.phone.replace(/\s/g, "")}`}
+              aria-label={`${t("Téléphone", "Phone")}: ${COMPANY_CONTACT.phone}`}
+            >
+              <span className="public-footer-card-icon" aria-hidden="true">
+                <IconPhone width={24} height={24} />
+              </span>
               <span className="public-footer-card-value">{COMPANY_CONTACT.phone}</span>
             </a>
-            <a className="public-footer-card" href={COMPANY_CONTACT.whatsapp} rel="noopener noreferrer">
-              <span className="public-footer-card-label">WhatsApp</span>
+            <a
+              className="public-footer-card"
+              href={COMPANY_CONTACT.whatsapp}
+              rel="noopener noreferrer"
+              aria-label={`WhatsApp — ${t("Écrire à McBuleli", "Message McBuleli")}`}
+            >
+              <span className="public-footer-card-icon" aria-hidden="true">
+                <IconWhatsApp width={24} height={24} />
+              </span>
               <span className="public-footer-card-value">{t("Écrire à McBuleli", "Message McBuleli")}</span>
             </a>
-            <div className="public-footer-card public-footer-card--static">
-              <span className="public-footer-card-label">{t("Siège", "Head office")}</span>
+            <div
+              className="public-footer-card public-footer-card--static"
+              role="group"
+              aria-label={`${t("Siège", "Head office")}: ${COMPANY_CONTACT.address}`}
+            >
+              <span className="public-footer-card-icon" aria-hidden="true">
+                <IconMapPin width={24} height={24} />
+              </span>
               <span className="public-footer-card-value">{COMPANY_CONTACT.address}</span>
             </div>
           </div>

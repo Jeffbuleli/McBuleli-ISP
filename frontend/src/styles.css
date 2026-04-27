@@ -2026,12 +2026,14 @@ a.public-footer-card:hover {
   cursor: default;
 }
 
-.public-footer-card-label {
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(200, 230, 201, 0.85);
+.public-footer-card-icon {
+  display: flex;
+  align-items: center;
+  color: rgba(200, 230, 201, 0.95);
+}
+
+.public-footer-card-icon svg {
+  display: block;
 }
 
 .public-footer-card-value {
