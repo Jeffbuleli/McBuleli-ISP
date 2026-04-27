@@ -112,6 +112,12 @@ export function setAuthToken(token) {
   else localStorage.removeItem("token");
 }
 
+/** Réaligne le jeton en mémoire sur localStorage (onglets / restauration session mobile). */
+export function syncAuthTokenFromStorage() {
+  if (typeof window === "undefined") return;
+  authToken = localStorage.getItem("token") || "";
+}
+
 function withIsp(path, ispId) {
   const delimiter = path.includes("?") ? "&" : "?";
   return `${path}${delimiter}ispId=${encodeURIComponent(ispId)}`;

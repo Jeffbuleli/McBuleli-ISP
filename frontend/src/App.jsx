@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, publicAssetUrl, setAuthToken } from "./api";
+import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
 import LangSwitch from "./LangSwitch.jsx";
 import HomeShortcut from "./HomeShortcut.jsx";
 import DashboardHistograms from "./DashboardHistograms.jsx";
@@ -658,7 +658,14 @@ function App() {
   });
   const availablePawapayNetworks = pawapayNetworks.length ? pawapayNetworks : DEFAULT_PAWAPAY_NETWORKS;
 
-  async function refresh(selectedTenantId = selectedIspId) {
+  function isStaleSessionErrorMessage(msg) {
+    const m = String(msg || "").trim().toLowerCase();
+    return m === "invalid token" || m.includes("invalid token") || m === "missing bearer token";
+  }
+
+  async function refresh(selectedTenantId = selectedIspId, options = {}) {
+    const silentInvalidSession = Boolean(options.silentInvalidSession);
+    syncAuthTokenFromStorage();
     setLoading(true);
     setError("");
     try {
@@ -928,7 +935,13 @@ function App() {
         });
       }
     } catch (err) {
-      setError(err.message);
+      if (silentInvalidSession && isStaleSessionErrorMessage(err.message)) {
+        setAuthToken("");
+        setUser(null);
+        if (typeof window !== "undefined") localStorage.removeItem("token");
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -980,8 +993,10 @@ function App() {
         // Ignore tenant-context bootstrap failures.
       }
       if (localStorage.getItem("token")) {
+        const path = typeof window !== "undefined" ? window.location.pathname || "" : "";
+        const isLoginPath = path === "/login" || path.startsWith("/login/");
         try {
-          await refresh();
+          await refresh(selectedIspId, { silentInvalidSession: isLoginPath });
         } catch (_err) {
           setAuthToken("");
           setUser(null);
