@@ -346,7 +346,7 @@ function PublicLogo() {
 
 export default function PublicSite() {
   const [uiLang, setUiLang] = useState(getStoredUiLang);
-  const [publicSlots, setPublicSlots] = useState([]);
+  const [homeMarketing, setHomeMarketing] = useState({ homePromos: [], footerBlocks: [] });
   const isEn = uiLang === "en";
   const t = (fr, en) => (isEn ? en : fr);
   const statRows = useMemo(
@@ -369,14 +369,6 @@ export default function PublicSite() {
 
   const year = useMemo(() => new Date().getFullYear(), []);
 
-  const slotByKey = useMemo(() => {
-    const m = {};
-    for (const s of publicSlots) {
-      if (s?.slotKey) m[s.slotKey] = s;
-    }
-    return m;
-  }, [publicSlots]);
-
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("ui_lang", uiLang);
@@ -386,12 +378,17 @@ export default function PublicSite() {
   useEffect(() => {
     let cancelled = false;
     api
-      .getPublicPlatformPageSlots()
+      .getPublicHomeMarketing()
       .then((data) => {
-        if (!cancelled) setPublicSlots(data.slots || []);
+        if (!cancelled) {
+          setHomeMarketing({
+            homePromos: data.homePromos || [],
+            footerBlocks: data.footerBlocks || []
+          });
+        }
       })
       .catch(() => {
-        if (!cancelled) setPublicSlots([]);
+        if (!cancelled) setHomeMarketing({ homePromos: [], footerBlocks: [] });
       });
     return () => {
       cancelled = true;
@@ -406,22 +403,17 @@ export default function PublicSite() {
             <PublicLogo />
             <span>McBuleli</span>
           </a>
-          {slotByKey.hero_top ? (
-            <PublicMarketingSlot slot={slotByKey.hero_top} variant="hero" t={t} />
-          ) : null}
-          <div className="public-hero-top-right">
-            <nav className="public-nav" aria-label="Navigation principale">
-              <a href="#services">{t("Services", "Services")}</a>
-              <a href="#promos">{t("Offres", "Offers")}</a>
-              <a href="#interfaces">{t("Interfaces", "Workspaces")}</a>
-              <a href="#pricing">{t("Tarifs", "Pricing")}</a>
-              <a href="#testimonials">{t("Témoignages", "Testimonials")}</a>
-              <a href="#faq">{t("FAQ", "FAQ")}</a>
-              <a href="/wifi">{t("Wi‑Fi invité", "Guest Wi‑Fi")}</a>
-              <a href="#contact">Contact</a>
-            </nav>
-            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="public" />
-          </div>
+          <nav className="public-nav" aria-label="Navigation principale">
+            <a href="#services">{t("Services", "Services")}</a>
+            <a href="#promos">{t("Offres", "Offers")}</a>
+            <a href="#interfaces">{t("Interfaces", "Workspaces")}</a>
+            <a href="#pricing">{t("Tarifs", "Pricing")}</a>
+            <a href="#testimonials">{t("Témoignages", "Testimonials")}</a>
+            <a href="#faq">{t("FAQ", "FAQ")}</a>
+            <a href="/wifi">{t("Wi‑Fi invité", "Guest Wi‑Fi")}</a>
+            <a href="#contact">Contact</a>
+          </nav>
+          <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="public" />
         </div>
         <div className="public-hero-grid">
           <section>
@@ -490,7 +482,7 @@ export default function PublicSite() {
         </div>
       </header>
 
-      <PublicHomePromos t={t} isEn={isEn} />
+      <PublicHomePromos t={t} isEn={isEn} apiPromos={homeMarketing.homePromos} />
 
       <section className="public-section public-section--split" id="services">
         <div>
@@ -514,10 +506,6 @@ export default function PublicSite() {
           </article>
         ))}
       </section>
-
-      {slotByKey.after_services ? (
-        <PublicMarketingSlot slot={slotByKey.after_services} variant="banner" t={t} />
-      ) : null}
 
       <section className="public-section" id="interfaces">
         <p className="eyebrow">{t("Interfaces", "Workspaces")}</p>
@@ -592,10 +580,6 @@ export default function PublicSite() {
         </ul>
       </section>
 
-      {slotByKey.after_why ? (
-        <PublicMarketingSlot slot={slotByKey.after_why} variant="banner" t={t} />
-      ) : null}
-
       <section className="public-section" id="testimonials">
         <p className="eyebrow">{t("Ils utilisent McBuleli", "Teams using McBuleli")}</p>
         <h2>{t("Ce que disent les opérateurs", "What operators say")}</h2>
@@ -631,9 +615,9 @@ export default function PublicSite() {
         </div>
       </section>
 
-      {slotByKey.footer_strip ? (
-        <PublicMarketingSlot slot={slotByKey.footer_strip} variant="footer" t={t} />
-      ) : null}
+      {(homeMarketing.footerBlocks || []).map((block) => (
+        <PublicMarketingSlot key={block.id} slot={{ ...block, isActive: true }} variant="footer" t={t} />
+      ))}
 
       <footer className="public-footer" id="contact">
         <div className="public-footer-main">

@@ -346,30 +346,44 @@ function mapAnnouncementRow(row) {
   };
 }
 
-const PUBLIC_PAGE_SLOT_KEYS = new Set(["hero_top", "after_why", "after_services", "footer_strip"]);
-
-function parsePublicPageSlotKey(param) {
-  const k = String(param || "").trim();
-  return PUBLIC_PAGE_SLOT_KEYS.has(k) ? k : null;
-}
-
-function mapPublicPageSlotRow(row) {
+function mapHomePromoRow(row) {
   if (!row) return null;
   const mime = row.image_mime ?? row.imageMime;
   const bytes = row.image_bytes ?? row.imageBytes;
   const dataUrl = bufferToDataUrl(mime, bytes);
-  const out = {
-    slotKey: row.slot_key ?? row.slotKey,
+  return {
+    slotIndex: row.slot_index ?? row.slotIndex,
+    imageUrl: dataUrl,
+    linkUrl: row.link_url ?? row.linkUrl ?? null,
+    altTextFr: row.alt_text_fr ?? row.altTextFr ?? null,
+    altTextEn: row.alt_text_en ?? row.altTextEn ?? null,
+    orientation: row.orientation === "square" ? "square" : "landscape",
+    isActive: row.is_active ?? row.isActive !== false,
+    updatedAt: row.updated_at ?? row.updatedAt
+  };
+}
+
+function mapFooterBlockRow(row) {
+  if (!row) return null;
+  const mime = row.image_mime ?? row.imageMime;
+  const bytes = row.image_bytes ?? row.imageBytes;
+  const dataUrl = bufferToDataUrl(mime, bytes);
+  return {
+    id: row.id,
+    sortOrder: Number(row.sort_order ?? row.sortOrder ?? 0),
     title: row.title != null ? String(row.title) : "",
     bodyHtml: row.body_html ?? row.bodyHtml ?? "",
     imageUrl: dataUrl,
     linkUrl: row.link_url ?? row.linkUrl ?? null,
-    isActive: row.is_active ?? row.isActive !== false
+    isActive: row.is_active ?? row.isActive !== false,
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt
   };
-  if (row.updated_at != null || row.updatedAt != null) {
-    out.updatedAt = row.updated_at ?? row.updatedAt;
-  }
-  return out;
+}
+
+function normalizePromoAlt(raw) {
+  const s = raw != null ? String(raw).trim() : "";
+  return s ? s.slice(0, 400) : null;
 }
 
 app.get("/api/public/branding-logo/:ispId", rlPublicRead, async (req, res) => {
@@ -454,30 +468,34 @@ app.get("/api/public/platform-banner/:slot", rlPublicRead, async (req, res) => {
   return res.status(404).end();
 });
 
-app.get("/api/public/platform-public-page-slots", rlPublicRead, async (_req, res) => {
+app.get("/api/public/home-marketing", rlPublicRead, async (_req, res) => {
   try {
-    const r = await query(
-      `SELECT slot_key, title, body_html, image_bytes, image_mime, link_url, is_active, updated_at
-       FROM platform_public_page_slots
-       WHERE is_active = TRUE
-       ORDER BY CASE slot_key
-         WHEN 'hero_top' THEN 1
-         WHEN 'after_why' THEN 2
-         WHEN 'after_services' THEN 3
-         WHEN 'footer_strip' THEN 4
-         ELSE 9
-       END`
-    );
-    const slots = r.rows
-      .map(mapPublicPageSlotRow)
-      .filter((s) => {
-        if (!s) return false;
-        const plain = String(s.bodyHtml || "").replace(/<[^>]+>/g, " ").trim();
-        return Boolean(plain.length || s.imageUrl);
+    const [promosR, blocksR] = await Promise.all([
+      query(
+        `SELECT slot_index, link_url, alt_text_fr, alt_text_en, orientation, image_bytes, image_mime, is_active, updated_at
+         FROM platform_home_promos
+         WHERE slot_index BETWEEN 0 AND 2 AND is_active = TRUE
+         ORDER BY slot_index`
+      ),
+      query(
+        `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, updated_at
+         FROM platform_public_footer_blocks
+         WHERE is_active = TRUE
+         ORDER BY sort_order ASC, updated_at DESC
+         LIMIT 24`
+      )
+    ]);
+    const homePromos = promosR.rows.map(mapHomePromoRow);
+    const footerBlocks = blocksR.rows
+      .map(mapFooterBlockRow)
+      .filter((b) => {
+        if (!b) return false;
+        const plain = String(b.bodyHtml || "").replace(/<[^>]+>/g, " ").trim();
+        return Boolean(plain.length || b.imageUrl || String(b.title || "").trim());
       });
-    res.json({ slots });
+    res.json({ homePromos, footerBlocks });
   } catch (_err) {
-    res.status(500).json({ message: "Could not load public page content." });
+    res.status(500).json({ message: "Could not load public marketing content." });
   }
 });
 
@@ -2418,9 +2436,9 @@ app.post(
   }
 );
 
-app.get("/api/audit-logs", authenticate, async (req, res) => {
+app.get("/api/audit-logs", authenticate, requireRoles("system_owner"), async (req, res) => {
   const ispId = resolveIspId(req, res);
-  if (!ispId) return;
+  if (!ispId) return res.json([]);
   const result = await query(
     "SELECT id, action, entity_type AS \"entityType\", entity_id AS \"entityId\", details, created_at AS \"createdAt\" FROM audit_logs WHERE isp_id = $1 ORDER BY created_at DESC LIMIT 100",
     [ispId]
@@ -4613,148 +4631,293 @@ app.delete(
   }
 );
 
-app.get("/api/system-owner/platform-public-page-slots", authenticate, requireRoles("system_owner"), async (_req, res) => {
+app.get("/api/system-owner/home-promos", authenticate, requireRoles("system_owner"), async (_req, res) => {
   const r = await query(
-    `SELECT slot_key, title, body_html, image_bytes, image_mime, link_url, is_active, updated_at
-     FROM platform_public_page_slots
-     ORDER BY CASE slot_key
-       WHEN 'hero_top' THEN 1
-       WHEN 'after_why' THEN 2
-       WHEN 'after_services' THEN 3
-       WHEN 'footer_strip' THEN 4
-       ELSE 9
-     END`
+    `SELECT slot_index, link_url, alt_text_fr, alt_text_en, orientation, image_bytes, image_mime, is_active, updated_at
+     FROM platform_home_promos
+     WHERE slot_index BETWEEN 0 AND 2
+     ORDER BY slot_index`
   );
-  res.json({ slots: r.rows.map(mapPublicPageSlotRow) });
+  res.json({ slots: r.rows.map(mapHomePromoRow) });
 });
 
-app.patch(
-  "/api/system-owner/platform-public-page-slots/:slotKey",
-  authenticate,
-  requireRoles("system_owner"),
-  async (req, res) => {
-    const slotKey = parsePublicPageSlotKey(req.params.slotKey);
-    if (!slotKey) return res.status(400).json({ message: "Invalid slot key." });
-    const b = req.body || {};
-    const cur = await query(`SELECT title, body_html FROM platform_public_page_slots WHERE slot_key = $1`, [slotKey]);
-    if (!cur.rows[0]) return res.status(404).json({ message: "Slot not found." });
-    const pieces = [];
-    const vals = [];
-    let i = 1;
-    let nextTitle = cur.rows[0].title;
-    let nextBody = cur.rows[0].body_html;
-    if (Object.prototype.hasOwnProperty.call(b, "title")) nextTitle = b.title;
-    if (Object.prototype.hasOwnProperty.call(b, "bodyHtml")) nextBody = b.bodyHtml;
-    if (Object.prototype.hasOwnProperty.call(b, "title") || Object.prototype.hasOwnProperty.call(b, "bodyHtml")) {
-      const v = validatePublicPageSlot(nextTitle, nextBody);
-      if (!v.ok) return res.status(400).json({ message: v.message });
-      pieces.push(`title = $${i++}`);
-      vals.push(v.title);
-      pieces.push(`body_html = $${i++}`);
-      vals.push(v.bodyHtml);
+app.patch("/api/system-owner/home-promos/:slot", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const slot = parsePlatformBannerSlot(req.params.slot);
+  if (slot == null) return res.status(400).json({ message: "slot must be 0, 1, or 2" });
+  const b = req.body || {};
+  const pieces = [];
+  const vals = [];
+  let i = 1;
+  if (Object.prototype.hasOwnProperty.call(b, "linkUrl")) {
+    const norm = normalizeBannerLinkUrl(b.linkUrl);
+    if (norm === undefined) {
+      return res.status(400).json({ message: "linkUrl must be a valid http(s) URL or empty." });
     }
-    if (Object.prototype.hasOwnProperty.call(b, "linkUrl")) {
-      const norm = normalizeBannerLinkUrl(b.linkUrl);
-      if (norm === undefined) {
-        return res.status(400).json({ message: "linkUrl must be a valid http(s) URL or empty." });
-      }
-      pieces.push(`link_url = $${i++}`);
-      vals.push(norm);
-    }
-    if (Object.prototype.hasOwnProperty.call(b, "isActive")) {
-      pieces.push(`is_active = $${i++}`);
-      vals.push(Boolean(b.isActive));
-    }
-    if (pieces.length === 0) {
-      return res.status(400).json({ message: "Provide title, bodyHtml, linkUrl, and/or isActive." });
-    }
-    pieces.push("updated_at = NOW()");
-    vals.push(slotKey);
-    await query(`UPDATE platform_public_page_slots SET ${pieces.join(", ")} WHERE slot_key = $${i}`, vals);
-    await logAudit({
-      actorUserId: req.user.sub,
-      action: "platform_public_page_slot.updated",
-      entityType: "platform_public_page_slot",
-      entityId: slotKey,
-      details: { fields: Object.keys(b) }
-    });
-    const row = await query(
-      `SELECT slot_key, title, body_html, image_bytes, image_mime, link_url, is_active, updated_at
-       FROM platform_public_page_slots WHERE slot_key = $1`,
-      [slotKey]
-    );
-    res.json(mapPublicPageSlotRow(row.rows[0]));
+    pieces.push(`link_url = $${i++}`);
+    vals.push(norm);
   }
-);
+  if (Object.prototype.hasOwnProperty.call(b, "altTextFr")) {
+    pieces.push(`alt_text_fr = $${i++}`);
+    vals.push(normalizePromoAlt(b.altTextFr));
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "altTextEn")) {
+    pieces.push(`alt_text_en = $${i++}`);
+    vals.push(normalizePromoAlt(b.altTextEn));
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "orientation")) {
+    const o = String(b.orientation || "").toLowerCase() === "square" ? "square" : "landscape";
+    pieces.push(`orientation = $${i++}`);
+    vals.push(o);
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "isActive")) {
+    pieces.push(`is_active = $${i++}`);
+    vals.push(Boolean(b.isActive));
+  }
+  if (pieces.length === 0) {
+    return res.status(400).json({ message: "Provide linkUrl, altTextFr, altTextEn, orientation, and/or isActive." });
+  }
+  pieces.push("updated_at = NOW()");
+  vals.push(slot);
+  await query(`UPDATE platform_home_promos SET ${pieces.join(", ")} WHERE slot_index = $${i}`, vals);
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_home_promo.updated",
+    entityType: "platform_home_promo",
+    entityId: String(slot),
+    details: { fields: Object.keys(b) }
+  });
+  const row = await query(
+    `SELECT slot_index, link_url, alt_text_fr, alt_text_en, orientation, image_bytes, image_mime, is_active, updated_at
+     FROM platform_home_promos WHERE slot_index = $1`,
+    [slot]
+  );
+  res.json(mapHomePromoRow(row.rows[0]));
+});
 
 app.post(
-  "/api/system-owner/platform-public-page-slots/:slotKey/image",
+  "/api/system-owner/home-promos/:slot/image",
   authenticate,
   requireRoles("system_owner"),
   uploadLogoMemory.single("banner"),
   async (req, res) => {
-    const slotKey = parsePublicPageSlotKey(req.params.slotKey);
-    if (!slotKey) return res.status(400).json({ message: "Invalid slot key." });
+    const slot = parsePlatformBannerSlot(req.params.slot);
+    if (slot == null) return res.status(400).json({ message: "slot must be 0, 1, or 2" });
     if (!req.file?.buffer) {
       return res.status(400).json({ message: "Choose an image file (form field name: banner)." });
     }
-    const mimeToExt = {
-      "image/png": ".png",
-      "image/jpeg": ".jpg",
-      "image/jpg": ".jpg",
-      "image/webp": ".webp",
-      "image/gif": ".gif"
-    };
-    const ext = mimeToExt[req.file.mimetype];
-    if (!ext) {
+    const allowed = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
+    if (!allowed.has(req.file.mimetype)) {
       return res.status(400).json({ message: "Image must be PNG, JPEG, WebP or GIF." });
     }
     await query(
-      `UPDATE platform_public_page_slots SET image_bytes = $1, image_mime = $2, updated_at = NOW() WHERE slot_key = $3`,
-      [req.file.buffer, req.file.mimetype, slotKey]
+      `UPDATE platform_home_promos SET image_bytes = $1, image_mime = $2, updated_at = NOW() WHERE slot_index = $3`,
+      [req.file.buffer, req.file.mimetype, slot]
     );
     await logAudit({
       actorUserId: req.user.sub,
-      action: "platform_public_page_slot.image_uploaded",
-      entityType: "platform_public_page_slot",
-      entityId: slotKey,
+      action: "platform_home_promo.image_uploaded",
+      entityType: "platform_home_promo",
+      entityId: String(slot),
       details: { mime: req.file.mimetype }
     });
     const row = await query(
-      `SELECT slot_key, title, body_html, image_bytes, image_mime, link_url, is_active, updated_at
-       FROM platform_public_page_slots WHERE slot_key = $1`,
-      [slotKey]
+      `SELECT slot_index, link_url, alt_text_fr, alt_text_en, orientation, image_bytes, image_mime, is_active, updated_at
+       FROM platform_home_promos WHERE slot_index = $1`,
+      [slot]
     );
-    res.json(mapPublicPageSlotRow(row.rows[0]));
+    res.json(mapHomePromoRow(row.rows[0]));
   }
 );
 
-app.delete(
-  "/api/system-owner/platform-public-page-slots/:slotKey/image",
+app.delete("/api/system-owner/home-promos/:slot/image", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const slot = parsePlatformBannerSlot(req.params.slot);
+  if (slot == null) return res.status(400).json({ message: "slot must be 0, 1, or 2" });
+  await query(
+    `UPDATE platform_home_promos SET image_bytes = NULL, image_mime = NULL, updated_at = NOW() WHERE slot_index = $1`,
+    [slot]
+  );
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_home_promo.image_cleared",
+    entityType: "platform_home_promo",
+    entityId: String(slot),
+    details: {}
+  });
+  const row = await query(
+    `SELECT slot_index, link_url, alt_text_fr, alt_text_en, orientation, image_bytes, image_mime, is_active, updated_at
+     FROM platform_home_promos WHERE slot_index = $1`,
+    [slot]
+  );
+  res.json(mapHomePromoRow(row.rows[0]));
+});
+
+app.get("/api/system-owner/footer-blocks", authenticate, requireRoles("system_owner"), async (_req, res) => {
+  const r = await query(
+    `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, is_active, created_at, updated_at
+     FROM platform_public_footer_blocks
+     ORDER BY sort_order ASC, updated_at DESC
+     LIMIT 100`
+  );
+  res.json({ items: r.rows.map(mapFooterBlockRow) });
+});
+
+app.post("/api/system-owner/footer-blocks", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const b = req.body || {};
+  const v = validatePublicPageSlot(b.title || "", b.bodyHtml || "");
+  if (!v.ok) return res.status(400).json({ message: v.message });
+  const normLink = normalizeBannerLinkUrl(b.linkUrl);
+  if (normLink === undefined) {
+    return res.status(400).json({ message: "linkUrl must be a valid http(s) URL or empty." });
+  }
+  const sortOrder = Number(b.sortOrder) || 0;
+  const inserted = await query(
+    `INSERT INTO platform_public_footer_blocks (id, sort_order, title, body_html, link_url, is_active)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+     RETURNING id, sort_order, title, body_html, image_bytes, image_mime, link_url, is_active, created_at, updated_at`,
+    [sortOrder, v.title, v.bodyHtml, normLink, b.isActive !== false]
+  );
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_footer_block.created",
+    entityType: "platform_public_footer_block",
+    entityId: inserted.rows[0].id,
+    details: {}
+  });
+  res.status(201).json(mapFooterBlockRow(inserted.rows[0]));
+});
+
+app.patch("/api/system-owner/footer-blocks/:id", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const { id } = req.params;
+  if (!isUuidString(id)) return res.status(400).json({ message: "Invalid id." });
+  const b = req.body || {};
+  const cur = await query(`SELECT title, body_html FROM platform_public_footer_blocks WHERE id = $1`, [id]);
+  if (!cur.rows[0]) return res.status(404).json({ message: "Not found." });
+  let nextTitle = cur.rows[0].title;
+  let nextBody = cur.rows[0].body_html;
+  if (Object.prototype.hasOwnProperty.call(b, "title")) nextTitle = b.title;
+  if (Object.prototype.hasOwnProperty.call(b, "bodyHtml")) nextBody = b.bodyHtml;
+  const pieces = [];
+  const vals = [];
+  let i = 1;
+  if (Object.prototype.hasOwnProperty.call(b, "title") || Object.prototype.hasOwnProperty.call(b, "bodyHtml")) {
+    const v = validatePublicPageSlot(nextTitle, nextBody);
+    if (!v.ok) return res.status(400).json({ message: v.message });
+    pieces.push(`title = $${i++}`);
+    vals.push(v.title);
+    pieces.push(`body_html = $${i++}`);
+    vals.push(v.bodyHtml);
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "linkUrl")) {
+    const norm = normalizeBannerLinkUrl(b.linkUrl);
+    if (norm === undefined) {
+      return res.status(400).json({ message: "linkUrl must be a valid http(s) URL or empty." });
+    }
+    pieces.push(`link_url = $${i++}`);
+    vals.push(norm);
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "sortOrder")) {
+    pieces.push(`sort_order = $${i++}`);
+    vals.push(Number(b.sortOrder) || 0);
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "isActive")) {
+    pieces.push(`is_active = $${i++}`);
+    vals.push(Boolean(b.isActive));
+  }
+  if (pieces.length === 0) {
+    return res.status(400).json({ message: "Nothing to update." });
+  }
+  pieces.push("updated_at = NOW()");
+  vals.push(id);
+  await query(`UPDATE platform_public_footer_blocks SET ${pieces.join(", ")} WHERE id = $${i}`, vals);
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_footer_block.updated",
+    entityType: "platform_public_footer_block",
+    entityId: id,
+    details: { fields: Object.keys(b) }
+  });
+  const row = await query(
+    `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, is_active, created_at, updated_at
+     FROM platform_public_footer_blocks WHERE id = $1`,
+    [id]
+  );
+  res.json(mapFooterBlockRow(row.rows[0]));
+});
+
+app.delete("/api/system-owner/footer-blocks/:id", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const { id } = req.params;
+  if (!isUuidString(id)) return res.status(400).json({ message: "Invalid id." });
+  const del = await query(`DELETE FROM platform_public_footer_blocks WHERE id = $1 RETURNING id`, [id]);
+  if (!del.rows[0]) return res.status(404).json({ message: "Not found." });
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_footer_block.deleted",
+    entityType: "platform_public_footer_block",
+    entityId: id,
+    details: {}
+  });
+  res.status(204).end();
+});
+
+app.post(
+  "/api/system-owner/footer-blocks/:id/image",
   authenticate,
   requireRoles("system_owner"),
+  uploadLogoMemory.single("banner"),
   async (req, res) => {
-    const slotKey = parsePublicPageSlotKey(req.params.slotKey);
-    if (!slotKey) return res.status(400).json({ message: "Invalid slot key." });
+    const { id } = req.params;
+    if (!isUuidString(id)) return res.status(400).json({ message: "Invalid id." });
+    if (!req.file?.buffer) {
+      return res.status(400).json({ message: "Choose an image file (form field name: banner)." });
+    }
+    const allowed = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
+    if (!allowed.has(req.file.mimetype)) {
+      return res.status(400).json({ message: "Image must be PNG, JPEG, WebP or GIF." });
+    }
+    const ex = await query(`SELECT id FROM platform_public_footer_blocks WHERE id = $1`, [id]);
+    if (!ex.rows[0]) return res.status(404).json({ message: "Not found." });
     await query(
-      `UPDATE platform_public_page_slots SET image_bytes = NULL, image_mime = NULL, updated_at = NOW() WHERE slot_key = $1`,
-      [slotKey]
+      `UPDATE platform_public_footer_blocks SET image_bytes = $1, image_mime = $2, updated_at = NOW() WHERE id = $3`,
+      [req.file.buffer, req.file.mimetype, id]
     );
     await logAudit({
       actorUserId: req.user.sub,
-      action: "platform_public_page_slot.image_cleared",
-      entityType: "platform_public_page_slot",
-      entityId: slotKey,
-      details: {}
+      action: "platform_footer_block.image_uploaded",
+      entityType: "platform_public_footer_block",
+      entityId: id,
+      details: { mime: req.file.mimetype }
     });
     const row = await query(
-      `SELECT slot_key, title, body_html, image_bytes, image_mime, link_url, is_active, updated_at
-       FROM platform_public_page_slots WHERE slot_key = $1`,
-      [slotKey]
+      `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, is_active, created_at, updated_at
+       FROM platform_public_footer_blocks WHERE id = $1`,
+      [id]
     );
-    res.json(mapPublicPageSlotRow(row.rows[0]));
+    res.json(mapFooterBlockRow(row.rows[0]));
   }
 );
+
+app.delete("/api/system-owner/footer-blocks/:id/image", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const { id } = req.params;
+  if (!isUuidString(id)) return res.status(400).json({ message: "Invalid id." });
+  await query(
+    `UPDATE platform_public_footer_blocks SET image_bytes = NULL, image_mime = NULL, updated_at = NOW() WHERE id = $1`,
+    [id]
+  );
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_footer_block.image_cleared",
+    entityType: "platform_public_footer_block",
+    entityId: id,
+    details: {}
+  });
+  const row = await query(
+    `SELECT id, sort_order, title, body_html, image_bytes, image_mime, link_url, is_active, created_at, updated_at
+     FROM platform_public_footer_blocks WHERE id = $1`,
+    [id]
+  );
+  if (!row.rows[0]) return res.status(404).json({ message: "Not found." });
+  res.json(mapFooterBlockRow(row.rows[0]));
+});
 
 const EXPENSE_CATEGORIES = [
   "field_agent_fixed",

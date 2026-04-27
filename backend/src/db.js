@@ -762,6 +762,44 @@ export async function initDb() {
   }
 
   await query(`
+    CREATE TABLE IF NOT EXISTS platform_home_promos (
+      slot_index SMALLINT PRIMARY KEY CHECK (slot_index >= 0 AND slot_index <= 2),
+      link_url TEXT NULL,
+      alt_text_fr VARCHAR(400) NULL,
+      alt_text_en VARCHAR(400) NULL,
+      orientation TEXT NOT NULL DEFAULT 'landscape' CHECK (orientation IN ('square', 'landscape')),
+      image_bytes BYTEA NULL,
+      image_mime TEXT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  for (let s = 0; s < 3; s++) {
+    await query(
+      `INSERT INTO platform_home_promos (slot_index, orientation) VALUES ($1, $2) ON CONFLICT (slot_index) DO NOTHING`,
+      [s, s === 0 ? "square" : "landscape"]
+    );
+  }
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS platform_public_footer_blocks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      sort_order INT NOT NULL DEFAULT 0,
+      title VARCHAR(200) NOT NULL DEFAULT '',
+      body_html TEXT NOT NULL DEFAULT '',
+      image_bytes BYTEA NULL,
+      image_mime TEXT NULL,
+      link_url TEXT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_platform_footer_blocks_active ON platform_public_footer_blocks (is_active, sort_order);"
+  );
+
+  await query(`
     CREATE TABLE IF NOT EXISTS platform_dashboard_banners (
       slot_index SMALLINT PRIMARY KEY CHECK (slot_index >= 0 AND slot_index <= 2),
       image_url TEXT NULL,

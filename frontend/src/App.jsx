@@ -6,7 +6,7 @@ import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
 import DashboardAnnouncementStrip from "./DashboardAnnouncementStrip.jsx";
 import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
-import PlatformPublicPagePanel from "./PlatformPublicPagePanel.jsx";
+import PlatformHomeMarketingPanel from "./PlatformHomeMarketingPanel.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
 import { IconAntenna, IconHome, IconPeople, IconSignOut, IconSliders, IconWallet } from "./icons.jsx";
@@ -787,7 +787,9 @@ function App() {
             api.getFreeRadiusSyncEvents(activeIspId),
             api.getRoleProfiles(activeIspId),
             api.getPlatformSubscriptions(activeIspId),
-            api.getAuditLogs(activeIspId),
+            currentUser.role === "system_owner" && activeIspId
+              ? api.getAuditLogs(activeIspId)
+              : Promise.resolve([]),
             api.getNotificationOutbox(activeIspId),
             api.getBranding(activeIspId),
             api.getNetworkStats(activeIspId, statsPeriod.from, statsPeriod.to),
@@ -2277,7 +2279,7 @@ function App() {
             <a href="#platform-banners">{t("Bannières publiques", "Public banners")}</a>
           ) : null}
           {user.role === "system_owner" ? (
-            <a href="#platform-public-home">{t("Accueil public", "Public home")}</a>
+            <a href="#platform-home-marketing">{t("Accueil public", "Public home")}</a>
           ) : null}
           {!isFieldAgent &&
           (user.role === "system_owner" ||
@@ -2565,7 +2567,7 @@ function App() {
         </section>
       ) : null}
 
-      {user.role === "system_owner" ? <PlatformPublicPagePanel t={t} isEn={isEn} /> : null}
+      {user.role === "system_owner" ? <PlatformHomeMarketingPanel t={t} isEn={isEn} /> : null}
 
       {user.role === "system_owner" && superDashboard?.tenants ? (
         <section className="panel">
@@ -3654,14 +3656,22 @@ function App() {
         </section>
       </section>
 
-      <section className="panel">
-        <h2>Journal d'audit récent</h2>
-        {auditLogs.slice(0, 12).map((log) => (
-          <p key={log.id}>
-            {new Date(log.createdAt).toLocaleString()} - {log.action} ({log.entityType})
+      {user.role === "system_owner" ? (
+        <section className="panel">
+          <h2>{t("Journal d'audit récent", "Recent audit log")}</h2>
+          <p className="app-meta">
+            {t(
+              "Réservé au propriétaire plateforme : historique des actions pour le FAI sélectionné.",
+              "Platform owner only: action history for the selected ISP."
+            )}
           </p>
-        ))}
-      </section>
+          {auditLogs.slice(0, 12).map((log) => (
+            <p key={log.id}>
+              {new Date(log.createdAt).toLocaleString()} — {log.action} ({log.entityType})
+            </p>
+          ))}
+        </section>
+      ) : null}
 
       <section className="panel">
         <h2>File d'attente des notifications</h2>

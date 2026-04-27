@@ -246,7 +246,7 @@ async function authFetchBlob(path) {
 
 export const api = {
   getPublicPlatformPackages: () => publicRequest("/public/platform-packages"),
-  getPublicPlatformPageSlots: () => publicRequest("/public/platform-public-page-slots"),
+  getPublicHomeMarketing: () => publicRequest("/public/home-marketing"),
   signupTenant: (payload) =>
     publicRequest("/public/signup", { method: "POST", body: JSON.stringify(payload) }),
   subscriberLogin: (payload) =>
@@ -330,27 +330,24 @@ export const api = {
     request(`/system-owner/dashboard-banners/${slot}/image`, {
       method: "DELETE"
     }),
-  getSystemOwnerPublicPageSlots: () => request("/system-owner/platform-public-page-slots"),
-  patchSystemOwnerPublicPageSlot: (slotKey, body) =>
-    request(`/system-owner/platform-public-page-slots/${encodeURIComponent(slotKey)}`, {
+  getSystemOwnerHomePromos: () => request("/system-owner/home-promos"),
+  patchSystemOwnerHomePromo: (slot, body) =>
+    request(`/system-owner/home-promos/${slot}`, {
       method: "PATCH",
       body: JSON.stringify(body)
     }),
-  uploadSystemOwnerPublicPageSlotImage: async (slotKey, file) => {
+  uploadSystemOwnerHomePromoImage: async (slot, file) => {
     const form = new FormData();
     form.append("banner", file);
     const headers = {};
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
     let response;
     try {
-      response = await fetch(
-        `${API_URL}/system-owner/platform-public-page-slots/${encodeURIComponent(slotKey)}/image`,
-        {
-          method: "POST",
-          headers,
-          body: form
-        }
-      );
+      response = await fetch(`${API_URL}/system-owner/home-promos/${slot}/image`, {
+        method: "POST",
+        headers,
+        body: form
+      });
     } catch (_err) {
       throw new Error(
         `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
@@ -362,8 +359,50 @@ export const api = {
     }
     return response.json();
   },
-  deleteSystemOwnerPublicPageSlotImage: (slotKey) =>
-    request(`/system-owner/platform-public-page-slots/${encodeURIComponent(slotKey)}/image`, {
+  deleteSystemOwnerHomePromoImage: (slot) =>
+    request(`/system-owner/home-promos/${slot}/image`, {
+      method: "DELETE"
+    }),
+  getSystemOwnerFooterBlocks: () => request("/system-owner/footer-blocks"),
+  createSystemOwnerFooterBlock: (body) =>
+    request("/system-owner/footer-blocks", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+  patchSystemOwnerFooterBlock: (id, body) =>
+    request(`/system-owner/footer-blocks/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }),
+  deleteSystemOwnerFooterBlock: (id) =>
+    request(`/system-owner/footer-blocks/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    }),
+  uploadSystemOwnerFooterBlockImage: async (id, file) => {
+    const form = new FormData();
+    form.append("banner", file);
+    const headers = {};
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    let response;
+    try {
+      response = await fetch(`${API_URL}/system-owner/footer-blocks/${encodeURIComponent(id)}/image`, {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
+    if (!response.ok) {
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
+    }
+    return response.json();
+  },
+  deleteSystemOwnerFooterBlockImage: (id) =>
+    request(`/system-owner/footer-blocks/${encodeURIComponent(id)}/image`, {
       method: "DELETE"
     }),
   getBranding: (ispId) => request(withIsp("/branding", ispId)),
