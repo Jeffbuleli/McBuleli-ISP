@@ -268,6 +268,7 @@ async function authFetchBlob(path) {
 export const api = {
   getPublicPlatformPackages: () => publicRequest("/public/platform-packages"),
   getPublicHomeMarketing: () => publicRequest("/public/home-marketing"),
+  getPublicAuthCopy: () => publicRequest("/public/auth-copy"),
   signupTenant: (payload) =>
     publicRequest("/public/signup", { method: "POST", body: JSON.stringify(payload) }),
   forgotPassword: (email) =>
@@ -328,6 +329,9 @@ export const api = {
     }),
   getIsps: () => request("/isps"),
   getSystemOwnerOverview: () => request("/system-owner/overview"),
+  getSystemOwnerAuthCopy: () => request("/system-owner/auth-copy"),
+  patchSystemOwnerAuthCopy: (payload) =>
+    request("/system-owner/auth-copy", { method: "PATCH", body: JSON.stringify(payload) }),
   getSystemOwnerDashboardBanners: () => request("/system-owner/dashboard-banners"),
   uploadSystemOwnerDashboardBanner: async (slot, file) => {
     const form = new FormData();

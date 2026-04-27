@@ -1097,6 +1097,78 @@ app.post("/api/public/reset-password", rlResetPasswordToken, async (req, res) =>
   return res.json({ ok: true, message: "Password updated. You can sign in with your new password." });
 });
 
+function normalizeAuthCopyBody(raw) {
+  const s = raw != null ? String(raw).trim() : "";
+  return s.slice(0, 4000);
+}
+
+app.get("/api/public/auth-copy", rlPublicRead, async (_req, res) => {
+  try {
+    const r = await query(
+      `SELECT forgot_password_body_fr, forgot_password_body_en FROM platform_auth_copy WHERE id = 1`
+    );
+    const row = r.rows[0] || {};
+    return res.json({
+      forgotPasswordBodyFr: row.forgot_password_body_fr ?? "",
+      forgotPasswordBodyEn: row.forgot_password_body_en ?? ""
+    });
+  } catch (_err) {
+    return res.json({ forgotPasswordBodyFr: "", forgotPasswordBodyEn: "" });
+  }
+});
+
+app.get("/api/system-owner/auth-copy", authenticate, requireRoles("system_owner"), async (_req, res) => {
+  const r = await query(
+    `SELECT forgot_password_body_fr, forgot_password_body_en, updated_at FROM platform_auth_copy WHERE id = 1`
+  );
+  const row = r.rows[0] || {};
+  res.json({
+    forgotPasswordBodyFr: row.forgot_password_body_fr ?? "",
+    forgotPasswordBodyEn: row.forgot_password_body_en ?? "",
+    updatedAt: row.updated_at ?? null
+  });
+});
+
+app.patch("/api/system-owner/auth-copy", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const b = req.body || {};
+  const cur = await query(
+    `SELECT forgot_password_body_fr, forgot_password_body_en FROM platform_auth_copy WHERE id = 1`
+  );
+  let nextFr = cur.rows[0]?.forgot_password_body_fr ?? "";
+  let nextEn = cur.rows[0]?.forgot_password_body_en ?? "";
+  if (Object.prototype.hasOwnProperty.call(b, "forgotPasswordBodyFr")) {
+    nextFr = normalizeAuthCopyBody(b.forgotPasswordBodyFr);
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "forgotPasswordBodyEn")) {
+    nextEn = normalizeAuthCopyBody(b.forgotPasswordBodyEn);
+  }
+  await query(
+    `INSERT INTO platform_auth_copy (id, forgot_password_body_fr, forgot_password_body_en, updated_at)
+     VALUES (1, $1, $2, NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       forgot_password_body_fr = EXCLUDED.forgot_password_body_fr,
+       forgot_password_body_en = EXCLUDED.forgot_password_body_en,
+       updated_at = NOW()`,
+    [nextFr, nextEn]
+  );
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_auth_copy.updated",
+    entityType: "platform_auth_copy",
+    entityId: "1",
+    details: {}
+  });
+  const out = await query(
+    `SELECT forgot_password_body_fr, forgot_password_body_en, updated_at FROM platform_auth_copy WHERE id = 1`
+  );
+  const row = out.rows[0] || {};
+  res.json({
+    forgotPasswordBodyFr: row.forgot_password_body_fr ?? "",
+    forgotPasswordBodyEn: row.forgot_password_body_en ?? "",
+    updatedAt: row.updated_at ?? null
+  });
+});
+
 async function handleUnifiedPawapayWebhook(req, res) {
   if (!verifyPawapayCallbackSecret(req)) {
     return res.status(401).json({ message: "Invalid or missing callback secret" });
@@ -5214,7 +5286,7 @@ app.get("/api/super/dashboard", authenticate, requireRoles("system_owner", "supe
        LEFT JOIN users u ON u.isp_id = i.id AND u.role IN ('company_manager', 'isp_admin')
        GROUP BY i.id, ps.status, ps.ends_at, pp.name
        ORDER BY i.created_at DESC
-       LIMIT 100`
+       LIMIT 3000`
     )
   ]);
   res.json({

@@ -183,11 +183,185 @@ a:hover {
   top: 0;
   z-index: 40;
   margin: -24px -20px 16px;
-  padding: 0 20px 14px;
+  padding: 0 20px 10px;
   background: var(--mb-bg);
   border-bottom: 1px solid rgba(93, 64, 55, 0.1);
   border-radius: 0 0 22px 22px;
   box-shadow: 0 10px 28px rgba(45, 36, 32, 0.06);
+}
+
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: minmax(232px, 280px) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px 28px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 960px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dashboard-sidenav {
+  position: sticky;
+  top: 0.75rem;
+  align-self: start;
+  padding: 16px 14px 14px;
+  border-radius: 18px;
+  background: linear-gradient(165deg, #fffdf9 0%, #f6faf6 100%);
+  border: 1px solid rgba(93, 64, 55, 0.1);
+  box-shadow: 0 8px 26px rgba(45, 36, 32, 0.07);
+  max-height: calc(100vh - 1.5rem);
+  overflow-y: auto;
+  z-index: 10;
+}
+
+@media (max-width: 960px) {
+  .dashboard-sidenav {
+    position: relative;
+    top: 0;
+    max-height: none;
+  }
+}
+
+.dashboard-main-column {
+  min-width: 0;
+}
+
+.dashboard-sidenav-search-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(93, 64, 55, 0.14);
+  font: inherit;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.dashboard-sidenav-announcements {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(93, 64, 55, 0.08);
+}
+
+.dashboard-sidenav-announcements-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--mb-muted);
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+
+.dashboard-sidenav-announce-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dashboard-sidenav-announce-list li + li {
+  margin-top: 8px;
+}
+
+.dashboard-sidenav-announce-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(93, 64, 55, 0.08);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dashboard-sidenav-announce-link:hover {
+  border-color: rgba(21, 101, 216, 0.28);
+  box-shadow: 0 4px 14px rgba(21, 101, 216, 0.08);
+}
+
+.dashboard-sidenav-announce-title {
+  display: block;
+  font-weight: 650;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.dashboard-sidenav-announce-snippet {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--mb-muted);
+  margin-top: 4px;
+  line-height: 1.35;
+}
+
+.dashboard-sidenav-categories {
+  margin-top: 14px;
+}
+
+.dashboard-nav-category {
+  border-bottom: 1px solid rgba(93, 64, 55, 0.08);
+}
+
+.dashboard-nav-category-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: var(--mb-text);
+}
+
+.dashboard-nav-category-head:hover {
+  color: var(--mb-primary);
+}
+
+.dashboard-nav-category-icon {
+  display: flex;
+  color: var(--mb-primary);
+  opacity: 0.92;
+  flex-shrink: 0;
+}
+
+.dashboard-nav-category-label {
+  flex: 1;
+  font-weight: 650;
+  font-size: 0.94rem;
+}
+
+.dashboard-nav-category-chevron {
+  font-size: 1rem;
+  color: var(--mb-muted);
+  width: 1.35rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.dashboard-nav-category-items {
+  list-style: none;
+  padding: 0 0 10px 38px;
+  margin: 0;
+}
+
+.dashboard-nav-category-link {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: var(--mb-text);
+  text-decoration: none;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.dashboard-nav-category-link:hover {
+  background: rgba(21, 101, 216, 0.09);
+  color: var(--mb-primary);
 }
 
 .app-header--dashboard {
@@ -1585,6 +1759,18 @@ button:disabled {
 .auth-simple-panel-title {
   margin: 0 0 8px;
   font-size: 1.05rem;
+}
+
+.auth-simple-forgot-hint {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 253, 249, 0.95);
+  border: 1px solid rgba(93, 64, 55, 0.1);
+  color: var(--mb-text);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .auth-simple-label {

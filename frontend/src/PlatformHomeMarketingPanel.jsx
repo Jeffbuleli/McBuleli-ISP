@@ -33,6 +33,9 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const footerCreateImageInputRef = useRef(null);
+  const [authCopyFr, setAuthCopyFr] = useState("");
+  const [authCopyEn, setAuthCopyEn] = useState("");
+  const [authCopyUpdatedAt, setAuthCopyUpdatedAt] = useState(null);
 
   const loadPromos = useCallback(async () => {
     const data = await api.getSystemOwnerHomePromos();
@@ -65,6 +68,13 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     setFounderCaptionEdit(data.caption ?? "");
   }, []);
 
+  const loadAuthCopy = useCallback(async () => {
+    const data = await api.getSystemOwnerAuthCopy();
+    setAuthCopyFr(data.forgotPasswordBodyFr ?? "");
+    setAuthCopyEn(data.forgotPasswordBodyEn ?? "");
+    setAuthCopyUpdatedAt(data.updatedAt ?? null);
+  }, []);
+
   const loadAll = useCallback(async () => {
     setError("");
     setFounderLoadError("");
@@ -74,11 +84,16 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       setError(err.message || "Error");
     }
     try {
+      await loadAuthCopy();
+    } catch (_e) {
+      /* optional block — avoid blocking promos/footer if auth-copy fails */
+    }
+    try {
       await loadFounder();
     } catch (err) {
       setFounderLoadError(err.message || "Error");
     }
-  }, [loadPromos, loadFooter, loadFounder]);
+  }, [loadPromos, loadFooter, loadFounder, loadAuthCopy]);
 
   useEffect(() => {
     loadAll();
@@ -305,6 +320,22 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     }
   }
 
+  async function onSaveAuthCopy() {
+    setSaving(true);
+    setError("");
+    try {
+      await api.patchSystemOwnerAuthCopy({
+        forgotPasswordBodyFr: authCopyFr,
+        forgotPasswordBodyEn: authCopyEn
+      });
+      await loadAuthCopy();
+    } catch (err) {
+      setError(err.message || "Error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <section className="panel" id="platform-home-marketing">
       <h2>{t("Page d'accueil publique (marketing)", "Public home page (marketing)")}</h2>
@@ -315,6 +346,51 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
         )}
       </p>
       {error ? <p className="error">{error}</p> : null}
+
+      <div className="panel" style={{ marginTop: 20 }}>
+        <h3 style={{ marginTop: 0 }}>
+          {t("Texte « Mot de passe oublié » (écran de connexion)", "Forgot-password message (sign-in screen)")}
+        </h3>
+        <p className="app-meta" style={{ marginTop: 0, maxWidth: "56rem" }}>
+          {t(
+            "Texte facultatif affiché sur le formulaire de réinitialisation (une variante par langue). Laisser vide pour n’afficher aucun encadré explicatif — le message de confirmation après envoi reste inchangé.",
+            "Optional copy on the password-reset request form (one variant per language). Leave both empty to show no explanatory block — the post-submit confirmation is unchanged."
+          )}
+        </p>
+        <label style={{ display: "block", marginBottom: 12 }}>
+          <span className="app-meta">{t("Français", "French")}</span>
+          <textarea
+            value={authCopyFr}
+            onChange={(e) => setAuthCopyFr(e.target.value)}
+            disabled={saving}
+            maxLength={4000}
+            rows={4}
+            style={{ display: "block", marginTop: 6, width: "100%", maxWidth: "40rem", fontFamily: "inherit" }}
+          />
+        </label>
+        <label style={{ display: "block", marginBottom: 12 }}>
+          <span className="app-meta">{t("English", "English")}</span>
+          <textarea
+            value={authCopyEn}
+            onChange={(e) => setAuthCopyEn(e.target.value)}
+            disabled={saving}
+            maxLength={4000}
+            rows={4}
+            style={{ display: "block", marginTop: 6, width: "100%", maxWidth: "40rem", fontFamily: "inherit" }}
+          />
+        </label>
+        <p style={{ marginBottom: 0 }}>
+          <button type="button" className="btn-primary" disabled={saving} onClick={onSaveAuthCopy}>
+            {t("Enregistrer le texte de connexion", "Save sign-in copy")}
+          </button>
+        </p>
+        {authCopyUpdatedAt ? (
+          <p className="app-meta" style={{ marginTop: 12, marginBottom: 0 }}>
+            {t("Dernière mise à jour :", "Last updated:")}{" "}
+            {new Date(authCopyUpdatedAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}
+          </p>
+        ) : null}
+      </div>
 
       <h3 style={{ marginTop: 20 }}>
         {t("Signature sous le texte d’intro (pied de page)", "Signature under the footer intro line")}

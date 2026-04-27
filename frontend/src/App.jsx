@@ -1,16 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
 import LangSwitch from "./LangSwitch.jsx";
-import PublicSocialLinks from "./PublicSocialLinks.jsx";
 import DashboardHistograms from "./DashboardHistograms.jsx";
 import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
-import DashboardAnnouncementStrip from "./DashboardAnnouncementStrip.jsx";
+import DashboardSideNav from "./DashboardSideNav.jsx";
 import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
 import PlatformHomeMarketingPanel from "./PlatformHomeMarketingPanel.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
-import { IconAntenna, IconArrowLeft, IconHome, IconPeople, IconSignOut, IconSliders, IconWallet } from "./icons.jsx";
+import { IconArrowLeft, IconHome, IconSignOut } from "./icons.jsx";
 
 function isPlatformSuperRole(role) {
   return role === "super_admin" || role === "system_owner";
@@ -429,6 +428,9 @@ function App() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotNotice, setForgotNotice] = useState("");
   const [forgotBusy, setForgotBusy] = useState(false);
+  const [dashboardSidebarSearch, setDashboardSidebarSearch] = useState("");
+  const [expandedNavCategory, setExpandedNavCategory] = useState("overview");
+  const [publicAuthCopyForgot, setPublicAuthCopyForgot] = useState({ fr: "", en: "" });
   const [resetTokenState, setResetTokenState] = useState("");
   const [resetPasswordForm, setResetPasswordForm] = useState({ password: "", confirm: "" });
   const [teamRowDraft, setTeamRowDraft] = useState({});
@@ -973,6 +975,46 @@ function App() {
       window.localStorage.setItem("ui_lang", uiLang);
     }
   }, [uiLang]);
+
+  useEffect(() => {
+    if (user) return;
+    if (loginAuthStep !== "forgot") return;
+    let cancelled = false;
+    api
+      .getPublicAuthCopy()
+      .then((data) => {
+        if (cancelled) return;
+        setPublicAuthCopyForgot({
+          fr: data.forgotPasswordBodyFr || "",
+          en: data.forgotPasswordBodyEn || ""
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user, loginAuthStep]);
+
+  useEffect(() => {
+    if (!user || user.mustChangePassword) return;
+    setExpandedNavCategory(user.role === "field_agent" ? "field" : "overview");
+  }, [user?.id, user?.role]);
+
+  const filteredTenants = useMemo(() => {
+    const list = superDashboard?.tenants;
+    if (!Array.isArray(list)) return [];
+    const s = dashboardSidebarSearch.trim().toLowerCase();
+    if (!s) return list;
+    return list.filter((tenant) => {
+      const admins = (tenant.adminUsers || [])
+        .map((a) => `${a.fullName || ""} ${a.email || ""}`)
+        .join(" ");
+      const hay = `${tenant.name || ""} ${tenant.location || ""} ${tenant.contactPhone || ""} ${
+        tenant.subscriptionStatus || ""
+      } ${tenant.packageName || ""} ${admins}`.toLowerCase();
+      return hay.includes(s);
+    });
+  }, [superDashboard?.tenants, dashboardSidebarSearch]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !user || !isEn || loading) return;
@@ -2300,12 +2342,9 @@ function App() {
   const tenantSurfaceLogoAlt = resolvePublicBrandName(tenantContext?.displayName) || "McBuleli";
 
   if (!user) {
+    const forgotHintPlain = (isEn ? publicAuthCopyForgot.en : publicAuthCopyForgot.fr).trim();
     return (
       <main className="auth-simple">
-        <div className="auth-simple-toolbar">
-          <PublicSocialLinks idPrefix="login" isEn={isEn} />
-          <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="login" />
-        </div>
         <div className="auth-simple-card">
           <img
             className="auth-simple-logo"
@@ -2382,11 +2421,9 @@ function App() {
           {!loginWorkspaces && !mfaLogin && loginAuthStep === "forgot" ? (
             <form className="panel auth-simple-panel" onSubmit={onForgotPassword}>
               <h2 className="auth-simple-panel-title">{isEn ? "Reset password" : "Mot de passe oublié"}</h2>
-              <p className="app-meta">
-                {isEn
-                  ? "We will email you a link (if this address is registered). Cost-free: uses your platform SMTP when configured."
-                  : "Nous enverrons un lien par e-mail (si l'adresse est enregistrée). Sans service payant : SMTP de la plateforme si configuré."}
-              </p>
+              {forgotHintPlain ? (
+                <p className="auth-simple-forgot-hint">{forgotHintPlain}</p>
+              ) : null}
               <input
                 type="email"
                 autoComplete="email"
@@ -2493,50 +2530,44 @@ function App() {
 
   if (user.mustChangePassword) {
     return (
-      <main className="container">
-        <header className="app-header app-header--login">
-          <div className="login-brand-row">
-            <img
-              className="login-brand-logo"
-              src={tenantSurfaceLogoSrc}
-              alt={tenantSurfaceLogoAlt}
-              width={48}
-              height={48}
+      <main className="auth-simple">
+        <div className="auth-simple-card">
+          <img
+            className="auth-simple-logo"
+            src={tenantSurfaceLogoSrc}
+            alt={tenantSurfaceLogoAlt}
+            width={80}
+            height={80}
+          />
+          <h1 className="auth-simple-title">{tenantSurfaceLogoAlt}</h1>
+          <p className="auth-simple-sub">
+            {t(
+              "Vous devez mettre à jour votre mot de passe avant de continuer.",
+              "You must update your password before continuing."
+            )}
+          </p>
+          {error ? <p className="error">{error}</p> : null}
+          <form className="panel auth-simple-panel" onSubmit={onChangePassword}>
+            <h2 className="auth-simple-panel-title">{t("Nouveau mot de passe", "Change password")}</h2>
+            <input
+              type="password"
+              autoComplete="current-password"
+              placeholder={t("Mot de passe actuel", "Current password")}
+              value={passwordForm.currentPassword}
+              onChange={(e) =>
+                setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
+              }
             />
-            <div>
-            <h1>{tenantSurfaceLogoAlt}</h1>
-            <p className="app-meta">
-              {t(
-                "Vous devez mettre à jour votre mot de passe avant de continuer.",
-                "You must update your password before continuing."
-              )}
-            </p>
-            </div>
-          </div>
-          <div className="login-toolbar-icons">
-            <PublicSocialLinks idPrefix="pwd" isEn={isEn} />
-            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="pwd" />
-          </div>
-        </header>
-        {error && <p className="error">{error}</p>}
-        <form className="panel" onSubmit={onChangePassword}>
-          <h2>{t("Nouveau mot de passe", "Change password")}</h2>
-          <input
-            type="password"
-            placeholder={t("Mot de passe actuel", "Current password")}
-            value={passwordForm.currentPassword}
-            onChange={(e) =>
-              setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
-            }
-          />
-          <input
-            type="password"
-            placeholder={t("Nouveau mot de passe", "New password")}
-            value={passwordForm.newPassword}
-            onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-          />
-          <button type="submit">{t("Enregistrer", "Save")}</button>
-        </form>
+            <input
+              type="password"
+              autoComplete="new-password"
+              placeholder={t("Nouveau mot de passe", "New password")}
+              value={passwordForm.newPassword}
+              onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+            />
+            <button type="submit">{t("Enregistrer", "Save")}</button>
+          </form>
+        </div>
       </main>
     );
   }
@@ -2618,69 +2649,19 @@ function App() {
             </div>
           </div>
         </header>
-        <nav className="dashboard-subnav" aria-label="Navigation tableau de bord">
-          <a href="#dashboard-overview">{t("Vue d'ensemble", "Overview")}</a>
-          {user.role === "system_owner" ? (
-            <a href="#platform-banners">{t("Bannières publiques", "Public banners")}</a>
-          ) : null}
-          {user.role === "system_owner" ? (
-            <a href="#platform-home-marketing">{t("Accueil public", "Public home")}</a>
-          ) : null}
-          {!isFieldAgent &&
-          (user.role === "system_owner" ||
-            user.role === "super_admin" ||
-            user.role === "company_manager" ||
-            user.role === "isp_admin") ? (
-            <a href="#isp-announcements">{t("Annonces", "Announcements")}</a>
-          ) : null}
-          {!isFieldAgent ? (
-            <>
-              <a href="#workspace-settings">{t("Paramètres", "Settings")}</a>
-              <a href="#network-ops">{t("Réseau", "Network")}</a>
-              <a href="#billing-ops">{t("Facturation", "Billing")}</a>
-              <a href="#team-settings">{t("Utilisateurs", "Users")}</a>
-              <a href="#security-settings">{t("Sécurité", "Security")}</a>
-            </>
-          ) : (
-            <a href="#field-clients">{t("Clients & portail", "Clients & portal")}</a>
-          )}
-        </nav>
       </div>
-      {ispAnnouncements.length ? (
-        <DashboardAnnouncementStrip items={ispAnnouncements} t={t} variant="wide" />
-      ) : null}
-      {!isFieldAgent ? (
-      <section className="dashboard-quick-actions" aria-label="Raccourcis tableau de bord">
-        <a href="#workspace-settings">
-          <span className="dashboard-quick-icon" aria-hidden="true">
-            <IconSliders />
-          </span>
-          <strong>{t("Paramètres entreprise", "Company settings")}</strong>
-          <small>{t("Logo, couleurs, domaines, contacts", "Logo, colors, domains, contacts")}</small>
-        </a>
-        <a href="#billing-ops">
-          <span className="dashboard-quick-icon" aria-hidden="true">
-            <IconWallet />
-          </span>
-          <strong>{t("Facturation & paiements", "Billing & payments")}</strong>
-          <small>{t("TID, Mobile Money, retraits", "TID, Mobile Money, withdrawals")}</small>
-        </a>
-        <a href="#team-settings">
-          <span className="dashboard-quick-icon" aria-hidden="true">
-            <IconPeople />
-          </span>
-          <strong>{t("Menus utilisateurs", "User menus")}</strong>
-          <small>{t("Agents, rôles, invitations", "Agents, roles, invites")}</small>
-        </a>
-        <a href="#network-ops">
-          <span className="dashboard-quick-icon" aria-hidden="true">
-            <IconAntenna />
-          </span>
-          <strong>{t("Réseau", "Network")}</strong>
-          <small>{t("MikroTik, Hotspot, télémétrie", "MikroTik, Hotspot, telemetry")}</small>
-        </a>
-      </section>
-      ) : null}
+      <div className="dashboard-layout">
+        <DashboardSideNav
+          t={t}
+          user={user}
+          isFieldAgent={isFieldAgent}
+          expandedCategory={expandedNavCategory}
+          setExpandedCategory={setExpandedNavCategory}
+          ispAnnouncements={ispAnnouncements}
+          navSearch={dashboardSidebarSearch}
+          setNavSearch={setDashboardSidebarSearch}
+        />
+        <div className="dashboard-main-column">
       {loading && <p>{t("Chargement…", "Loading...")}</p>}
       {error && <p className="error">{isEn ? translateToEnglish(error) : error}</p>}
       {notice && <p>{isEn ? translateToEnglish(notice) : notice}</p>}
@@ -2916,14 +2897,17 @@ function App() {
       {user.role === "system_owner" ? <PlatformHomeMarketingPanel t={t} isEn={isEn} /> : null}
 
       {user.role === "system_owner" && superDashboard?.tenants ? (
-        <section className="panel">
+        <section className="panel" id="system-tenants">
           <h2>Vue créateur système</h2>
           <p>
             Compte propriétaire global. Les mots de passe des entreprises sont stockés de façon chiffrée et ne sont pas
             affichables ; utilisez les invitations ou la réinitialisation pour donner un nouvel accès.
           </p>
+          {dashboardSidebarSearch.trim() && !filteredTenants.length ? (
+            <p className="app-meta">{t("Aucun espace ne correspond à la recherche.", "No workspace matches your search.")}</p>
+          ) : null}
           <div className="grid">
-            {superDashboard.tenants.map((tenant) => (
+            {filteredTenants.map((tenant) => (
               <article className="panel" key={tenant.id}>
                 <h3>
                   {tenant.name} {tenant.isDemo ? "(démo)" : ""}
@@ -5042,6 +5026,9 @@ function App() {
           </p>
         ))}
       </section>
+
+        </div>
+      </div>
 
       <footer className="app-footer">
         <span className="app-footer-brand">McBuleli</span>

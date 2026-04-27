@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, publicAssetUrl, setAuthToken } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
-import LangSwitch from "./LangSwitch.jsx";
-import PublicSocialLinks from "./PublicSocialLinks.jsx";
 import { IconArrowLeft } from "./icons.jsx";
 
 function getStoredUiLang() {
@@ -24,7 +22,7 @@ export default function Signup() {
   });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [uiLang, setUiLang] = useState(getStoredUiLang);
+  const [uiLang] = useState(getStoredUiLang);
   const isEn = uiLang === "en";
   const [tenantContext, setTenantContext] = useState(null);
 
@@ -59,12 +57,6 @@ export default function Signup() {
     }
   }, [packages, form.packageCode]);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("ui_lang", uiLang);
-    }
-  }, [uiLang]);
-
   async function onSubmit(e) {
     e.preventDefault();
     setError("");
@@ -91,10 +83,6 @@ export default function Signup() {
 
   return (
     <main className="auth-simple">
-      <div className="auth-simple-toolbar">
-        <PublicSocialLinks idPrefix="signup" isEn={isEn} />
-        <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="signup" />
-      </div>
       <div className="auth-simple-card">
         <img className="auth-simple-logo" src={surfaceLogoSrc} alt={surfaceLogoAlt} width={80} height={80} />
         <h1 className="auth-simple-title">McBuleli</h1>

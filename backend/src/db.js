@@ -185,6 +185,18 @@ export async function initDb() {
   );
 
   await query(`
+    CREATE TABLE IF NOT EXISTS platform_auth_copy (
+      id SMALLINT PRIMARY KEY CHECK (id = 1),
+      forgot_password_body_fr TEXT NOT NULL DEFAULT '',
+      forgot_password_body_en TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(
+    `INSERT INTO platform_auth_copy (id, forgot_password_body_fr, forgot_password_body_en) VALUES (1, '', '') ON CONFLICT (id) DO NOTHING`
+  );
+
+  await query(`
     CREATE TABLE IF NOT EXISTS customers (
       id UUID PRIMARY KEY,
       isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
