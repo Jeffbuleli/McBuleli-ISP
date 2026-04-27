@@ -89,12 +89,6 @@ export default function PublicHomePromos({ t, isEn, variant = "marketing", apiPr
                 "Pro-grade gear that delivers — antennas, routers, connectivity"
               )}
             </h2>
-            <p className="public-home-promos-lead">
-              {t(
-                "PUB — encarts réservés aux annonces de fournisseurs de matériel réseau. Sur mobile : un sous l’autre ; sur grand écran : trois visuels alignés. Clic = WhatsApp McBuleli.",
-                "Ads — slots reserved for network hardware supplier promos. Stacked on mobile; three tiles on desktop. Tap/click opens WhatsApp with McBuleli."
-              )}
-            </p>
           </>
         ) : (
           <>
@@ -109,23 +103,30 @@ export default function PublicHomePromos({ t, isEn, variant = "marketing", apiPr
         )}
       </div>
       <div className="public-home-promos-grid">
-        {ads.map((ad) => (
-          <a
-            key={ad.key}
-            className={`public-home-promo-card public-home-promo-card--${ad.orientation}`}
-            href={ad.href}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <img
-              src={ad.src}
-              alt={isEn ? ad.altEn : ad.altFr}
-              loading="lazy"
-              decoding="async"
-              sizes="(min-width: 960px) 33vw, 100vw"
-            />
-          </a>
-        ))}
+        {ads.map((ad) => {
+          const caption = isEn ? ad.altEn : ad.altFr;
+          return (
+            <a
+              key={ad.key}
+              className={`public-home-promo-card public-home-promo-card--${ad.orientation}`}
+              href={ad.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={caption}
+            >
+              <span className="public-home-promo-card__media">
+                <img
+                  src={ad.src}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  sizes="(min-width: 960px) 33vw, 100vw"
+                />
+              </span>
+              <span className="public-home-promo-card__caption">{caption}</span>
+            </a>
+          );
+        })}
       </div>
     </section>
   );
