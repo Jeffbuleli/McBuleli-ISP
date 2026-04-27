@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_URL, publicAssetUrl, publicRequest } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import LangSwitch from "./LangSwitch.jsx";
+import HomeShortcut from "./HomeShortcut.jsx";
 import { IconAntenna, IconWallet, IconZap } from "./icons.jsx";
 import { wifiT } from "./wifiCopy.js";
 
@@ -204,7 +205,10 @@ export default function WifiPortal() {
             <h1>{t("heroTitle")}</h1>
             <p className="wifi-lead">{t("heroLead")}</p>
           </div>
-          <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="wifi" />
+          <div className="wifi-hero-toolbar">
+            <HomeShortcut title={t("homeShortcut")} idPrefix="wifi" />
+            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="wifi" />
+          </div>
         </div>
         {activeIspId && hasIspContact(branding) ? (
           <aside className="wifi-isp-contact" aria-label={t("contactTitle")}>
@@ -251,10 +255,15 @@ export default function WifiPortal() {
           </div>
         </div>
       </section>
-      <header className="app-header" style={{ alignItems: "center" }}>
-        <img src={wifiLogoSrc} alt="" style={{ height: 40, width: "auto", objectFit: "contain" }} />
-        <div>
-          <h1 style={{ margin: 0 }}>{wifiDisplayName(branding?.displayName, uiLang)}</h1>
+      <header className="isp-enduser-brand-head">
+        <div
+          className="isp-enduser-brand-head__logo-wrap"
+          style={{ borderColor: branding?.primaryColor || "#43a047" }}
+        >
+          <img src={wifiLogoSrc} alt="" width={40} height={40} />
+        </div>
+        <div className="isp-enduser-brand-head__text">
+          <h1>{wifiDisplayName(branding?.displayName, uiLang)}</h1>
           <p className="app-meta">{t("catalogLead")}</p>
         </div>
       </header>
@@ -428,6 +437,19 @@ export default function WifiPortal() {
           ) : null}
         </div>
       )}
+
+      {activeIspId && branding?.wifiPortalBannerUrl ? (
+        <section className="wifi-portal-bottom-banner" aria-label={t("wifiBannerAria")}>
+          <img
+            src={publicAssetUrl(branding.wifiPortalBannerUrl)}
+            alt=""
+            className="wifi-portal-bottom-banner__img"
+            loading="lazy"
+            decoding="async"
+          />
+        </section>
+      ) : null}
+
       <footer className="mcbuleli-site-footer">
         <img src={mcbuleliLogoUrl} alt="" width={28} height={28} className="mcbuleli-site-footer__logo" />
         <p>{t("mcbuleliFooter")}</p>

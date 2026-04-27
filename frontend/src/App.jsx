@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, publicAssetUrl, setAuthToken } from "./api";
 import LangSwitch from "./LangSwitch.jsx";
+import HomeShortcut from "./HomeShortcut.jsx";
 import DashboardHistograms from "./DashboardHistograms.jsx";
 import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
@@ -1526,6 +1527,48 @@ function App() {
     }
   }
 
+  async function onBrandingWifiBannerFile(e) {
+    const input = e.target;
+    const f = input.files?.[0];
+    if (!f) return;
+    if (!selectedIspId) {
+      setError(t("Choisissez d'abord un FAI dans « Espace FAI actif ».", "Select an ISP in Active ISP Workspace first."));
+      return;
+    }
+    setError("");
+    setNotice("");
+    try {
+      const row = await api.uploadBrandingWifiPortalBanner(selectedIspId, f);
+      if (row) setBranding(row);
+      setNotice(t("Bannière Wi‑Fi invité enregistrée.", "Guest Wi‑Fi banner saved."));
+      input.value = "";
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function onClearBrandingWifiBanner() {
+    if (!selectedIspId) return;
+    if (
+      !window.confirm(
+        t("Retirer la bannière du portail Wi‑Fi invité ?", "Remove the guest Wi‑Fi portal banner?")
+      )
+    ) {
+      return;
+    }
+    setError("");
+    setNotice("");
+    try {
+      const row = await api.deleteBrandingWifiPortalBanner(selectedIspId);
+      if (row) setBranding(row);
+      setNotice(t("Bannière Wi‑Fi retirée.", "Wi‑Fi banner removed."));
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function onDownloadCustomersCsv() {
     if (!selectedIspId) return;
     setError("");
@@ -2058,13 +2101,25 @@ function App() {
     refresh();
   }
 
+  const tenantSurfaceLogoSrc =
+    tenantContext?.logoUrl != null && String(tenantContext.logoUrl).trim()
+      ? publicAssetUrl(tenantContext.logoUrl)
+      : mcbuleliLogoUrl;
+  const tenantSurfaceLogoAlt = resolvePublicBrandName(tenantContext?.displayName) || "McBuleli";
+
   if (!user) {
     const loginTitle = resolvePublicBrandName(tenantContext?.displayName);
     return (
       <main className="container container--login">
         <div className="login-layout">
           <section className="login-poster" aria-label="Présentation">
-            <img className="login-poster-logo-img" src={mcbuleliLogoUrl} alt="McBuleli" width={72} height={72} />
+            <img
+              className="login-poster-logo-img"
+              src={tenantSurfaceLogoSrc}
+              alt={tenantSurfaceLogoAlt}
+              width={72}
+              height={72}
+            />
             <p className="login-poster-lead">
               {isEn
                 ? "Billing, Mobile Money collections, customer portal, agents, MikroTik and reporting in one professional ISP workspace."
@@ -2079,7 +2134,13 @@ function App() {
           <div className="login-stack">
             <header className="app-header app-header--login">
               <div className="login-brand-row">
-                <img className="login-brand-logo" src={mcbuleliLogoUrl} alt="McBuleli" width={44} height={44} />
+                <img
+                  className="login-brand-logo"
+                  src={tenantSurfaceLogoSrc}
+                  alt={tenantSurfaceLogoAlt}
+                  width={44}
+                  height={44}
+                />
                 <div>
                 <h1>{loginTitle}</h1>
                 <p className="app-meta">
@@ -2093,7 +2154,11 @@ function App() {
                 </p>
                 </div>
               </div>
-              <div className="login-lang">
+              <div className="login-toolbar-icons">
+                <HomeShortcut
+                  title={isEn ? "Home — McBuleli public site" : "Accueil — site public McBuleli"}
+                  idPrefix="login"
+                />
                 <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="login" />
               </div>
             </header>
@@ -2158,9 +2223,15 @@ function App() {
       <main className="container">
         <header className="app-header app-header--login">
           <div className="login-brand-row">
-            <img className="login-brand-logo" src={mcbuleliLogoUrl} alt="McBuleli" width={48} height={48} />
+            <img
+              className="login-brand-logo"
+              src={tenantSurfaceLogoSrc}
+              alt={tenantSurfaceLogoAlt}
+              width={48}
+              height={48}
+            />
             <div>
-            <h1>McBuleli</h1>
+            <h1>{tenantSurfaceLogoAlt}</h1>
             <p className="app-meta">
               {t(
                 "Vous devez mettre à jour votre mot de passe avant de continuer.",
@@ -2169,7 +2240,11 @@ function App() {
             </p>
             </div>
           </div>
-          <div className="login-lang">
+          <div className="login-toolbar-icons">
+            <HomeShortcut
+              title={isEn ? "Home — McBuleli public site" : "Accueil — site public McBuleli"}
+              idPrefix="pwd"
+            />
             <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="pwd" />
           </div>
         </header>
@@ -2826,6 +2901,48 @@ function App() {
                 setBrandingForm({ ...brandingForm, wifiPortalRedirectUrl: e.target.value })
               }
             />
+            <p className="app-meta" style={{ margin: "12px 0 6px", maxWidth: "56ch" }}>
+              {t(
+                "Image large affichée en bas de la page Wi‑Fi invité (/buy/packages ou /wifi), sous les offres — visuel promo, partenaires, etc. (PNG, JPEG, WebP, GIF ; max. 5 Mo).",
+                "Wide image at the bottom of the guest Wi‑Fi page (/buy/packages or /wifi), below the plans — promos, partners, etc. (PNG, JPEG, WebP, GIF; max 5 MB)."
+              )}
+            </p>
+            <label style={{ display: "block", marginTop: 4 }}>
+              {t("Bannière bas de page Wi‑Fi invité", "Guest Wi‑Fi bottom banner")}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                disabled={!selectedIspId}
+                onChange={onBrandingWifiBannerFile}
+                style={{ display: "block", marginTop: 6 }}
+              />
+            </label>
+            {branding?.wifiPortalBannerUrl ? (
+              <div style={{ margin: "10px 0 0" }}>
+                <img
+                  src={publicAssetUrl(branding.wifiPortalBannerUrl)}
+                  alt=""
+                  style={{
+                    width: "100%",
+                    maxWidth: 520,
+                    maxHeight: 160,
+                    objectFit: "cover",
+                    borderRadius: 14,
+                    display: "block",
+                    border: "1px solid rgba(93, 64, 55, 0.12)"
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn-secondary-outline"
+                  style={{ marginTop: 8 }}
+                  disabled={!selectedIspId}
+                  onClick={onClearBrandingWifiBanner}
+                >
+                  {t("Retirer la bannière Wi‑Fi", "Remove Wi‑Fi banner")}
+                </button>
+              </div>
+            ) : null}
             <textarea
               placeholder={t(
                 "Texte de pied de page portail client (RCCM, mentions légales…)",

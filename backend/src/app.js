@@ -185,6 +185,11 @@ const uploadLogoMemory = multer({
   limits: { fileSize: 2 * 1024 * 1024 }
 });
 
+const uploadWifiPortalBannerMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
 const uploadCsvMemory = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 6 * 1024 * 1024 }
@@ -250,12 +255,28 @@ app.use(async (req, _res, next) => {
   if (!host || host === "localhost" || host === "127.0.0.1") return next();
   try {
     const tenant = await query(
-      "SELECT i.id AS \"ispId\", i.name, i.subdomain, b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\" FROM isps i LEFT JOIN isp_branding b ON b.isp_id = i.id WHERE LOWER(i.subdomain) = LOWER($1) OR LOWER(COALESCE(b.custom_domain, '')) = LOWER($1) LIMIT 1",
+      `SELECT i.id AS "ispId", i.name, i.subdomain, b.display_name AS "displayName",
+              b.logo_url AS "logoUrl", b.logo_bytes AS "logoBytes", b.logo_mime AS "logoMime",
+              b.primary_color AS "primaryColor", b.secondary_color AS "secondaryColor"
+       FROM isps i
+       LEFT JOIN isp_branding b ON b.isp_id = i.id
+       WHERE LOWER(i.subdomain) = LOWER($1) OR LOWER(COALESCE(b.custom_domain, '')) = LOWER($1)
+       LIMIT 1`,
       [host]
     );
     if (tenant.rows[0]) {
-      req.tenantIspId = tenant.rows[0].ispId;
-      req.tenantContext = tenant.rows[0];
+      const r = tenant.rows[0];
+      const dataUrl = bufferToDataUrl(r.logoMime, r.logoBytes);
+      req.tenantIspId = r.ispId;
+      req.tenantContext = {
+        ispId: r.ispId,
+        name: r.name,
+        subdomain: r.subdomain,
+        displayName: r.displayName || r.name,
+        logoUrl: dataUrl || r.logoUrl || null,
+        primaryColor: r.primaryColor,
+        secondaryColor: r.secondaryColor
+      };
     }
   } catch (_err) {
     // Ignore tenant resolution failures and continue.
@@ -286,14 +307,22 @@ function mapPublicBrandingRow(row) {
   const mime = row.logo_mime ?? row.logoMime;
   const bytes = row.logo_bytes ?? row.logoBytes;
   const dataUrl = bufferToDataUrl(mime, bytes);
+  const bannerMime = row.wifi_portal_banner_mime ?? row.wifiPortalBannerMime;
+  const bannerBytes = row.wifi_portal_banner_bytes ?? row.wifiPortalBannerBytes;
+  const bannerDataUrl = bufferToDataUrl(bannerMime, bannerBytes);
   const out = { ...row };
   delete out.logo_bytes;
   delete out.logo_mime;
   delete out.logoBytes;
   delete out.logoMime;
   delete out.logo_url;
+  delete out.wifi_portal_banner_bytes;
+  delete out.wifi_portal_banner_mime;
+  delete out.wifiPortalBannerBytes;
+  delete out.wifiPortalBannerMime;
   const prev = row.logoUrl;
   out.logoUrl = dataUrl || prev || null;
+  out.wifiPortalBannerUrl = bannerDataUrl || null;
   return out;
 }
 
@@ -957,6 +986,7 @@ app.get("/api/public/wifi-plans", rlPublicRead, async (req, res) => {
     `SELECT display_name AS "displayName", logo_url AS "logoUrl", logo_bytes AS "logoBytes", logo_mime AS "logoMime",
             primary_color AS "primaryColor", secondary_color AS "secondaryColor",
             wifi_portal_redirect_url AS "wifiPortalRedirectUrl",
+            wifi_portal_banner_bytes AS "wifiPortalBannerBytes", wifi_portal_banner_mime AS "wifiPortalBannerMime",
             contact_email AS "contactEmail", contact_phone AS "contactPhone", address
      FROM isp_branding WHERE isp_id = $1`,
     [ispId]
@@ -1198,6 +1228,7 @@ app.get("/api/portal/session", authenticatePortal, async (req, res) => {
       `SELECT display_name AS "displayName", logo_url AS "logoUrl", logo_bytes AS "logoBytes", logo_mime AS "logoMime",
               primary_color AS "primaryColor", secondary_color AS "secondaryColor",
               portal_footer_text AS "portalFooterText", portal_client_ref_prefix AS "portalClientRefPrefix",
+              wifi_portal_banner_bytes AS "wifiPortalBannerBytes", wifi_portal_banner_mime AS "wifiPortalBannerMime",
               contact_email AS "contactEmail", contact_phone AS "contactPhone", address
        FROM isp_branding WHERE isp_id = $1`,
       [ispId]
@@ -1596,7 +1627,7 @@ app.get("/api/branding", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const result = await query(
-    "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+    "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", b.wifi_portal_banner_bytes AS \"wifiPortalBannerBytes\", b.wifi_portal_banner_mime AS \"wifiPortalBannerMime\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
     [ispId]
   );
   res.json(mapPublicBrandingRow(result.rows[0] || null));
@@ -1709,7 +1740,7 @@ app.post(
       entityId: updated.rows[0]?.id || null
     });
     const finalResult = await query(
-      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", b.wifi_portal_banner_bytes AS \"wifiPortalBannerBytes\", b.wifi_portal_banner_mime AS \"wifiPortalBannerMime\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
       [ispId]
     );
     return res.json(mapPublicBrandingRow(finalResult.rows[0] || null));
@@ -1775,12 +1806,72 @@ app.post(
       details: { mime: req.file.mimetype }
     });
     const finalResult = await query(
-      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", b.wifi_portal_banner_bytes AS \"wifiPortalBannerBytes\", b.wifi_portal_banner_mime AS \"wifiPortalBannerMime\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
       [ispId]
     );
     return res.json(mapPublicBrandingRow(finalResult.rows[0] || null));
   }
 );
+
+app.post(
+  "/api/branding/wifi-portal-banner",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  uploadWifiPortalBannerMemory.single("banner"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    if (!req.file?.buffer) {
+      return res.status(400).json({ message: "Choose an image file (form field name: banner)." });
+    }
+    const allowed = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
+    if (!allowed.has(req.file.mimetype)) {
+      return res.status(400).json({ message: "Image must be PNG, JPEG, WebP or GIF." });
+    }
+    const ex = await query(`SELECT id FROM isp_branding WHERE isp_id = $1`, [ispId]);
+    if (!ex.rows[0]) return res.status(404).json({ message: "Branding not found." });
+    await query(
+      `UPDATE isp_branding SET wifi_portal_banner_bytes = $1, wifi_portal_banner_mime = $2, updated_at = NOW() WHERE isp_id = $3`,
+      [req.file.buffer, req.file.mimetype, ispId]
+    );
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "branding.wifi_portal_banner_uploaded",
+      entityType: "branding",
+      entityId: ispId,
+      details: { mime: req.file.mimetype }
+    });
+    const finalResult = await query(
+      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", b.wifi_portal_banner_bytes AS \"wifiPortalBannerBytes\", b.wifi_portal_banner_mime AS \"wifiPortalBannerMime\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+      [ispId]
+    );
+    return res.json(mapPublicBrandingRow(finalResult.rows[0] || null));
+  }
+);
+
+app.delete("/api/branding/wifi-portal-banner", authenticate, requireRoles("super_admin", "company_manager", "isp_admin"), async (req, res) => {
+  const ispId = resolveIspId(req, res);
+  if (!ispId) return;
+  await query(
+    `UPDATE isp_branding SET wifi_portal_banner_bytes = NULL, wifi_portal_banner_mime = NULL, updated_at = NOW() WHERE isp_id = $1`,
+    [ispId]
+  );
+  await logAudit({
+    ispId,
+    actorUserId: req.user.sub,
+    action: "branding.wifi_portal_banner_cleared",
+    entityType: "branding",
+    entityId: ispId,
+    details: {}
+  });
+  const finalResult = await query(
+    "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", b.wifi_portal_banner_bytes AS \"wifiPortalBannerBytes\", b.wifi_portal_banner_mime AS \"wifiPortalBannerMime\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+    [ispId]
+  );
+  if (!finalResult.rows[0]) return res.status(404).json({ message: "Branding not found." });
+  return res.json(mapPublicBrandingRow(finalResult.rows[0]));
+});
 
 app.get(
   "/api/announcements",

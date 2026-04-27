@@ -62,6 +62,7 @@ const STR = {
     contactPhone: "Téléphone",
     contactEmail: "E-mail",
     contactAddress: "Adresse",
+    homeShortcut: "Accueil — site public McBuleli",
     mcbuleliFooter: "Propulsé par McBuleli — plateforme de gestion pour opérateurs et FAI.",
     announcementsTitle: "Messages de votre opérateur"
   },
@@ -127,6 +128,7 @@ const STR = {
     contactPhone: "Phone",
     contactEmail: "Email",
     contactAddress: "Address",
+    homeShortcut: "Home — McBuleli public site",
     mcbuleliFooter: "Powered by McBuleli — operations platform for ISPs and providers.",
     announcementsTitle: "Messages from your provider"
   }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { api, setAuthToken } from "./api";
+import { api, publicAssetUrl, setAuthToken } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import LangSwitch from "./LangSwitch.jsx";
+import HomeShortcut from "./HomeShortcut.jsx";
 
 function getStoredUiLang() {
   if (typeof window === "undefined") return "fr";
@@ -24,6 +25,24 @@ export default function Signup() {
   const [notice, setNotice] = useState("");
   const [uiLang, setUiLang] = useState(getStoredUiLang);
   const isEn = uiLang === "en";
+  const [tenantContext, setTenantContext] = useState(null);
+
+  const surfaceLogoSrc =
+    tenantContext?.logoUrl != null && String(tenantContext.logoUrl).trim()
+      ? publicAssetUrl(tenantContext.logoUrl)
+      : mcbuleliLogoUrl;
+  const surfaceLogoAlt =
+    (tenantContext?.displayName != null && String(tenantContext.displayName).trim()) ||
+    "McBuleli";
+
+  useEffect(() => {
+    api
+      .getTenantContext()
+      .then((row) => {
+        if (row?.matched) setTenantContext(row);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     api
@@ -72,7 +91,7 @@ export default function Signup() {
     <main className="container container--login">
       <div className="login-layout">
         <section className="login-poster" aria-label="Présentation">
-            <img className="login-poster-logo-img" src={mcbuleliLogoUrl} alt="McBuleli" width={72} height={72} />
+            <img className="login-poster-logo-img" src={surfaceLogoSrc} alt={surfaceLogoAlt} width={72} height={72} />
           <p className="login-poster-lead">
               {isEn
                 ? "Launch your operator workspace in minutes: 1-month free trial, then monthly billing via Mobile Money. McBuleli centralizes billing, payments, and operations for your ISP."
@@ -87,7 +106,7 @@ export default function Signup() {
         <div className="login-stack">
           <header className="app-header app-header--login">
             <div className="login-brand-row">
-              <img className="login-brand-logo" src={mcbuleliLogoUrl} alt="McBuleli" width={44} height={44} />
+              <img className="login-brand-logo" src={surfaceLogoSrc} alt={surfaceLogoAlt} width={44} height={44} />
               <div>
                 <h1>{isEn ? "Create your McBuleli workspace" : "Créer votre espace McBuleli"}</h1>
                 <p className="app-meta">
@@ -97,7 +116,11 @@ export default function Signup() {
                 </p>
               </div>
             </div>
-            <div className="login-lang">
+            <div className="login-toolbar-icons">
+              <HomeShortcut
+                title={isEn ? "Home — McBuleli public site" : "Accueil — site public McBuleli"}
+                idPrefix="signup"
+              />
               <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="signup" />
             </div>
           </header>

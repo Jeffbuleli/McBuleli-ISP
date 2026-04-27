@@ -450,6 +450,33 @@ export const api = {
     }
     return response.json();
   },
+  uploadBrandingWifiPortalBanner: async (ispId, file) => {
+    const form = new FormData();
+    form.append("banner", file);
+    const headers = {};
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    let response;
+    try {
+      response = await fetch(`${API_URL}${withIsp("/branding/wifi-portal-banner", ispId)}`, {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
+    if (!response.ok) {
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
+    }
+    return response.json();
+  },
+  deleteBrandingWifiPortalBanner: (ispId) =>
+    request(withIsp("/branding/wifi-portal-banner", ispId), {
+      method: "DELETE"
+    }),
   getNetworkStats: (ispId, from, to) =>
     request(
       withIsp(

@@ -1434,6 +1434,75 @@ button:disabled {
   margin-top: 10px;
 }
 
+.login-toolbar-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.public-hero-toolbar,
+.portal-hero-toolbar,
+.wifi-hero-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.isp-enduser-brand-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 12px 0 20px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: linear-gradient(165deg, #fffdf9 0%, #f5faf4 100%);
+  border: 1px solid rgba(93, 64, 55, 0.12);
+  box-shadow: 0 10px 32px rgba(45, 36, 32, 0.07);
+}
+
+.isp-enduser-brand-head__logo-wrap {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 3px solid #43a047;
+  box-shadow: 0 4px 16px rgba(67, 160, 71, 0.14);
+  box-sizing: border-box;
+}
+
+.isp-enduser-brand-head__logo-wrap img {
+  display: block;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.isp-enduser-brand-head__text {
+  min-width: 0;
+  flex: 1;
+}
+
+.isp-enduser-brand-head__text h1 {
+  margin: 0 0 6px;
+  font-size: clamp(1.25rem, 2.4vw, 1.65rem);
+  font-weight: 850;
+  color: var(--mb-primary);
+  letter-spacing: -0.02em;
+}
+
+.isp-enduser-brand-head__text .app-meta {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
 .public-card--workspace .workspace-icon {
   display: inline-flex;
   align-items: center;
@@ -2114,6 +2183,24 @@ a.public-footer-card:hover {
   background: linear-gradient(145deg, #e7f5e6, #fffaf4);
   border: 1px solid rgba(93, 64, 55, 0.15);
   box-shadow: 0 8px 20px rgba(45, 36, 32, 0.08);
+}
+
+.wifi-portal-bottom-banner {
+  margin: 24px 0 16px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(93, 64, 55, 0.12);
+  box-shadow: 0 10px 32px rgba(45, 36, 32, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.wifi-portal-bottom-banner__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(380px, 58vw);
+  object-fit: cover;
+  object-position: center;
 }
 
 .mcbuleli-site-footer {

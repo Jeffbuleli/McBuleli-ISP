@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_URL, api, publicAssetUrl } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import LangSwitch from "./LangSwitch.jsx";
+import HomeShortcut from "./HomeShortcut.jsx";
 import { portalBrandTitle, portalT } from "./portalCopy.js";
 
 const SUBSCRIBER_JWT_KEY = "subscriberJwt";
@@ -320,14 +321,19 @@ export default function Portal() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <img
-              className="portal-hero-logo"
-              src={portalLogoSrc}
-              alt=""
-              height={48}
-              width={48}
-              style={{ height: 48, width: "auto", objectFit: "contain" }}
-            />
+            <div
+              className="isp-enduser-brand-head__logo-wrap"
+              style={{ borderColor: brand?.primaryColor || "#43a047" }}
+            >
+              <img
+                className="portal-hero-logo"
+                src={portalLogoSrc}
+                alt=""
+                width={40}
+                height={40}
+                style={{ width: 40, height: 40, objectFit: "contain" }}
+              />
+            </div>
             <div>
               <p className="eyebrow">{t("eyebrow")}</p>
               <h1 style={{ color: brand?.primaryColor || "#5d4037", margin: 0 }}>
@@ -335,7 +341,10 @@ export default function Portal() {
               </h1>
             </div>
           </div>
-          <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="portal" />
+          <div className="portal-hero-toolbar">
+            <HomeShortcut title={t("homeShortcut")} idPrefix="portal" />
+            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="portal" />
+          </div>
         </div>
         <p>{t("heroLead")}</p>
         {portalAnnouncements.length > 0 ? (
