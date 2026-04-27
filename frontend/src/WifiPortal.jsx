@@ -3,7 +3,14 @@ import { API_URL, publicAssetUrl, publicRequest } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import LangSwitch from "./LangSwitch.jsx";
 import HomeShortcut from "./HomeShortcut.jsx";
-import { IconAntenna, IconWallet, IconZap } from "./icons.jsx";
+import {
+  IconAntenna,
+  IconSignalBars,
+  IconSmartphone,
+  IconWallet,
+  IconX,
+  IconZap
+} from "./icons.jsx";
 import { wifiT } from "./wifiCopy.js";
 
 function getStoredUiLang() {
@@ -22,6 +29,16 @@ function wifiEyebrowText(branding, lang, t) {
   const n = branding?.displayName != null ? String(branding.displayName).trim() : "";
   if (n && n !== "AA") return `${base} — ${n}`;
   return base;
+}
+
+const WIFI_PLAN_ICONS = [IconZap, IconAntenna, IconWallet];
+
+function WifiPlanHeroIcon({ plan, index }) {
+  const raw = String(plan?.defaultAccessType || "").toLowerCase();
+  let Icon = WIFI_PLAN_ICONS[((index % 3) + 3) % 3];
+  if (raw.includes("ppp")) Icon = IconAntenna;
+  else if (raw.includes("hot")) Icon = IconZap;
+  return <Icon width={44} height={44} style={{ color: "#2f7439" }} aria-hidden />;
 }
 
 function hasIspContact(b) {
@@ -341,93 +358,122 @@ export default function WifiPortal() {
 
       {activeIspId && plans.length === 0 && !error && <p>{t("noPlans")}</p>}
 
-      <section className="grid">
-        {plans.map((plan) => (
-          <button
-            key={plan.id}
-            type="button"
-            className="panel pricing-card"
-            style={{ textAlign: "left", cursor: "pointer" }}
-            onClick={() => {
-              setSelectedPlan(plan);
-              setDepositId(null);
-              setNotice("");
-              setError("");
-            }}
-          >
-            <h2>{plan.name}</h2>
-            <p>
-              <strong>{plan.priceUsd}&nbsp;$</strong> — {plan.durationDays}{" "}
-              {plan.durationDays === 1 ? t("daySingular") : t("dayPlural")}
-            </p>
-            <p>
-              {t("speed")} : {plan.speedLabel || plan.rateLimit} · {t("type")} : {plan.defaultAccessType} ·{" "}
-              {t("devices")} : {plan.maxDevices}
-            </p>
-          </button>
-        ))}
+      <section className="grid wifi-plan-grid">
+        {plans.map((plan, planIndex) => {
+          const cardLabel = `${plan.name}. ${plan.priceUsd} $, ${plan.durationDays} ${
+            plan.durationDays === 1 ? t("daySingular") : t("dayPlural")
+          }. ${t("speed")} ${plan.speedLabel || plan.rateLimit}, ${plan.defaultAccessType}, ${plan.maxDevices} ${t("devices")}.`;
+          return (
+            <button
+              key={plan.id}
+              type="button"
+              className="panel pricing-card wifi-plan-card"
+              aria-label={cardLabel}
+              onClick={() => {
+                setSelectedPlan(plan);
+                setDepositId(null);
+                setNotice("");
+                setError("");
+              }}
+            >
+              <div className="wifi-plan-card__icon-wrap">
+                <WifiPlanHeroIcon plan={plan} index={planIndex} />
+              </div>
+              <span className="visually-hidden">{plan.name}</span>
+              <hr className="wifi-plan-card__divider" />
+              <p className="wifi-plan-card__price">
+                <strong>
+                  {plan.priceUsd}&nbsp;$ — {plan.durationDays}{" "}
+                  {plan.durationDays === 1 ? t("daySingular") : t("dayPlural")}
+                </strong>
+              </p>
+              <p className="wifi-plan-card__meta">
+                {t("speed")} : {plan.speedLabel || plan.rateLimit} · {t("type")} : {plan.defaultAccessType} ·{" "}
+                {t("devices")} : {plan.maxDevices}
+              </p>
+            </button>
+          );
+        })}
       </section>
 
       {selectedPlan && (
         <div
           role="presentation"
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.45)",
-            zIndex: 40
-          }}
+          className="wifi-checkout-backdrop"
           onClick={() => setSelectedPlan(null)}
         />
       )}
       {selectedPlan && (
         <div
-          className="panel"
-          style={{
-            position: "fixed",
-            inset: 0,
-            margin: "auto",
-            maxWidth: 420,
-            maxHeight: "90vh",
-            overflow: "auto",
-            zIndex: 50,
-            boxShadow: "0 8px 32px rgba(0,0,0,0.25)"
-          }}
+          className="panel wifi-checkout-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="wifi-checkout-summary"
           onClick={(e) => e.stopPropagation()}
         >
-          <h2>{selectedPlan.name}</h2>
-          <p>
-            {selectedPlan.priceUsd}&nbsp;$ · {selectedPlan.durationDays}{" "}
-            {selectedPlan.durationDays === 1 ? t("daySingular") : t("dayPlural")}
-          </p>
-          <button type="button" onClick={() => setSelectedPlan(null)}>
-            {t("close")}
+          <button
+            type="button"
+            className="wifi-checkout-modal__close"
+            onClick={() => setSelectedPlan(null)}
+            aria-label={t("close")}
+          >
+            <IconX width={20} height={20} />
           </button>
 
-          <h3>{t("payMobileTitle")}</h3>
-          <form onSubmit={onStartPayment}>
-            <p>{t("phoneLabel")}</p>
-            <input
-              placeholder={t("phonePh")}
-              value={checkout.phone}
-              onChange={(e) => setCheckout({ ...checkout, phone: e.target.value })}
-            />
-            <p>{t("network")}</p>
-            <select
-              value={checkout.networkKey}
-              onChange={(e) => setCheckout({ ...checkout, networkKey: e.target.value })}
-            >
-              {networks.map((n) => (
-                <option key={n.key} value={n.key}>
-                  {n.label}
-                </option>
-              ))}
-            </select>
-            <button type="submit" disabled={polling || !checkout.phone}>
-              {polling ? t("paying") : t("paySubmit")}
+          <div className="wifi-checkout-modal__head">
+            <span className="wifi-checkout-modal__wifi-mark" aria-hidden="true">
+              <IconAntenna width={26} height={26} />
+            </span>
+            <p id="wifi-checkout-summary" className="wifi-checkout-modal__summary">
+              <span className="visually-hidden">{selectedPlan.name}. </span>
+              <strong className="wifi-checkout-modal__amount">
+                {selectedPlan.priceUsd}&nbsp;$ · {selectedPlan.durationDays}{" "}
+                {selectedPlan.durationDays === 1 ? t("daySingular") : t("dayPlural")}
+              </strong>
+            </p>
+          </div>
+
+          <div className="wifi-checkout-pay-head" role="group" aria-label={t("payMobileTitle")}>
+            <IconWallet width={22} height={22} aria-hidden />
+          </div>
+
+          <form className="wifi-checkout-form" onSubmit={onStartPayment}>
+            <div className="wifi-input-row">
+              <span className="wifi-input-row__lead" aria-hidden="true">
+                <IconSmartphone width={20} height={20} />
+              </span>
+              <input
+                id="wifi-checkout-phone"
+                autoComplete="tel"
+                aria-label={t("phoneLabel")}
+                placeholder={t("phonePh")}
+                value={checkout.phone}
+                onChange={(e) => setCheckout({ ...checkout, phone: e.target.value })}
+              />
+            </div>
+            <div className="wifi-input-row">
+              <span className="wifi-input-row__lead" aria-hidden="true">
+                <IconSignalBars width={20} height={20} />
+              </span>
+              <select
+                id="wifi-checkout-network"
+                aria-label={t("network")}
+                value={checkout.networkKey}
+                onChange={(e) => setCheckout({ ...checkout, networkKey: e.target.value })}
+              >
+                {networks.map((n) => (
+                  <option key={n.key} value={n.key}>
+                    {n.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button type="submit" className="wifi-pay-submit" disabled={polling || !checkout.phone}>
+              <IconWallet width={18} height={18} aria-hidden />
+              <span>{polling ? t("paying") : t("paySubmit")}</span>
             </button>
           </form>
-          <p>
+          <p className="wifi-checkout-foot">
             <small>{t("payFoot")}</small>
           </p>
           {import.meta.env.DEV ? (

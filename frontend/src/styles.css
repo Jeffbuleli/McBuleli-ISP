@@ -985,19 +985,11 @@ button:disabled {
 }
 
 .public-home-promos-head h2 {
-  margin: 8px 0 10px;
+  margin: 8px 0 0;
   font-size: clamp(1.35rem, 3.2vw, 1.85rem);
   line-height: 1.2;
   color: #2b211d;
   font-weight: 800;
-}
-
-.public-home-promos-lead {
-  margin: 0;
-  max-width: 52rem;
-  color: #5d514c;
-  font-size: 0.98rem;
-  line-height: 1.65;
 }
 
 .public-home-promos-grid {
@@ -1014,19 +1006,20 @@ button:disabled {
 }
 
 .public-home-promo-card {
-  display: block;
+  display: flex;
+  flex-direction: column;
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid rgba(11, 21, 36, 0.2);
   background: #0b1524;
   box-shadow: 0 12px 36px rgba(11, 21, 36, 0.2);
   text-decoration: none;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.22s cubic-bezier(0.34, 1.3, 0.64, 1), box-shadow 0.22s ease;
 }
 
 .public-home-promo-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 18px 44px rgba(11, 21, 36, 0.28);
+  transform: translateY(-10px) scale(1.02);
+  box-shadow: 0 22px 52px rgba(11, 21, 36, 0.38);
 }
 
 .public-home-promo-card:focus-visible {
@@ -1034,23 +1027,48 @@ button:disabled {
   outline-offset: 3px;
 }
 
-.public-home-promo-card img {
+.public-home-promo-card__media {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.public-home-promo-card__media img {
   width: 100%;
   height: auto;
   display: block;
   object-fit: contain;
-  vertical-align: middle;
+  transition: transform 0.22s cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+.public-home-promo-card:hover .public-home-promo-card__media img {
+  transform: scale(1.06);
+}
+
+.public-home-promo-card__caption {
+  display: block;
+  padding: 12px 14px 14px;
+  font-size: clamp(0.82rem, 2vw, 0.92rem);
+  font-weight: 750;
+  line-height: 1.4;
+  text-align: center;
+  color: rgba(232, 245, 233, 0.96);
+  background: linear-gradient(180deg, rgba(15, 25, 40, 0.2) 0%, rgba(7, 12, 22, 0.92) 100%);
+  border-top: 1px solid rgba(165, 214, 167, 0.18);
 }
 
 /* Mobile / narrow: full width, natural height (vertical reading). */
 @media (max-width: 959px) {
-  .public-home-promo-card--landscape img {
+  .public-home-promo-card--landscape .public-home-promo-card__media img {
     max-height: min(52vh, 420px);
     object-fit: cover;
     object-position: center;
   }
 
-  .public-home-promo-card--square img {
+  .public-home-promo-card--square .public-home-promo-card__media img {
     max-height: min(70vh, 520px);
     object-fit: cover;
     object-position: center top;
@@ -1059,17 +1077,29 @@ button:disabled {
 
 /* Desktop: uniform band so wide and square assets align in one row. */
 @media (min-width: 960px) {
-  .public-home-promo-card {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .public-home-promo-card__media {
     min-height: 200px;
   }
 
-  .public-home-promo-card img {
+  .public-home-promo-card__media img {
     max-height: 220px;
     width: 100%;
     object-fit: contain;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-home-promo-card,
+  .public-home-promo-card__media img {
+    transition: none;
+  }
+
+  .public-home-promo-card:hover {
+    transform: none;
+  }
+
+  .public-home-promo-card:hover .public-home-promo-card__media img {
+    transform: none;
   }
 }
 
@@ -1917,6 +1947,186 @@ button:disabled {
   display: flex;
   flex-direction: column;
   min-height: 260px;
+}
+
+.wifi-plan-grid {
+  align-items: stretch;
+}
+
+button.wifi-plan-card {
+  cursor: pointer;
+  text-align: left;
+  background: var(--mb-surface);
+  color: var(--mb-text);
+  border: 1px solid var(--mb-border);
+  box-shadow: var(--mb-shadow);
+  font-weight: 500;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+
+button.wifi-plan-card:hover:not(:disabled) {
+  border-color: rgba(47, 116, 57, 0.35);
+  box-shadow: 0 14px 36px rgba(45, 36, 32, 0.1);
+  transform: translateY(-2px);
+}
+
+button.wifi-plan-card:focus-visible {
+  outline: 2px solid rgba(165, 214, 167, 0.85);
+  outline-offset: 2px;
+}
+
+.wifi-plan-card__icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.wifi-plan-card__divider {
+  width: 100%;
+  margin: 10px 0 12px;
+  border: 0;
+  border-top: 1px solid var(--mb-border);
+}
+
+.wifi-plan-card__price {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  color: #2f7439;
+}
+
+.wifi-plan-card__price strong {
+  font-weight: 800;
+  color: #2f7439;
+}
+
+.wifi-plan-card__meta {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--mb-muted);
+}
+
+.wifi-checkout-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 40;
+}
+
+.wifi-checkout-modal {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  max-width: 420px;
+  width: calc(100% - 24px);
+  max-height: 90vh;
+  overflow: auto;
+  z-index: 50;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  padding: 48px 18px 18px;
+}
+
+.wifi-checkout-modal__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(245, 248, 252, 0.96);
+  border: 1px solid var(--mb-border);
+  color: var(--mb-muted);
+}
+
+.wifi-checkout-modal__close:hover:not(:disabled) {
+  background: #fff;
+  color: var(--mb-text);
+}
+
+.wifi-checkout-modal__head {
+  text-align: center;
+  padding: 0 40px;
+  margin-bottom: 4px;
+}
+
+.wifi-checkout-modal__wifi-mark {
+  display: inline-flex;
+  color: var(--mb-muted);
+  margin-bottom: 8px;
+}
+
+.wifi-checkout-modal__summary {
+  margin: 0;
+}
+
+.wifi-checkout-modal__amount {
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: #2f7439;
+}
+
+.wifi-checkout-pay-head {
+  display: flex;
+  justify-content: center;
+  margin: 12px 0 8px;
+  color: var(--mb-primary);
+}
+
+.wifi-checkout-form .wifi-input-row {
+  margin: 0 0 12px;
+}
+
+.wifi-input-row {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid #c5d0e3;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.wifi-input-row:focus-within {
+  outline: 2px solid rgba(165, 214, 167, 0.85);
+  outline-offset: 1px;
+}
+
+.wifi-input-row__lead {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  flex-shrink: 0;
+  background: rgba(245, 248, 252, 0.92);
+  color: var(--mb-muted);
+  border-right: 1px solid rgba(197, 208, 227, 0.55);
+}
+
+.wifi-input-row input,
+.wifi-input-row select {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.wifi-pay-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.wifi-checkout-foot {
+  margin: 14px 0 0;
 }
 
 .pricing-card--featured {

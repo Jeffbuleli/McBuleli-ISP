@@ -179,3 +179,31 @@ export function IconMapPin(props) {
     </svg>
   );
 }
+
+/** Smartphone — champs numéro (style portail captif) */
+export function IconSmartphone(props) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="6" y="2" width="12" height="20" rx="2" stroke="currentColor" strokeWidth="2" />
+      <path d="M10 18h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Barres réseau / opérateur Mobile Money */
+export function IconSignalBars(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 18v-4M9 18v-8M14 18V6M19 18v-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Fermer (modale) */
+export function IconX(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
