@@ -617,6 +617,7 @@ async function fetchTeamUserRow(ispId, userId) {
             m.role,
             m.accreditation_level AS "accreditationLevel",
             m.is_active AS "isActive",
+            u.is_active AS "userAccountActive",
             u.must_change_password AS "mustChangePassword",
             m.phone AS "phone",
             m.address AS "address",
@@ -3225,6 +3226,7 @@ app.get(
             m.role,
             m.accreditation_level AS "accreditationLevel",
             m.is_active AS "isActive",
+            u.is_active AS "userAccountActive",
             u.must_change_password AS "mustChangePassword",
             m.phone AS "phone",
             m.address AS "address",
@@ -3620,6 +3622,83 @@ app.post(
       entityId: userId
     });
     return res.json({ message: "User reactivated for this workspace" });
+  }
+);
+
+/** Désactive le compte partout (licenciement) : `users.is_active` + toutes les memberships. L’acteur doit voir la cible dans son FAI courant. */
+app.post(
+  "/api/users/:userId/suspend-globally",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const targetIspId = resolveIspId(req, res);
+    if (!targetIspId) return;
+    const { userId } = req.params;
+    if (String(userId) === String(req.user.sub)) {
+      return res.status(400).json({ message: "You cannot suspend your own account." });
+    }
+    const memOk = await query(
+      `SELECT 1 FROM user_isp_memberships m WHERE m.user_id = $1 AND m.isp_id = $2`,
+      [userId, targetIspId]
+    );
+    if (!memOk.rows[0]) return res.status(404).json({ message: "User not found" });
+    const u = await query("SELECT id, role FROM users WHERE id = $1", [userId]);
+    const target = u.rows[0];
+    if (!target) return res.status(404).json({ message: "User not found" });
+    if (target.role === "system_owner") {
+      return res.status(403).json({ message: "Cannot suspend this account type." });
+    }
+    if (target.role === "super_admin" && req.user.role !== "system_owner") {
+      return res.status(403).json({ message: "Forbidden target user" });
+    }
+    await query("UPDATE users SET is_active = FALSE WHERE id = $1", [userId]);
+    await query("UPDATE user_isp_memberships SET is_active = FALSE WHERE user_id = $1", [userId]);
+    await logAudit({
+      ispId: targetIspId,
+      actorUserId: req.user.sub,
+      action: "user.suspended_globally",
+      entityType: "user",
+      entityId: userId,
+      details: {}
+    });
+    return res.json({ message: "Account suspended globally; user cannot sign in." });
+  }
+);
+
+/** Réactive le compte au niveau `users` ; les accès par FAI restent à réactiver par espace si besoin. */
+app.post(
+  "/api/users/:userId/reactivate-globally",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const targetIspId = resolveIspId(req, res);
+    if (!targetIspId) return;
+    const { userId } = req.params;
+    const memOk = await query(
+      `SELECT 1 FROM user_isp_memberships m WHERE m.user_id = $1 AND m.isp_id = $2`,
+      [userId, targetIspId]
+    );
+    if (!memOk.rows[0]) return res.status(404).json({ message: "User not found" });
+    const u = await query("SELECT id, role FROM users WHERE id = $1", [userId]);
+    if (!u.rows[0]) return res.status(404).json({ message: "User not found" });
+    if (u.rows[0].role === "system_owner") {
+      return res.status(403).json({ message: "Cannot modify this account type." });
+    }
+    if (u.rows[0].role === "super_admin" && req.user.role !== "system_owner") {
+      return res.status(403).json({ message: "Forbidden target user" });
+    }
+    await query("UPDATE users SET is_active = TRUE WHERE id = $1", [userId]);
+    await logAudit({
+      ispId: targetIspId,
+      actorUserId: req.user.sub,
+      action: "user.reactivated_globally",
+      entityType: "user",
+      entityId: userId,
+      details: {}
+    });
+    return res.json({
+      message: "Account re-enabled for sign-in. Re-activate each workspace if access should be restored there."
+    });
   }
 );
 

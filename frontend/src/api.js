@@ -552,6 +552,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ispId })
     }),
+  suspendUserGlobally: (ispId, userId) =>
+    request(withIsp(`/users/${userId}/suspend-globally`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ispId })
+    }),
+  reactivateUserGlobally: (ispId, userId) =>
+    request(withIsp(`/users/${userId}/reactivate-globally`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ispId })
+    }),
   createInvite: (ispId, userId) =>
     request(withIsp(`/users/${userId}/invite`, ispId), {
       method: "POST",

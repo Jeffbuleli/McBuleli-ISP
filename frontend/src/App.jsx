@@ -1789,6 +1789,40 @@ function App() {
     refresh();
   }
 
+  async function onSuspendUserGlobally(userId) {
+    const ok = window.confirm(
+      t(
+        "Suspendre ce compte PARTOUT (toutes entreprises) ? La personne ne pourra plus se connecter jusqu'à réactivation globale. Les accès par FAI devront être réactivés si besoin.",
+        "Suspend this account EVERYWHERE (all companies)? They cannot sign in until globally re-enabled. Per-ISP access may need to be re-enabled separately."
+      )
+    );
+    if (!ok) return;
+    setError("");
+    try {
+      await api.suspendUserGlobally(selectedIspId, userId);
+      setNotice(t("Compte suspendu globalement.", "Account suspended globally."));
+      refresh();
+    } catch (err) {
+      setError(err.message || t("Échec.", "Failed."));
+    }
+  }
+
+  async function onReactivateUserGlobally(userId) {
+    setError("");
+    try {
+      await api.reactivateUserGlobally(selectedIspId, userId);
+      setNotice(
+        t(
+          "Compte réactivé pour la connexion. Réactivez chaque FAI si nécessaire.",
+          "Account re-enabled for sign-in. Re-enable each ISP workspace if needed."
+        )
+      );
+      refresh();
+    } catch (err) {
+      setError(err.message || t("Échec.", "Failed."));
+    }
+  }
+
   async function onCreateInvite(userId) {
     setError("");
     const payload = await api.createInvite(selectedIspId, userId);
@@ -3905,7 +3939,11 @@ function App() {
               <div key={item.id} className="panel" style={{ marginBottom: 12 }}>
                 <p style={{ marginTop: 0 }}>
                   <strong>{item.fullName}</strong> — {item.email}{" "}
-                  <span className="app-meta">[{item.isActive ? "actif dans ce FAI" : "inactif dans ce FAI"}]</span>
+                  <span className="app-meta">
+                    [
+                    {item.isActive ? "actif dans ce FAI" : "inactif dans ce FAI"}
+                    {item.userAccountActive === false ? " · compte global suspendu" : ""}]
+                  </span>
                 </p>
                 {canManageTeam ? (
                   <div className="grid" style={{ gap: 8 }}>
@@ -3985,7 +4023,15 @@ function App() {
                       <button type="button" onClick={() => onReactivateUser(item.id)}>
                         Réactiver dans ce FAI
                       </button>
-                    )}
+                    )}{" "}
+                    <button type="button" onClick={() => onSuspendUserGlobally(item.id)}>
+                      Suspendre compte (toutes entreprises)
+                    </button>{" "}
+                    {item.userAccountActive === false ? (
+                      <button type="button" onClick={() => onReactivateUserGlobally(item.id)}>
+                        Réactiver connexion (global)
+                      </button>
+                    ) : null}
                   </p>
                 ) : null}
               </div>
