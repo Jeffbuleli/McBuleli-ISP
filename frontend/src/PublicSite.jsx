@@ -5,10 +5,10 @@ import PublicSocialLinks from "./PublicSocialLinks.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
 import PublicMarketingSlot from "./PublicMarketingSlot.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
+import { COMPANY_CONTACT } from "./companyContact.js";
 import {
   IconBuilding,
   IconMail,
-  IconMapPin,
   IconPhone,
   IconPresentation,
   IconReceipt,
@@ -331,14 +331,6 @@ const FAQ_ITEMS = [
     }
   }
 ];
-
-const COMPANY_CONTACT = {
-  address: "Av. des Ecuries, Jolis Parcs, Ngaliema Kinshasa",
-  email: "mcbuleli@gmail.com",
-  phone: "+243997366736",
-  whatsapp: "https://wa.me/mcbuleli",
-  rccm: "CD/KNG/RCCM/26-A-00382"
-};
 
 function PublicLogo() {
   return (
@@ -715,13 +707,13 @@ export default function PublicSite() {
             </a>
             <a
               className="public-footer-card"
-              href={`tel:${COMPANY_CONTACT.phone.replace(/\s/g, "")}`}
-              aria-label={`${t("Téléphone", "Phone")}: ${COMPANY_CONTACT.phone}`}
+              href={`tel:${COMPANY_CONTACT.phoneTel}`}
+              aria-label={`${t("Téléphone", "Phone")}: ${COMPANY_CONTACT.phoneDisplay}`}
             >
               <span className="public-footer-card-icon" aria-hidden="true">
                 <IconPhone width={24} height={24} />
               </span>
-              <span className="public-footer-card-value">{COMPANY_CONTACT.phone}</span>
+              <span className="public-footer-card-value">{COMPANY_CONTACT.phoneDisplay}</span>
             </a>
             <a
               className="public-footer-card"
@@ -735,13 +727,10 @@ export default function PublicSite() {
               <span className="public-footer-card-value">{t("Écrire à McBuleli", "Message McBuleli")}</span>
             </a>
             <div
-              className="public-footer-card public-footer-card--static"
+              className="public-footer-card public-footer-card--static public-footer-card--address"
               role="group"
               aria-label={`${t("Siège", "Head office")}: ${COMPANY_CONTACT.address}`}
             >
-              <span className="public-footer-card-icon" aria-hidden="true">
-                <IconMapPin width={24} height={24} />
-              </span>
               <span className="public-footer-card-value">{COMPANY_CONTACT.address}</span>
             </div>
           </div>
@@ -753,6 +742,7 @@ export default function PublicSite() {
           <p className="public-footer-rccm">
             RCCM : <span className="public-footer-rccm-id">{COMPANY_CONTACT.rccm}</span>
           </p>
+          <p className="public-footer-powered">Powered by McBuleli</p>
         </div>
       </footer>
     </main>

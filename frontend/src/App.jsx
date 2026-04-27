@@ -4,12 +4,40 @@ import LangSwitch from "./LangSwitch.jsx";
 import DashboardHistograms from "./DashboardHistograms.jsx";
 import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
+import DashboardHeaderAnnouncements from "./DashboardHeaderAnnouncements.jsx";
 import DashboardSideNav from "./DashboardSideNav.jsx";
 import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
 import PlatformHomeMarketingPanel from "./PlatformHomeMarketingPanel.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
+import { COMPANY_CONTACT } from "./companyContact.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
-import { IconArrowLeft, IconHome, IconSignOut } from "./icons.jsx";
+import {
+  IconArrowLeft,
+  IconHome,
+  IconMail,
+  IconPhone,
+  IconSidebarCompact,
+  IconSidebarWide,
+  IconSignOut
+} from "./icons.jsx";
+
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(query);
+    const fn = () => setMatches(mq.matches);
+    fn();
+    mq.addEventListener("change", fn);
+    return () => mq.removeEventListener("change", fn);
+  }, [query]);
+  return matches;
+}
+
+function readDashboardNavCompact() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem("dashboard_nav_compact") === "1";
+}
 
 function isPlatformSuperRole(role) {
   return role === "super_admin" || role === "system_owner";
@@ -429,7 +457,7 @@ function App() {
   const [forgotNotice, setForgotNotice] = useState("");
   const [forgotBusy, setForgotBusy] = useState(false);
   const [dashboardSidebarSearch, setDashboardSidebarSearch] = useState("");
-  const [expandedNavCategory, setExpandedNavCategory] = useState("overview");
+  const [dashboardNavCompact, setDashboardNavCompact] = useState(readDashboardNavCompact);
   const [publicAuthCopyForgot, setPublicAuthCopyForgot] = useState({ fr: "", en: "" });
   const [resetTokenState, setResetTokenState] = useState("");
   const [resetPasswordForm, setResetPasswordForm] = useState({ password: "", confirm: "" });
@@ -667,6 +695,14 @@ function App() {
     message: "Message de test McBuleli."
   });
   const availablePawapayNetworks = pawapayNetworks.length ? pawapayNetworks : DEFAULT_PAWAPAY_NETWORKS;
+
+  const dashboardLayoutStacked = useMediaQuery("(max-width: 1200px)");
+  const dashboardNavCompactEffective = Boolean(dashboardNavCompact && !dashboardLayoutStacked);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("dashboard_nav_compact", dashboardNavCompact ? "1" : "0");
+  }, [dashboardNavCompact]);
 
   function isStaleSessionErrorMessage(msg) {
     const m = String(msg || "").trim().toLowerCase();
@@ -994,11 +1030,6 @@ function App() {
       cancelled = true;
     };
   }, [user, loginAuthStep]);
-
-  useEffect(() => {
-    if (!user || user.mustChangePassword) return;
-    setExpandedNavCategory(user.role === "field_agent" ? "field" : "overview");
-  }, [user?.id, user?.role]);
 
   const filteredTenants = useMemo(() => {
     const list = superDashboard?.tenants;
@@ -2629,6 +2660,28 @@ function App() {
               aria-label={t("Langue et navigation", "Language and navigation")}
             >
               <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash" />
+              <button
+                type="button"
+                className="btn-icon-toolbar"
+                onClick={() => setDashboardNavCompact((v) => !v)}
+                title={
+                  dashboardNavCompactEffective
+                    ? t("Afficher les noms du menu", "Show menu labels")
+                    : t("Réduire le menu (icônes seules)", "Narrow menu (icons only)")
+                }
+                aria-label={
+                  dashboardNavCompactEffective
+                    ? t("Afficher les noms du menu", "Show menu labels")
+                    : t("Réduire le menu", "Narrow menu")
+                }
+                aria-pressed={dashboardNavCompact}
+              >
+                {dashboardNavCompactEffective ? (
+                  <IconSidebarWide width={22} height={22} aria-hidden />
+                ) : (
+                  <IconSidebarCompact width={22} height={22} aria-hidden />
+                )}
+              </button>
               <a
                 className="btn-icon-toolbar"
                 href="/?site=public"
@@ -2648,16 +2701,19 @@ function App() {
               </button>
             </div>
           </div>
+          <DashboardHeaderAnnouncements items={ispAnnouncements} t={t} isFieldAgent={isFieldAgent} />
         </header>
       </div>
-      <div className="dashboard-layout">
+      <div
+        className={`dashboard-layout${
+          dashboardNavCompactEffective ? " dashboard-layout--nav-compact" : ""
+        }`}
+      >
         <DashboardSideNav
           t={t}
           user={user}
           isFieldAgent={isFieldAgent}
-          expandedCategory={expandedNavCategory}
-          setExpandedCategory={setExpandedNavCategory}
-          ispAnnouncements={ispAnnouncements}
+          compact={dashboardNavCompactEffective}
           navSearch={dashboardSidebarSearch}
           setNavSearch={setDashboardSidebarSearch}
         />
@@ -5030,9 +5086,31 @@ function App() {
         </div>
       </div>
 
-      <footer className="app-footer">
-        <span className="app-footer-brand">McBuleli</span>
-        <span className="app-footer-note">Facturation FAI &amp; opérations réseau</span>
+      <footer className="app-footer app-footer--dashboard">
+        <div className="app-footer-inner">
+          <div className="app-footer-row app-footer-row--brand">
+            <span className="app-footer-brand">{COMPANY_CONTACT.legalName}</span>
+            <span className="app-footer-note">
+              {t("Facturation FAI & opérations réseau", "ISP billing & network operations")}
+            </span>
+          </div>
+          <p className="app-footer-legal">
+            RCCM : <strong>{COMPANY_CONTACT.rccm}</strong>
+            {" — "}
+            {COMPANY_CONTACT.address}
+          </p>
+          <div className="app-footer-contact-row">
+            <a className="app-footer-contact-pill" href={`tel:${COMPANY_CONTACT.phoneTel}`}>
+              <IconPhone width={18} height={18} aria-hidden />
+              <span>{COMPANY_CONTACT.phoneDisplay}</span>
+            </a>
+            <a className="app-footer-contact-pill" href={`mailto:${COMPANY_CONTACT.email}`}>
+              <IconMail width={18} height={18} aria-hidden />
+              <span>{COMPANY_CONTACT.email}</span>
+            </a>
+          </div>
+          <p className="app-footer-powered">Powered by McBuleli</p>
+        </div>
       </footer>
     </main>
   );

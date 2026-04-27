@@ -232,3 +232,23 @@ export function IconArrowLeft(props) {
     </svg>
   );
 }
+
+/** Menu latéral étroit (icônes seules) */
+export function IconSidebarCompact(props) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3" y="4" width="7" height="16" rx="1.5" stroke="currentColor" strokeWidth="2" />
+      <path d="M15 8h6M15 12h6M15 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Menu latéral avec libellés */
+export function IconSidebarWide(props) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3" y="4" width="11" height="16" rx="1.5" stroke="currentColor" strokeWidth="2" />
+      <path d="M18 8h3M18 12h3M18 16h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
