@@ -15,8 +15,6 @@ import {
   IconHome,
   IconMail,
   IconPhone,
-  IconSidebarCompact,
-  IconSidebarWide,
   IconSignOut
 } from "./icons.jsx";
 
@@ -422,6 +420,56 @@ const EXPENSE_CATEGORY_OPTIONS = [
 
 function expenseCategoryLabel(value) {
   return EXPENSE_CATEGORY_OPTIONS.find((o) => o.value === value)?.label || value;
+}
+
+function expenseApprovalStatusLabel(status) {
+  const s = String(status || "");
+  if (s === "approved") return "Approuvée";
+  if (s === "rejected") return "Rejetée";
+  return "En attente";
+}
+
+const TENANTS_PAGE_SIZE = 6;
+
+function humanizeProvisioningEvent(ev) {
+  const d = ev.details && typeof ev.details === "object" ? ev.details : {};
+  const reason = d.reason || d.message;
+  if (ev.status === "skipped") {
+    if (reason === "No active network node configured") {
+      return "Aucun nœud MikroTik actif n’est défini comme défaut : l’étape a été ignorée. Enregistrez un nœud actif puis relancez une synchronisation (activer / suspendre).";
+    }
+    return reason ? `Étape ignorée : ${reason}` : "Étape ignorée (aucun changement appliqué sur le routeur).";
+  }
+  if (ev.status === "failed") {
+    return reason
+      ? `Échec : ${reason}`
+      : "Échec de communication avec l’API REST du routeur (vérifiez l’hôte, le port, TLS et les identifiants).";
+  }
+  if (ev.status === "success") {
+    const node = d.node || "";
+    return node
+      ? `Appliqué sur le nœud « ${node} » (${d.mode || "mis à jour"}).`
+      : "Paramètres appliqués sur le routeur MikroTik.";
+  }
+  return "";
+}
+
+function humanizeRadiusSyncEvent(ev) {
+  const d = ev.details && typeof ev.details === "object" ? ev.details : {};
+  const reason = String(d.reason || "");
+  if (ev.status === "skipped" && reason.includes("FREERADIUS_SYNC_ENABLED")) {
+    return "Synchronisation FreeRADIUS désactivée sur le serveur (FREERADIUS_SYNC_ENABLED≠true). Les entrées RADIUS ne sont pas mises à jour automatiquement ici.";
+  }
+  if (ev.status === "skipped") {
+    return reason ? `Synchronisation ignorée : ${reason}` : "Synchronisation ignorée.";
+  }
+  if (ev.status === "success") {
+    return "Entrée FreeRADIUS mise à jour (secret, profil ou état).";
+  }
+  if (ev.status === "failed") {
+    return d.message ? `Échec FreeRADIUS : ${d.message}` : "Échec lors de l’écriture dans les tables FreeRADIUS.";
+  }
+  return "";
 }
 
 const LOAD_FAILURE_LABELS_FR = {
@@ -1055,6 +1103,22 @@ function App() {
     });
   }, [superDashboard?.tenants, dashboardSidebarSearch]);
 
+  const [tenantListPage, setTenantListPage] = useState(1);
+  const tenantPageCount = Math.max(1, Math.ceil(filteredTenants.length / TENANTS_PAGE_SIZE) || 1);
+
+  useEffect(() => {
+    setTenantListPage(1);
+  }, [dashboardSidebarSearch]);
+
+  useEffect(() => {
+    setTenantListPage((p) => Math.min(Math.max(1, p), tenantPageCount));
+  }, [tenantPageCount]);
+
+  const pagedTenants = useMemo(() => {
+    const start = (tenantListPage - 1) * TENANTS_PAGE_SIZE;
+    return filteredTenants.slice(start, start + TENANTS_PAGE_SIZE);
+  }, [filteredTenants, tenantListPage]);
+
   useEffect(() => {
     if (typeof window === "undefined" || !user || !isEn || loading) return;
     const root = document.querySelector("main.container.app-shell");
@@ -1479,7 +1543,7 @@ function App() {
         agentPayoutPercent: "",
         revenueBasisUsd: ""
       }));
-      setNotice("Dépense enregistrée.");
+      setNotice("Dépense soumise — elle apparaît en « En attente » jusqu'à approbation par un autre administrateur (ou par vous-même si vous êtes seul validateur sur cet espace).");
       await refresh();
     } catch (err) {
       setError(err.message || "Impossible d'enregistrer la dépense.");
@@ -1497,6 +1561,34 @@ function App() {
       await refresh();
     } catch (err) {
       setError(err.message || "Impossible de supprimer la dépense.");
+    }
+  }
+
+  async function onApproveExpense(expenseId) {
+    if (!selectedIspId || !expenseId) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.approveExpense(selectedIspId, expenseId);
+      setNotice("Dépense approuvée — elle est prise en compte dans les totaux validés.");
+      await refresh();
+    } catch (err) {
+      setError(err.message || "Impossible d'approuver cette dépense.");
+    }
+  }
+
+  async function onRejectExpense(expenseId) {
+    if (!selectedIspId || !expenseId) return;
+    const note = window.prompt("Motif du rejet (facultatif) :");
+    if (note === null) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.rejectExpense(selectedIspId, expenseId, { rejectionNote: note });
+      setNotice("Dépense rejetée — vous pouvez la supprimer ou la soumettre à nouveau après correction.");
+      await refresh();
+    } catch (err) {
+      setError(err.message || "Impossible de rejeter cette dépense.");
     }
   }
 
@@ -1878,6 +1970,15 @@ function App() {
       method: "mobile_money"
     });
     refresh();
+  }
+
+  async function onDownloadInvoiceProforma(invoiceId) {
+    setError("");
+    try {
+      await api.downloadInvoiceProformaPdf(selectedIspId, invoiceId);
+    } catch (err) {
+      setError(err.message || "Impossible de télécharger la facture proforma (PDF).");
+    }
   }
 
   async function onCreateUser(e) {
@@ -2668,28 +2769,6 @@ function App() {
               aria-label={t("Langue et navigation", "Language and navigation")}
             >
               <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash" />
-              <button
-                type="button"
-                className="btn-icon-toolbar"
-                onClick={() => setDashboardNavCompact((v) => !v)}
-                title={
-                  dashboardNavCompactEffective
-                    ? t("Afficher les noms du menu", "Show menu labels")
-                    : t("Réduire le menu (icônes seules)", "Narrow menu (icons only)")
-                }
-                aria-label={
-                  dashboardNavCompactEffective
-                    ? t("Afficher les noms du menu", "Show menu labels")
-                    : t("Réduire le menu", "Narrow menu")
-                }
-                aria-pressed={dashboardNavCompact}
-              >
-                {dashboardNavCompactEffective ? (
-                  <IconSidebarWide width={22} height={22} aria-hidden />
-                ) : (
-                  <IconSidebarCompact width={22} height={22} aria-hidden />
-                )}
-              </button>
               <a
                 className="btn-icon-toolbar"
                 href="/?site=public"
@@ -2722,6 +2801,9 @@ function App() {
           user={user}
           isFieldAgent={isFieldAgent}
           compact={dashboardNavCompactEffective}
+          navCompactEffective={dashboardNavCompactEffective}
+          navCompactPreference={dashboardNavCompact}
+          onToggleNavCompact={() => setDashboardNavCompact((v) => !v)}
           navSearch={dashboardSidebarSearch}
           setNavSearch={setDashboardSidebarSearch}
         />
@@ -2734,6 +2816,7 @@ function App() {
         const billing = isPlatformSuperRole(user.role) ? platformBillingStatus : user.platformBilling;
         if (!selectedIspId || !billing || billing.legacyWorkspace) return null;
         if (user.role === "field_agent") return null;
+        if (user.role === "system_owner") return null;
         const locked = billing.accessAllowed === false;
         return (
           <section className={`panel ${locked ? "error" : ""}`} id="mcbuleli-billing">
@@ -2971,7 +3054,7 @@ function App() {
             <p className="app-meta">{t("Aucun espace ne correspond à la recherche.", "No workspace matches your search.")}</p>
           ) : null}
           <div className="grid">
-            {filteredTenants.map((tenant) => (
+            {pagedTenants.map((tenant) => (
               <article className="panel" key={tenant.id}>
                 <h3>
                   {tenant.name} {tenant.isDemo ? "(démo)" : ""}
@@ -2995,6 +3078,43 @@ function App() {
               </article>
             ))}
           </div>
+          {filteredTenants.length > TENANTS_PAGE_SIZE ? (
+            <nav className="tenant-pagination" aria-label={t("Pagination des espaces", "Workspaces pagination")}>
+              <button
+                type="button"
+                className="btn-secondary-outline"
+                disabled={tenantListPage <= 1}
+                onClick={() => setTenantListPage((p) => Math.max(1, p - 1))}
+              >
+                ← {t("Précédent", "Previous")}
+              </button>
+              <div className="tenant-pagination-pages">
+                {Array.from({ length: tenantPageCount }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={
+                      n === tenantListPage
+                        ? "tenant-pagination-page tenant-pagination-page--active"
+                        : "tenant-pagination-page"
+                    }
+                    onClick={() => setTenantListPage(n)}
+                    aria-current={n === tenantListPage ? "page" : undefined}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="btn-secondary-outline"
+                disabled={tenantListPage >= tenantPageCount}
+                onClick={() => setTenantListPage((p) => Math.min(tenantPageCount, p + 1))}
+              >
+                {t("Suivant", "Next")} →
+              </button>
+            </nav>
+          ) : null}
         </section>
       ) : null}
 
@@ -3421,6 +3541,15 @@ function App() {
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreateNetworkNode}>
             <h2>Nœud réseau MikroTik</h2>
+            <p className="app-meta" style={{ maxWidth: "56rem", marginBottom: 12 }}>
+              Connexion à l&apos;API REST RouterOS via{" "}
+              <code>
+                {networkNodeForm.useTls ? "https" : "http"}://hôte:port/rest
+              </code>
+              . Le port <strong>443</strong> avec <strong>TLS</strong> est l&apos;usage courant lorsque le service REST
+              est exposé en HTTPS. Vérifiez que l&apos;utilisateur API existe sur le routeur, que le service REST/API est
+              activé, et que le pare-feu autorise ce port depuis le serveur McBuleli.
+            </p>
             <input
               placeholder="Nom du nœud"
               value={networkNodeForm.name}
@@ -3510,21 +3639,41 @@ function App() {
 
         <section className="panel">
           <h2>Événements de provisionnement</h2>
-          {provisioningEvents.slice(0, 12).map((event) => (
-            <p key={event.id}>
-              {new Date(event.createdAt).toLocaleString()} - {event.action} ({event.accessType || "n/a"}){" "}
-              [{event.status}]
-            </p>
-          ))}
+          <p className="app-meta">
+            Résumé lisible des tentatives d&apos;activation ou de suspension sur MikroTik (PPPoE / hotspot). Un statut
+            « Ignoré » indique souvent qu&apos;aucun nœud par défaut n&apos;était prêt, pas une erreur client.
+          </p>
+          {provisioningEvents.slice(0, 12).map((event) => {
+            const hint = humanizeProvisioningEvent(event);
+            return (
+              <p key={event.id} className="network-event-line">
+                <span className="network-event-line__meta">
+                  {new Date(event.createdAt).toLocaleString()} — {event.action} ({event.accessType || "n/a"}) [
+                  {event.status}]
+                </span>
+                {hint ? <span className="network-event-line__hint">{hint}</span> : null}
+              </p>
+            );
+          })}
         </section>
 
         <section className="panel">
           <h2>Synchronisation FreeRADIUS</h2>
-          {radiusSyncEvents.slice(0, 12).map((event) => (
-            <p key={event.id}>
-              {new Date(event.createdAt).toLocaleString()} - {event.action} {event.username} [{event.status}]
-            </p>
-          ))}
+          <p className="app-meta">
+            Quand la synchro est active, McBuleli écrit dans les tables RADIUS locales. Si elle est désactivée
+            globalement, les événements restent visibles à titre d&apos;historique avec le motif « ignoré ».
+          </p>
+          {radiusSyncEvents.slice(0, 12).map((event) => {
+            const hint = humanizeRadiusSyncEvent(event);
+            return (
+              <p key={event.id} className="network-event-line">
+                <span className="network-event-line__meta">
+                  {new Date(event.createdAt).toLocaleString()} — {event.action} {event.username} [{event.status}]
+                </span>
+                {hint ? <span className="network-event-line__hint">{hint}</span> : null}
+              </p>
+            );
+          })}
         </section>
 
         <section className="panel">
@@ -3532,6 +3681,11 @@ function App() {
           <p>
             Derniers instantanés depuis <strong>Collecter la télémétrie</strong> sur chaque nœud. Les compteurs
             alimentent le graphique du jour (sessions PPPoE / hotspot de pointe).
+          </p>
+          <p className="app-meta">
+            Les valeurs reflètent l&apos;instant de la collecte : peu de sessions peut être normal hors heures de pointe.
+            En cas de baisse brutale ou de zéro prolongé alors que le trafic attendu est élevé, vérifiez le nœud et la
+            connectivité API avant d&apos;ouvrir un ticket matériel.
           </p>
           {telemetrySnapshots.length === 0 ? (
             <p>Aucun instantané pour le moment.</p>
@@ -4206,7 +4360,7 @@ function App() {
       </section>
 
       {user.role === "system_owner" ? (
-        <section className="panel">
+        <section className="panel" id="audit">
           <h2>{t("Journal d'audit récent", "Recent audit log")}</h2>
           <p className="app-meta">
             {t(
@@ -4382,8 +4536,26 @@ function App() {
         <section className="expenses-section">
           <h2>Dépenses &amp; suivi des fonds</h2>
           <p className="expenses-lead">
-            Enregistrez les dépenses par rapport aux encaissements sur une période. Catégories : versements agents
-            (fixe ou pourcentage), équipement, exploitation, etc., pour une vision claire des sorties de trésorerie.
+            Dépenses types d&apos;un FAI : liaisons et transit (fibre, radio, location de tours), énergie sur sites,
+            équipement (CPE, baies, onduleurs), salaires NOC et terrain, véhicule et carburant, licences et outils,
+            marketing, impôts et cotisations, cloud et prestataires. Chaque catégorie sert à documenter les sorties de
+            caisse pour les agents et la direction.
+          </p>
+          <p className="expenses-lead app-meta">
+            <strong>Validation en deux étapes :</strong> une fois la saisie enregistrée, la ligne est « En attente ». Un
+            autre super administrateur, gestionnaire ou administrateur FAI doit l&apos;
+            <strong>approuver</strong> pour qu&apos;elle entre dans les totaux « dépenses validées » utilisés pour le net
+            (encaissements − dépenses). Si <strong>au moins deux validateurs</strong> sont inscrits sur l&apos;espace,
+            le demandeur ne peut pas approuver ni rejeter sa propre demande. Avec un seul validateur, l&apos;auto-approbation
+            reste possible (voir journal d&apos;audit). <strong>Rejet :</strong> motif optionnel ; ligne retirée des
+            totaux jusqu&apos;à nouvelle soumission. Les rôles facturation et NOC consultent ; ils ne valident pas.
+            Création, approbation, rejet et suppression tracent une opération d&apos;audit.
+            {user.role === "system_owner" ? (
+              <>
+                {" "}
+                Détail : <a href="#audit">Journal d&apos;audit récent</a>.
+              </>
+            ) : null}
           </p>
           <div className="expenses-filter">
             <label>
@@ -4418,7 +4590,7 @@ function App() {
                 </strong>
               </div>
               <div className="expenses-summary-card">
-                <span>Total dépenses (saisies)</span>
+                <span>Dépenses validées (approuvées)</span>
                 <strong>
                   {(expenseSummary.totalExpensesUsd ?? 0).toLocaleString(undefined, {
                     style: "currency",
@@ -4427,7 +4599,16 @@ function App() {
                 </strong>
               </div>
               <div className="expenses-summary-card">
-                <span>Net (encaissements − dépenses)</span>
+                <span>En attente de validation</span>
+                <strong>
+                  {(expenseSummary.pendingExpensesUsd ?? 0).toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD"
+                  })}
+                </strong>
+              </div>
+              <div className="expenses-summary-card">
+                <span>Net (encaissements − dépenses validées)</span>
                 <strong>
                   {(
                     (expenseSummary.collectionsInPeriodUsd ?? 0) - (expenseSummary.totalExpensesUsd ?? 0)
@@ -4567,43 +4748,97 @@ function App() {
                   Aucune dépense ne chevauche ces dates, ou les données se chargent encore.
                 </p>
               ) : (
-                expenses.map((ex) => (
-                  <div key={ex.id} className="expenses-row">
-                    <div>
-                      <strong>
-                        {(ex.amountUsd ?? 0).toLocaleString(undefined, { style: "currency", currency: "USD" })}
-                      </strong>{" "}
-                      — {expenseCategoryLabel(ex.category)}
-                    </div>
-                    {ex.description ? <div>{ex.description}</div> : null}
-                    <div className="expenses-row-meta">
-                      Période {ex.periodStart} → {ex.periodEnd}
-                      {ex.fieldAgentName ? ` · Agent : ${ex.fieldAgentName}` : ""}
-                      {ex.category === "field_agent_percentage" && ex.agentPayoutPercent != null
-                        ? ` · ${ex.agentPayoutPercent}%`
-                        : ""}
-                      {ex.revenueBasisUsd != null
-                        ? ` · Base CA ${Number(ex.revenueBasisUsd).toLocaleString(undefined, {
+                expenses.map((ex) => {
+                  const st = ex.status || "pending";
+                  return (
+                    <div key={ex.id} className="expenses-row">
+                      <div className="expenses-row-title">
+                        <strong>
+                          {(ex.amountUsd ?? 0).toLocaleString(undefined, {
                             style: "currency",
                             currency: "USD"
-                          })}`
-                        : ""}
-                      {ex.createdByName ? ` · Saisi par ${ex.createdByName}` : ""}
+                          })}
+                        </strong>
+                        <span className={`expense-status-badge expense-status-badge--${st}`}>
+                          {expenseApprovalStatusLabel(st)}
+                        </span>
+                        <span className="expenses-row-category">— {expenseCategoryLabel(ex.category)}</span>
+                      </div>
+                      {ex.description ? <div>{ex.description}</div> : null}
+                      <div className="expenses-row-meta">
+                        Période {ex.periodStart} → {ex.periodEnd}
+                        {ex.fieldAgentName ? ` · Agent : ${ex.fieldAgentName}` : ""}
+                        {ex.category === "field_agent_percentage" && ex.agentPayoutPercent != null
+                          ? ` · ${ex.agentPayoutPercent}%`
+                          : ""}
+                        {ex.revenueBasisUsd != null
+                          ? ` · Base CA ${Number(ex.revenueBasisUsd).toLocaleString(undefined, {
+                              style: "currency",
+                              currency: "USD"
+                            })}`
+                          : ""}
+                        {ex.createdByName ? ` · Saisi par ${ex.createdByName}` : ""}
+                      </div>
+                      {st === "approved" && (ex.approvedByName || ex.approvedAt) ? (
+                        <div className="expenses-row-meta">
+                          Approuvé
+                          {ex.approvedByName ? ` par ${ex.approvedByName}` : ""}
+                          {ex.approvedAt
+                            ? ` — ${new Date(ex.approvedAt).toLocaleString()}`
+                            : ""}
+                        </div>
+                      ) : null}
+                      {st === "rejected" ? (
+                        <div className="expenses-row-meta expenses-row-meta--warn">
+                          Rejet
+                          {ex.rejectedByName ? ` par ${ex.rejectedByName}` : ""}
+                          {ex.rejectedAt ? ` — ${new Date(ex.rejectedAt).toLocaleString()}` : ""}
+                          {ex.rejectionNote ? ` · ${ex.rejectionNote}` : ""}
+                        </div>
+                      ) : null}
+                      {ex.approvalBlockedSelf && st === "pending" ? (
+                        <p className="app-meta expenses-row-pending-hint">
+                          En attente d&apos;un autre validateur (vous êtes le demandeur).
+                        </p>
+                      ) : null}
+                      <div className="expenses-row-actions">
+                        {ex.canApprove ? (
+                          <button
+                            type="button"
+                            className="btn-expense-approve"
+                            disabled={!selectedIspId}
+                            onClick={() => onApproveExpense(ex.id)}
+                          >
+                            Approuver
+                          </button>
+                        ) : null}
+                        {ex.canReject ? (
+                          <button
+                            type="button"
+                            className="btn-expense-reject"
+                            disabled={!selectedIspId}
+                            onClick={() => onRejectExpense(ex.id)}
+                          >
+                            Rejeter
+                          </button>
+                        ) : null}
+                        {(isPlatformSuperRole(user.role) ||
+                          user.role === "company_manager" ||
+                          user.role === "isp_admin") &&
+                          (st === "pending" || st === "rejected") && (
+                          <button
+                            type="button"
+                            className="btn-expense-delete"
+                            disabled={!selectedIspId}
+                            onClick={() => onDeleteExpense(ex.id)}
+                          >
+                            Supprimer
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {(isPlatformSuperRole(user.role) ||
-                      user.role === "company_manager" ||
-                      user.role === "isp_admin") && (
-                      <button
-                        type="button"
-                        className="btn-expense-delete"
-                        disabled={!selectedIspId}
-                        onClick={() => onDeleteExpense(ex.id)}
-                      >
-                        Supprimer
-                      </button>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -5041,7 +5276,8 @@ function App() {
             <span>ID</span>
             <span>Montant</span>
             <span>Statut</span>
-            <span>Action</span>
+            <span>Paiement</span>
+            <span>PDF</span>
           </div>
           {invoices.map((invoice) => (
             <div className="row" key={invoice.id}>
@@ -5051,13 +5287,24 @@ function App() {
               <span>
                 {invoice.status === "unpaid" || invoice.status === "overdue" ? (
                   !isFieldAgent ? (
-                    <button onClick={() => onMarkPaid(invoice.id, invoice.amountUsd)}>Marquer payée</button>
+                    <button type="button" onClick={() => onMarkPaid(invoice.id, invoice.amountUsd)}>
+                      Marquer payée
+                    </button>
                   ) : (
                     "—"
                   )
                 ) : (
                   "Payée"
                 )}
+              </span>
+              <span>
+                <button
+                  type="button"
+                  className="btn-secondary-outline"
+                  onClick={() => onDownloadInvoiceProforma(invoice.id)}
+                >
+                  Proforma
+                </button>
               </span>
             </div>
           ))}

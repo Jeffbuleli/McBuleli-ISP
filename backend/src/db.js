@@ -558,6 +558,29 @@ export async function initDb() {
   await query(
     "CREATE INDEX IF NOT EXISTS idx_isp_expenses_isp_period ON isp_expenses (isp_id, period_start DESC, period_end DESC);"
   );
+  await query(
+    "ALTER TABLE isp_expenses ADD COLUMN IF NOT EXISTS expense_status TEXT NOT NULL DEFAULT 'approved';"
+  );
+  await query("ALTER TABLE isp_expenses ALTER COLUMN expense_status SET DEFAULT 'pending';");
+  await query(
+    "ALTER TABLE isp_expenses ADD COLUMN IF NOT EXISTS approved_by UUID NULL REFERENCES users(id) ON DELETE SET NULL;"
+  );
+  await query("ALTER TABLE isp_expenses ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ NULL;");
+  await query(
+    "ALTER TABLE isp_expenses ADD COLUMN IF NOT EXISTS rejected_by UUID NULL REFERENCES users(id) ON DELETE SET NULL;"
+  );
+  await query("ALTER TABLE isp_expenses ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ NULL;");
+  await query("ALTER TABLE isp_expenses ADD COLUMN IF NOT EXISTS rejection_note TEXT NULL;");
+  await query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'isp_expenses_expense_status_chk'
+      ) THEN
+        ALTER TABLE isp_expenses ADD CONSTRAINT isp_expenses_expense_status_chk
+          CHECK (expense_status IN ('pending', 'approved', 'rejected'));
+      END IF;
+    END $$;
+  `);
 
   await query(`
     CREATE TABLE IF NOT EXISTS network_usage_daily (

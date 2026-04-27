@@ -69,6 +69,7 @@ import {
   putBrandingLogoInS3
 } from "./brandingLogoStorage.js";
 import { validateAnnouncementContent, validatePublicPageSlot } from "./announcementHtml.js";
+import { streamInvoiceProformaPdf } from "./proformaPdf.js";
 
 function authenticate(req, res, next) {
   authenticateJwt(req, res, () => enforcePlatformAccess(req, res, next));
@@ -4628,6 +4629,52 @@ app.get("/api/invoices", authenticate, async (req, res) => {
   res.json(result.rows);
 });
 
+app.get("/api/invoices/:invoiceId/proforma-pdf", authenticate, async (req, res) => {
+  const ispId = resolveIspId(req, res);
+  if (!ispId) return;
+  const { invoiceId } = req.params;
+  if (!isUuidString(invoiceId)) return res.status(400).json({ message: "Invalid invoice id" });
+
+  const faId = req.user.role === "field_agent" ? req.user.sub : null;
+  const invSql = faId
+    ? `SELECT i.id, i.amount_usd AS "amountUsd", i.status, i.due_date AS "dueDate",
+              c.full_name AS "customerName", c.phone AS "customerPhone"
+       FROM invoices i
+       INNER JOIN customers c ON c.id = i.customer_id AND c.isp_id = i.isp_id
+       WHERE i.id = $1 AND i.isp_id = $2 AND c.field_agent_id = $3`
+    : `SELECT i.id, i.amount_usd AS "amountUsd", i.status, i.due_date AS "dueDate",
+              c.full_name AS "customerName", c.phone AS "customerPhone"
+       FROM invoices i
+       INNER JOIN customers c ON c.id = i.customer_id AND c.isp_id = i.isp_id
+       WHERE i.id = $1 AND i.isp_id = $2`;
+  const inv = await query(invSql, faId ? [invoiceId, ispId, faId] : [invoiceId, ispId]);
+  const invRow = inv.rows[0];
+  if (!invRow) return res.status(404).json({ message: "Invoice not found" });
+
+  const [brandR, ispR] = await Promise.all([
+    query(
+      `SELECT b.display_name AS "displayName", b.address, b.contact_email AS "contactEmail",
+              b.contact_phone AS "contactPhone", b.invoice_footer AS "invoiceFooter"
+       FROM isp_branding b WHERE b.isp_id = $1`,
+      [ispId]
+    ),
+    query(`SELECT name FROM isps WHERE id = $1`, [ispId])
+  ]);
+  const brand = brandR.rows[0] || {};
+  const ispName = ispR.rows[0]?.name || "";
+
+  await logAudit({
+    ispId,
+    actorUserId: req.user.sub,
+    action: "invoice.proforma_pdf_downloaded",
+    entityType: "invoice",
+    entityId: invoiceId,
+    details: {}
+  });
+
+  streamInvoiceProformaPdf(res, { invoice: invRow, brand, ispName });
+});
+
 app.post("/api/payments/webhook", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
@@ -5837,6 +5884,35 @@ const EXPENSE_CATEGORIES = [
   "other"
 ];
 
+async function countExpenseApproversForIsp(ispId) {
+  const r = await query(
+    `SELECT COUNT(DISTINCT user_id)::int AS c
+     FROM user_isp_memberships
+     WHERE isp_id = $1 AND is_active = TRUE
+       AND role IN ('super_admin', 'company_manager', 'isp_admin')`,
+    [ispId]
+  );
+  return Number(r.rows[0]?.c || 0);
+}
+
+function attachExpenseWorkflowFlags(row, actorUserId, approverCount, actorRole) {
+  const status = row.status;
+  const createdBy = row.createdBy;
+  const multi = approverCount >= 2;
+  const sameAsCreator = Boolean(createdBy && createdBy === actorUserId);
+  const blockedSelf = multi && sameAsCreator;
+  const isApprover = ["super_admin", "company_manager", "isp_admin"].includes(actorRole);
+  const canApprove =
+    isApprover && !blockedSelf && (status === "pending" || status === "rejected");
+  const canReject = isApprover && !blockedSelf && status === "pending";
+  return {
+    ...row,
+    canApprove,
+    canReject,
+    approvalBlockedSelf: blockedSelf
+  };
+}
+
 app.get(
   "/api/expenses",
   authenticate,
@@ -5846,17 +5922,24 @@ app.get(
     if (!ispId) return;
     const from = String(req.query.from || "").slice(0, 10) || new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
     const to = String(req.query.to || "").slice(0, 10) || new Date().toISOString().slice(0, 10);
-    const [rows, sumExp, sumPay] = await Promise.all([
+    const approverCount = await countExpenseApproversForIsp(ispId);
+    const [rows, sumApproved, sumPending, sumPay] = await Promise.all([
       query(
         `SELECT e.id, e.isp_id AS "ispId", e.amount_usd AS "amountUsd", e.category, e.description,
                 e.period_start AS "periodStart", e.period_end AS "periodEnd",
                 e.field_agent_id AS "fieldAgentId", u.full_name AS "fieldAgentName",
                 e.agent_payout_type AS "agentPayoutType", e.agent_payout_percent AS "agentPayoutPercent",
                 e.revenue_basis_usd AS "revenueBasisUsd", e.metadata, e.created_at AS "createdAt",
-                e.created_by AS "createdBy", cu.full_name AS "createdByName"
+                e.created_by AS "createdBy", cu.full_name AS "createdByName",
+                e.expense_status AS "status",
+                e.approved_by AS "approvedBy", e.approved_at AS "approvedAt",
+                e.rejected_by AS "rejectedBy", e.rejected_at AS "rejectedAt", e.rejection_note AS "rejectionNote",
+                au.full_name AS "approvedByName", ru.full_name AS "rejectedByName"
          FROM isp_expenses e
          LEFT JOIN users u ON u.id = e.field_agent_id
          LEFT JOIN users cu ON cu.id = e.created_by
+         LEFT JOIN users au ON au.id = e.approved_by
+         LEFT JOIN users ru ON ru.id = e.rejected_by
          WHERE e.isp_id = $1 AND e.period_start <= $2::date AND e.period_end >= $3::date
          ORDER BY e.period_start DESC, e.created_at DESC
          LIMIT 500`,
@@ -5864,7 +5947,14 @@ app.get(
       ),
       query(
         `SELECT COALESCE(SUM(amount_usd), 0)::float AS t FROM isp_expenses
-         WHERE isp_id = $1 AND period_start <= $2::date AND period_end >= $3::date`,
+         WHERE isp_id = $1 AND expense_status = 'approved'
+           AND period_start <= $2::date AND period_end >= $3::date`,
+        [ispId, to, from]
+      ),
+      query(
+        `SELECT COALESCE(SUM(amount_usd), 0)::float AS t FROM isp_expenses
+         WHERE isp_id = $1 AND expense_status = 'pending'
+           AND period_start <= $2::date AND period_end >= $3::date`,
         [ispId, to, from]
       ),
       query(
@@ -5875,10 +5965,14 @@ app.get(
         [ispId, from, to]
       )
     ]);
+    const items = rows.rows.map((row) =>
+      attachExpenseWorkflowFlags(row, req.user.sub, approverCount, req.user.role)
+    );
     return res.json({
-      items: rows.rows,
+      items,
       summary: {
-        totalExpensesUsd: sumExp.rows[0].t,
+        totalExpensesUsd: sumApproved.rows[0].t,
+        pendingExpensesUsd: sumPending.rows[0].t,
         collectionsInPeriodUsd: sumPay.rows[0].t,
         filterFrom: from,
         filterTo: to
@@ -5972,13 +6066,15 @@ app.post(
     }
     const inserted = await query(
       `INSERT INTO isp_expenses (id, isp_id, amount_usd, category, description, period_start, period_end,
-          field_agent_id, agent_payout_type, agent_payout_percent, revenue_basis_usd, metadata, created_by)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::date, $6::date, $7, $8, $9, $10, $11::jsonb, $12)
+          field_agent_id, agent_payout_type, agent_payout_percent, revenue_basis_usd, metadata, created_by, expense_status)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::date, $6::date, $7, $8, $9, $10, $11::jsonb, $12, 'pending')
        RETURNING id, isp_id AS "ispId", amount_usd AS "amountUsd", category, description,
          period_start AS "periodStart", period_end AS "periodEnd",
          field_agent_id AS "fieldAgentId", agent_payout_type AS "agentPayoutType",
          agent_payout_percent AS "agentPayoutPercent", revenue_basis_usd AS "revenueBasisUsd",
-         metadata, created_at AS "createdAt", created_by AS "createdBy"`,
+         metadata, created_at AS "createdAt", created_by AS "createdBy",
+         expense_status AS "status", approved_by AS "approvedBy", approved_at AS "approvedAt",
+         rejected_by AS "rejectedBy", rejected_at AS "rejectedAt", rejection_note AS "rejectionNote"`,
       [
         ispId,
         amt,
@@ -6000,9 +6096,117 @@ app.post(
       action: "expense.created",
       entityType: "expense",
       entityId: inserted.rows[0].id,
-      details: { category, amountUsd: amt, periodStart: ps, periodEnd: pe }
+      details: { category, amountUsd: amt, periodStart: ps, periodEnd: pe, status: "pending" }
     });
     return res.status(201).json(inserted.rows[0]);
+  }
+);
+
+app.post(
+  "/api/expenses/:expenseId/approve",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { expenseId } = req.params;
+    if (!isUuidString(expenseId)) return res.status(400).json({ message: "Identifiant de dépense invalide." });
+    const approverCount = await countExpenseApproversForIsp(ispId);
+    const existing = await query(
+      `SELECT id, created_by AS "createdBy", expense_status AS "status"
+       FROM isp_expenses WHERE id = $1 AND isp_id = $2`,
+      [expenseId, ispId]
+    );
+    const ex = existing.rows[0];
+    if (!ex) return res.status(404).json({ message: "Dépense introuvable." });
+    if (ex.status === "approved") {
+      return res.status(409).json({ message: "Cette dépense est déjà approuvée." });
+    }
+    if (!["pending", "rejected"].includes(ex.status)) {
+      return res.status(400).json({ message: "Statut de dépense inattendu." });
+    }
+    if (approverCount >= 2 && ex.createdBy && ex.createdBy === req.user.sub) {
+      return res.status(403).json({
+        message:
+          "Au moins deux validateurs sont configurés : une autre personne doit approuver cette dépense (pas le demandeur)."
+      });
+    }
+    const updated = await query(
+      `UPDATE isp_expenses SET expense_status = 'approved', approved_by = $2, approved_at = NOW(),
+        rejected_by = NULL, rejected_at = NULL, rejection_note = NULL
+       WHERE id = $1 AND isp_id = $3
+       RETURNING id, isp_id AS "ispId", amount_usd AS "amountUsd", category, description,
+         period_start AS "periodStart", period_end AS "periodEnd",
+         field_agent_id AS "fieldAgentId", agent_payout_type AS "agentPayoutType",
+         agent_payout_percent AS "agentPayoutPercent", revenue_basis_usd AS "revenueBasisUsd",
+         metadata, created_at AS "createdAt", created_by AS "createdBy",
+         expense_status AS "status", approved_by AS "approvedBy", approved_at AS "approvedAt",
+         rejected_by AS "rejectedBy", rejected_at AS "rejectedAt", rejection_note AS "rejectionNote"`,
+      [expenseId, req.user.sub, ispId]
+    );
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "expense.approved",
+      entityType: "expense",
+      entityId: expenseId,
+      details: {}
+    });
+    return res.json(updated.rows[0]);
+  }
+);
+
+app.post(
+  "/api/expenses/:expenseId/reject",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { expenseId } = req.params;
+    if (!isUuidString(expenseId)) return res.status(400).json({ message: "Identifiant de dépense invalide." });
+    const approverCount = await countExpenseApproversForIsp(ispId);
+    const existing = await query(
+      `SELECT id, created_by AS "createdBy", expense_status AS "status"
+       FROM isp_expenses WHERE id = $1 AND isp_id = $2`,
+      [expenseId, ispId]
+    );
+    const ex = existing.rows[0];
+    if (!ex) return res.status(404).json({ message: "Dépense introuvable." });
+    if (ex.status !== "pending") {
+      return res.status(400).json({
+        message: "Seules les dépenses en attente peuvent être rejetées (supprimez ou corrigez autrement une dépense approuvée)."
+      });
+    }
+    if (approverCount >= 2 && ex.createdBy && ex.createdBy === req.user.sub) {
+      return res.status(403).json({
+        message:
+          "Au moins deux validateurs : une autre personne doit rejeter ou approuver cette demande (pas le demandeur)."
+      });
+    }
+    const rejectionNote = String(req.body?.rejectionNote || "").trim().slice(0, 2000);
+    const updated = await query(
+      `UPDATE isp_expenses SET expense_status = 'rejected', rejected_by = $2, rejected_at = NOW(),
+        rejection_note = $3, approved_by = NULL, approved_at = NULL
+       WHERE id = $1 AND isp_id = $4
+       RETURNING id, isp_id AS "ispId", amount_usd AS "amountUsd", category, description,
+         period_start AS "periodStart", period_end AS "periodEnd",
+         field_agent_id AS "fieldAgentId", agent_payout_type AS "agentPayoutType",
+         agent_payout_percent AS "agentPayoutPercent", revenue_basis_usd AS "revenueBasisUsd",
+         metadata, created_at AS "createdAt", created_by AS "createdBy",
+         expense_status AS "status", approved_by AS "approvedBy", approved_at AS "approvedAt",
+         rejected_by AS "rejectedBy", rejected_at AS "rejectedAt", rejection_note AS "rejectionNote"`,
+      [expenseId, req.user.sub, rejectionNote || null, ispId]
+    );
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "expense.rejected",
+      entityType: "expense",
+      entityId: expenseId,
+      details: { rejectionNote: rejectionNote || null }
+    });
+    return res.json(updated.rows[0]);
   }
 );
 
@@ -6014,8 +6218,17 @@ app.delete(
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
     const { expenseId } = req.params;
-    const ex = await query("SELECT id FROM isp_expenses WHERE id = $1 AND isp_id = $2", [expenseId, ispId]);
-    if (!ex.rows[0]) return res.status(404).json({ message: "Expense not found" });
+    const ex = await query(
+      `SELECT id, expense_status FROM isp_expenses WHERE id = $1 AND isp_id = $2`,
+      [expenseId, ispId]
+    );
+    const row = ex.rows[0];
+    if (!row) return res.status(404).json({ message: "Expense not found" });
+    if (!["pending", "rejected"].includes(row.expense_status)) {
+      return res.status(400).json({
+        message: "Seules les dépenses en attente ou rejetées peuvent être supprimées. Retirez d’abord l’approbation si besoin."
+      });
+    }
     await query("DELETE FROM isp_expenses WHERE id = $1", [expenseId]);
     await logAudit({
       ispId,

@@ -703,6 +703,16 @@ export const api = {
     request(withIsp(`/expenses/${encodeURIComponent(expenseId)}`, ispId), {
       method: "DELETE"
     }),
+  approveExpense: (ispId, expenseId) =>
+    request(withIsp(`/expenses/${encodeURIComponent(expenseId)}/approve`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ispId })
+    }),
+  rejectExpense: (ispId, expenseId, payload = {}) =>
+    request(withIsp(`/expenses/${encodeURIComponent(expenseId)}/reject`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
   exportVouchers: (ispId) => request(withIsp("/vouchers/export", ispId)),
   redeemVoucher: (payload) =>
     request("/vouchers/redeem", {
@@ -821,6 +831,12 @@ export const api = {
   getPlans: (ispId) => request(withIsp("/plans", ispId)),
   getSubscriptions: (ispId) => request(withIsp("/subscriptions", ispId)),
   getInvoices: (ispId) => request(withIsp("/invoices", ispId)),
+  downloadInvoiceProformaPdf: async (ispId, invoiceId) => {
+    const blob = await authFetchBlob(
+      withIsp(`/invoices/${encodeURIComponent(invoiceId)}/proforma-pdf`, ispId)
+    );
+    triggerBrowserDownload(blob, `proforma-${String(invoiceId).slice(0, 8)}.pdf`);
+  },
   createCustomer: (ispId, payload) =>
     request(withIsp("/customers", ispId), {
       method: "POST",

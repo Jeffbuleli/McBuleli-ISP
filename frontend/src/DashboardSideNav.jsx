@@ -5,6 +5,8 @@ import {
   IconMail,
   IconPeople,
   IconPresentation,
+  IconSidebarCompact,
+  IconSidebarWide,
   IconSliders,
   IconSmartphone,
   IconUserCheck,
@@ -22,7 +24,10 @@ export default function DashboardSideNav({
   isFieldAgent,
   navSearch,
   setNavSearch,
-  compact = false
+  compact = false,
+  navCompactEffective = false,
+  navCompactPreference = false,
+  onToggleNavCompact
 }) {
   const q = (navSearch || "").trim().toLowerCase();
 
@@ -101,14 +106,17 @@ export default function DashboardSideNav({
       items: [{ href: "#network-ops", label: t("MikroTik & télémétrie", "MikroTik & telemetry") }]
     });
 
+    const billingItems = [
+      ...(user.role === "system_owner"
+        ? []
+        : [{ href: "#mcbuleli-billing", label: t("Abonnement McBuleli", "McBuleli subscription") }]),
+      { href: "#billing-ops", label: t("Opérations de facturation", "Billing operations") }
+    ];
     cats.push({
       id: "billing",
       label: t("Facturation", "Billing"),
       Icon: IconWallet,
-      items: [
-        { href: "#mcbuleli-billing", label: t("Abonnement McBuleli", "McBuleli subscription") },
-        { href: "#billing-ops", label: t("Opérations de facturation", "Billing operations") }
-      ]
+      items: billingItems
     });
 
     cats.push({
@@ -191,6 +199,36 @@ export default function DashboardSideNav({
       aria-label={t("Navigation du tableau de bord", "Dashboard navigation")}
     >
       <div className={compact ? "dashboard-sidenav-inner dashboard-sidenav-inner--compact-scroll" : "dashboard-sidenav-inner"}>
+        {typeof onToggleNavCompact === "function" ? (
+          <div
+            className="dashboard-sidenav-toolbar"
+            role="toolbar"
+            aria-label={t("Affichage du menu", "Menu display")}
+          >
+            <button
+              type="button"
+              className="btn-icon-toolbar"
+              onClick={onToggleNavCompact}
+              title={
+                navCompactEffective
+                  ? t("Afficher les noms du menu", "Show menu labels")
+                  : t("Réduire le menu (icônes seules)", "Narrow menu (icons only)")
+              }
+              aria-label={
+                navCompactEffective
+                  ? t("Afficher les noms du menu", "Show menu labels")
+                  : t("Réduire le menu", "Narrow menu")
+              }
+              aria-pressed={navCompactPreference}
+            >
+              {navCompactEffective ? (
+                <IconSidebarWide width={22} height={22} aria-hidden />
+              ) : (
+                <IconSidebarCompact width={22} height={22} aria-hidden />
+              )}
+            </button>
+          </div>
+        ) : null}
         {!compact ? (
           <div className="dashboard-sidenav-search">
             <label className="visually-hidden" htmlFor="dashboard-nav-search">
