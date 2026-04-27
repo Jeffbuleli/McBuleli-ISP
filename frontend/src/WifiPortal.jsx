@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { API_URL, publicAssetUrl, publicRequest } from "./api";
+import { API_URL, publicRequest } from "./api";
+import { mcbuleliLogoUrl } from "./brandAssets.js";
 import LangSwitch from "./LangSwitch.jsx";
 import { IconAntenna, IconWallet, IconZap } from "./icons.jsx";
 import { wifiT } from "./wifiCopy.js";
@@ -227,9 +228,7 @@ export default function WifiPortal() {
         </div>
       </section>
       <header className="app-header" style={{ alignItems: "center" }}>
-        {branding?.logoUrl ? (
-          <img src={publicAssetUrl(branding.logoUrl)} alt="" style={{ height: 40 }} />
-        ) : null}
+        <img src={mcbuleliLogoUrl} alt="McBuleli" style={{ height: 40, width: "auto", objectFit: "contain" }} />
         <div>
           <h1 style={{ margin: 0 }}>{wifiDisplayName(branding?.displayName, uiLang)}</h1>
           <p className="app-meta">{t("catalogLead")}</p>
@@ -378,7 +377,7 @@ export default function WifiPortal() {
         </div>
       )}
       <footer className="mcbuleli-site-footer">
-        <img src="/mcbuleli-logo.svg" alt="" width={28} height={28} className="mcbuleli-site-footer__logo" />
+        <img src={mcbuleliLogoUrl} alt="" width={28} height={28} className="mcbuleli-site-footer__logo" />
         <p>{t("mcbuleliFooter")}</p>
       </footer>
     </main>

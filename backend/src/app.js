@@ -68,6 +68,7 @@ import {
   purgeHostedBrandingAssets,
   putBrandingLogoInS3
 } from "./brandingLogoStorage.js";
+import { validateAnnouncementContent } from "./announcementHtml.js";
 
 function authenticate(req, res, next) {
   authenticateJwt(req, res, () => enforcePlatformAccess(req, res, next));
@@ -272,12 +273,94 @@ const BRANDING_LOGO_MIME = {
   ".gif": "image/gif"
 };
 
+function bufferToDataUrl(mime, buf) {
+  if (!buf || !mime) return null;
+  const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
+  if (!b.length) return null;
+  return `data:${mime};base64,${b.toString("base64")}`;
+}
+
+/** Logo in API JSON: data URL when bytes are stored (no separate HTTP fetch; works Vercel + Render). */
+function mapPublicBrandingRow(row) {
+  if (!row) return null;
+  const mime = row.logo_mime ?? row.logoMime;
+  const bytes = row.logo_bytes ?? row.logoBytes;
+  const dataUrl = bufferToDataUrl(mime, bytes);
+  const out = { ...row };
+  delete out.logo_bytes;
+  delete out.logo_mime;
+  delete out.logoBytes;
+  delete out.logoMime;
+  delete out.logo_url;
+  const prev = row.logoUrl;
+  out.logoUrl = dataUrl || prev || null;
+  return out;
+}
+
+function mapPlatformBannerSlideRow(row) {
+  if (!row) return null;
+  const mime = row.image_mime ?? row.imageMime;
+  const bytes = row.image_bytes ?? row.imageBytes;
+  const byteLen = Buffer.isBuffer(bytes)
+    ? bytes.length
+    : bytes == null
+      ? 0
+      : typeof bytes.length === "number"
+        ? bytes.length
+        : 0;
+  const dataUrl = bufferToDataUrl(mime, bytes);
+  const legacyStr =
+    row.imageUrl != null || row.image_url != null
+      ? String(row.imageUrl ?? row.image_url ?? "").trim()
+      : "";
+  const imageUrl = dataUrl || (legacyStr || null);
+  const slotIndex = row.slot_index ?? row.slotIndex;
+  const hasImage = byteLen > 0 || Boolean(legacyStr);
+  const rawActive = row.is_active ?? row.isActive;
+  const out = {
+    slotIndex,
+    imageUrl,
+    linkUrl: row.link_url ?? row.linkUrl ?? null,
+    altText: row.alt_text ?? row.altText ?? null,
+    hasImage,
+    isActive: rawActive !== false
+  };
+  if (row.updated_at != null || row.updatedAt != null) {
+    out.updatedAt = row.updated_at ?? row.updatedAt;
+  }
+  return out;
+}
+
+function mapAnnouncementRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    ispId: row.isp_id ?? row.ispId,
+    title: row.title,
+    bodyHtml: row.body_html ?? row.bodyHtml,
+    audience: row.audience,
+    isActive: row.is_active ?? row.isActive,
+    sortOrder: Number(row.sort_order ?? row.sortOrder ?? 0),
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt
+  };
+}
+
 app.get("/api/public/branding-logo/:ispId", rlPublicRead, async (req, res) => {
   const { ispId } = req.params;
   if (!isUuidString(ispId)) return res.status(400).end();
   try {
-    const row = await query("SELECT logo_object_key FROM isp_branding WHERE isp_id = $1", [ispId]);
-    const objectKey = row.rows[0]?.logo_object_key;
+    const row = await query(
+      "SELECT logo_object_key, logo_bytes, logo_mime FROM isp_branding WHERE isp_id = $1",
+      [ispId]
+    );
+    const hosted = row.rows[0];
+    if (hosted?.logo_bytes?.length && hosted?.logo_mime) {
+      res.type(hosted.logo_mime);
+      res.set("Cache-Control", "public, max-age=86400");
+      return res.send(hosted.logo_bytes);
+    }
+    const objectKey = hosted?.logo_object_key;
     if (objectKey && isS3BrandingConfigured()) {
       const { stream, contentType } = await getBrandingLogoStreamFromS3(objectKey);
       res.type(contentType);
@@ -320,6 +403,16 @@ function parsePlatformBannerSlot(param) {
 app.get("/api/public/platform-banner/:slot", rlPublicRead, async (req, res) => {
   const slot = parsePlatformBannerSlot(req.params.slot);
   if (slot == null) return res.status(400).end();
+  const dbRow = await query(
+    "SELECT image_bytes, image_mime FROM platform_dashboard_banners WHERE slot_index = $1",
+    [slot]
+  );
+  const b = dbRow.rows[0];
+  if (b?.image_bytes?.length && b?.image_mime) {
+    res.type(b.image_mime);
+    res.set("Cache-Control", "public, max-age=3600");
+    return res.send(b.image_bytes);
+  }
   ensurePlatformBannerUploadDir();
   for (const ext of Object.keys(BRANDING_LOGO_MIME)) {
     const fp = path.join(platformBannerUploadDir, `${slot}${ext}`);
@@ -366,20 +459,16 @@ function publicUserPayload(user, extra = {}) {
 
 async function dashboardPayloadFromDb() {
   const r = await query(
-    `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", link_url AS "linkUrl",
-            alt_text AS "altText", is_active AS "isActive"
+    `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", image_bytes AS "imageBytes", image_mime AS "imageMime",
+            link_url AS "linkUrl", alt_text AS "altText", is_active AS "isActive"
      FROM platform_dashboard_banners
      WHERE slot_index BETWEEN 0 AND 2
      ORDER BY slot_index`
   );
   const slides = r.rows
-    .filter((row) => row.isActive && row.imageUrl)
-    .map((row) => ({
-      slotIndex: row.slotIndex,
-      imageUrl: row.imageUrl,
-      linkUrl: row.linkUrl || null,
-      altText: row.altText || null
-    }));
+    .filter((row) => row.isActive !== false && (row.imageBytes?.length || row.imageUrl))
+    .map((row) => mapPlatformBannerSlideRow(row))
+    .filter((s) => s?.imageUrl);
   return slides.length ? { dashboardBanners: slides } : {};
 }
 
@@ -784,8 +873,9 @@ app.get("/api/public/wifi-plans", rlPublicRead, async (req, res) => {
   const isp = await query("SELECT id FROM isps WHERE id = $1", [ispId]);
   if (!isp.rows[0]) return res.status(404).json({ message: "ISP not found" });
   const brand = await query(
-    `SELECT display_name AS "displayName", logo_url AS "logoUrl", primary_color AS "primaryColor",
-            secondary_color AS "secondaryColor", wifi_portal_redirect_url AS "wifiPortalRedirectUrl",
+    `SELECT display_name AS "displayName", logo_url AS "logoUrl", logo_bytes AS "logoBytes", logo_mime AS "logoMime",
+            primary_color AS "primaryColor", secondary_color AS "secondaryColor",
+            wifi_portal_redirect_url AS "wifiPortalRedirectUrl",
             contact_email AS "contactEmail", contact_phone AS "contactPhone", address
      FROM isp_branding WHERE isp_id = $1`,
     [ispId]
@@ -798,7 +888,11 @@ app.get("/api/public/wifi-plans", rlPublicRead, async (req, res) => {
      ORDER BY price_usd ASC`,
     [ispId]
   );
-  return res.json({ ispId, branding: brand.rows[0] || {}, plans: plans.rows });
+  return res.json({
+    ispId,
+    branding: mapPublicBrandingRow(brand.rows[0]) || {},
+    plans: plans.rows
+  });
 });
 
 app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
@@ -1005,9 +1099,9 @@ app.get("/api/portal/session", authenticatePortal, async (req, res) => {
       [ispId, customerId]
     ),
     query(
-      `SELECT display_name AS "displayName", logo_url AS "logoUrl", primary_color AS "primaryColor",
-              secondary_color AS "secondaryColor", portal_footer_text AS "portalFooterText",
-              portal_client_ref_prefix AS "portalClientRefPrefix",
+      `SELECT display_name AS "displayName", logo_url AS "logoUrl", logo_bytes AS "logoBytes", logo_mime AS "logoMime",
+              primary_color AS "primaryColor", secondary_color AS "secondaryColor",
+              portal_footer_text AS "portalFooterText", portal_client_ref_prefix AS "portalClientRefPrefix",
               contact_email AS "contactEmail", contact_phone AS "contactPhone", address
        FROM isp_branding WHERE isp_id = $1`,
       [ispId]
@@ -1019,8 +1113,20 @@ app.get("/api/portal/session", authenticatePortal, async (req, res) => {
     customer: c,
     invoices: invoices.rows,
     subscriptions: subscriptions.rows,
-    branding: brand.rows[0] || null
+    branding: mapPublicBrandingRow(brand.rows[0] || null)
   });
+});
+
+app.get("/api/portal/announcements", authenticatePortal, async (req, res) => {
+  const { ispId } = req.portal;
+  const r = await query(
+    `SELECT id, isp_id, title, body_html, audience, is_active, sort_order, created_at, updated_at
+     FROM isp_announcements
+     WHERE isp_id = $1 AND is_active = TRUE AND audience IN ('portal','both')
+     ORDER BY sort_order ASC, updated_at DESC LIMIT 10`,
+    [ispId]
+  );
+  res.json({ items: r.rows.map(mapAnnouncementRow) });
 });
 
 app.post("/api/portal/tid-submissions", authenticatePortal, async (req, res) => {
@@ -1394,10 +1500,10 @@ app.get("/api/branding", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const result = await query(
-    "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+    "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
     [ispId]
   );
-  res.json(result.rows[0] || null);
+  res.json(mapPublicBrandingRow(result.rows[0] || null));
 });
 
 app.post(
@@ -1507,10 +1613,10 @@ app.post(
       entityId: updated.rows[0]?.id || null
     });
     const finalResult = await query(
-      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
       [ispId]
     );
-    return res.json(finalResult.rows[0]);
+    return res.json(mapPublicBrandingRow(finalResult.rows[0] || null));
   }
 );
 
@@ -1550,16 +1656,18 @@ app.post(
         contentType: req.file.mimetype
       });
       await query(
-        "UPDATE isp_branding SET logo_url = $1, logo_object_key = $2, updated_at = NOW() WHERE isp_id = $3",
-        [publicPath, objectKey, ispId]
+        `UPDATE isp_branding SET logo_url = $1, logo_object_key = $2, logo_bytes = $4, logo_mime = $5, updated_at = NOW()
+         WHERE isp_id = $3`,
+        [publicPath, objectKey, ispId, req.file.buffer, req.file.mimetype]
       );
     } else {
       ensureBrandingUploadDir();
       const fp = path.join(brandingUploadDir, `${ispId}${ext}`);
       await fs.promises.writeFile(fp, req.file.buffer);
       await query(
-        "UPDATE isp_branding SET logo_url = $1, logo_object_key = NULL, updated_at = NOW() WHERE isp_id = $2",
-        [publicPath, ispId]
+        `UPDATE isp_branding SET logo_url = $1, logo_object_key = NULL, logo_bytes = $3, logo_mime = $4, updated_at = NOW()
+         WHERE isp_id = $2`,
+        [publicPath, ispId, req.file.buffer, req.file.mimetype]
       );
     }
     await logAudit({
@@ -1571,10 +1679,163 @@ app.post(
       details: { mime: req.file.mimetype }
     });
     const finalResult = await query(
-      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
       [ispId]
     );
-    return res.json(finalResult.rows[0]);
+    return res.json(mapPublicBrandingRow(finalResult.rows[0] || null));
+  }
+);
+
+app.get(
+  "/api/announcements",
+  authenticate,
+  requireRoles(
+    "system_owner",
+    "super_admin",
+    "company_manager",
+    "isp_admin",
+    "billing_agent",
+    "noc_operator",
+    "field_agent"
+  ),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const scope = String(req.query.scope || "");
+    const canManage =
+      req.user.role === "system_owner" ||
+      ["super_admin", "company_manager", "isp_admin"].includes(req.user.role);
+    if (scope === "manage") {
+      if (!canManage) return res.status(403).json({ message: "Not allowed to manage announcements." });
+      const r = await query(
+        `SELECT id, isp_id, title, body_html, audience, is_active, sort_order, created_at, updated_at
+         FROM isp_announcements WHERE isp_id = $1 ORDER BY sort_order ASC, updated_at DESC`,
+        [ispId]
+      );
+      return res.json({ items: r.rows.map(mapAnnouncementRow) });
+    }
+    const r = await query(
+      `SELECT id, isp_id, title, body_html, audience, is_active, sort_order, created_at, updated_at
+       FROM isp_announcements
+       WHERE isp_id = $1 AND is_active = TRUE AND audience IN ('staff','both')
+       ORDER BY sort_order ASC, updated_at DESC LIMIT 20`,
+      [ispId]
+    );
+    res.json({ items: r.rows.map(mapAnnouncementRow) });
+  }
+);
+
+app.post(
+  "/api/announcements",
+  authenticate,
+  requireRoles("system_owner", "super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { title, bodyHtml, audience, sortOrder, isActive } = req.body || {};
+    const aud = ["staff", "portal", "both"].includes(audience) ? audience : "staff";
+    const v = validateAnnouncementContent(title, bodyHtml);
+    if (!v.ok) return res.status(400).json({ message: v.message });
+    const sort = Number.isFinite(Number(sortOrder)) ? Number(sortOrder) : 0;
+    const active = isActive !== false;
+    const ins = await query(
+      `INSERT INTO isp_announcements (isp_id, created_by, title, body_html, audience, is_active, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, isp_id, title, body_html, audience, is_active, sort_order, created_at, updated_at`,
+      [ispId, req.user.sub, v.title, v.bodyHtml, aud, active, sort]
+    );
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "announcement.created",
+      entityType: "isp_announcement",
+      entityId: ins.rows[0].id,
+      details: { audience: aud }
+    });
+    res.status(201).json(mapAnnouncementRow(ins.rows[0]));
+  }
+);
+
+app.patch(
+  "/api/announcements/:id",
+  authenticate,
+  requireRoles("system_owner", "super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { id } = req.params;
+    if (!isUuidString(id)) return res.status(400).json({ message: "Invalid id" });
+    const own = await query(`SELECT id FROM isp_announcements WHERE id = $1 AND isp_id = $2`, [id, ispId]);
+    if (!own.rows[0]) return res.status(404).json({ message: "Announcement not found" });
+    const b = req.body || {};
+    const pieces = [];
+    const vals = [];
+    let i = 1;
+    if (Object.prototype.hasOwnProperty.call(b, "title") || Object.prototype.hasOwnProperty.call(b, "bodyHtml")) {
+      const title = Object.prototype.hasOwnProperty.call(b, "title") ? b.title : undefined;
+      const bodyHtml = Object.prototype.hasOwnProperty.call(b, "bodyHtml") ? b.bodyHtml : undefined;
+      const cur = await query(`SELECT title, body_html FROM isp_announcements WHERE id = $1`, [id]);
+      const row = cur.rows[0];
+      const t = title !== undefined ? title : row.title;
+      const body = bodyHtml !== undefined ? bodyHtml : row.body_html;
+      const v = validateAnnouncementContent(t, body);
+      if (!v.ok) return res.status(400).json({ message: v.message });
+      pieces.push(`title = $${i++}`, `body_html = $${i++}`);
+      vals.push(v.title, v.bodyHtml);
+    }
+    if (Object.prototype.hasOwnProperty.call(b, "audience")) {
+      const aud = ["staff", "portal", "both"].includes(b.audience) ? b.audience : "staff";
+      pieces.push(`audience = $${i++}`);
+      vals.push(aud);
+    }
+    if (Object.prototype.hasOwnProperty.call(b, "isActive")) {
+      pieces.push(`is_active = $${i++}`);
+      vals.push(Boolean(b.isActive));
+    }
+    if (Object.prototype.hasOwnProperty.call(b, "sortOrder")) {
+      pieces.push(`sort_order = $${i++}`);
+      vals.push(Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 0);
+    }
+    if (pieces.length === 0) return res.status(400).json({ message: "No fields to update" });
+    pieces.push("updated_at = NOW()");
+    vals.push(id);
+    await query(`UPDATE isp_announcements SET ${pieces.join(", ")} WHERE id = $${vals.length}`, vals);
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "announcement.updated",
+      entityType: "isp_announcement",
+      entityId: id,
+      details: { fields: Object.keys(b) }
+    });
+    const r = await query(
+      `SELECT id, isp_id, title, body_html, audience, is_active, sort_order, created_at, updated_at
+       FROM isp_announcements WHERE id = $1`,
+      [id]
+    );
+    res.json(mapAnnouncementRow(r.rows[0]));
+  }
+);
+
+app.delete(
+  "/api/announcements/:id",
+  authenticate,
+  requireRoles("system_owner", "super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { id } = req.params;
+    if (!isUuidString(id)) return res.status(400).json({ message: "Invalid id" });
+    const del = await query(`DELETE FROM isp_announcements WHERE id = $1 AND isp_id = $2 RETURNING id`, [id, ispId]);
+    if (!del.rows[0]) return res.status(404).json({ message: "Announcement not found" });
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "announcement.deleted",
+      entityType: "isp_announcement",
+      entityId: id
+    });
+    res.status(204).end();
   }
 );
 
@@ -4170,13 +4431,13 @@ app.get("/api/super/dashboard", authenticate, requireRoles("system_owner", "supe
 
 app.get("/api/system-owner/dashboard-banners", authenticate, requireRoles("system_owner"), async (_req, res) => {
   const r = await query(
-    `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", link_url AS "linkUrl",
-            alt_text AS "altText", is_active AS "isActive", updated_at AS "updatedAt"
+    `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", image_bytes AS "imageBytes", image_mime AS "imageMime",
+            link_url AS "linkUrl", alt_text AS "altText", is_active AS "isActive", updated_at AS "updatedAt"
      FROM platform_dashboard_banners
      WHERE slot_index BETWEEN 0 AND 2
      ORDER BY slot_index`
   );
-  res.json({ slots: r.rows });
+  res.json({ slots: r.rows.map((row) => mapPlatformBannerSlideRow(row)) });
 });
 
 app.post(
@@ -4202,14 +4463,11 @@ app.post(
       return res.status(400).json({ message: "Banner must be PNG, JPEG, WebP or GIF." });
     }
     await clearPlatformBannerFiles(slot);
-    ensurePlatformBannerUploadDir();
-    const fp = path.join(platformBannerUploadDir, `${slot}${ext}`);
-    await fs.promises.writeFile(fp, req.file.buffer);
-    const publicPath = `/api/public/platform-banner/${slot}`;
-    await query(`UPDATE platform_dashboard_banners SET image_url = $1, updated_at = NOW() WHERE slot_index = $2`, [
-      publicPath,
-      slot
-    ]);
+    await query(
+      `UPDATE platform_dashboard_banners SET image_bytes = $1, image_mime = $2, image_url = NULL, updated_at = NOW()
+       WHERE slot_index = $3`,
+      [req.file.buffer, req.file.mimetype, slot]
+    );
     await logAudit({
       actorUserId: req.user.sub,
       action: "platform_dashboard_banner.image_uploaded",
@@ -4218,12 +4476,12 @@ app.post(
       details: { slot, mime: req.file.mimetype }
     });
     const row = await query(
-      `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", link_url AS "linkUrl",
-              alt_text AS "altText", is_active AS "isActive", updated_at AS "updatedAt"
+      `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", image_bytes AS "imageBytes", image_mime AS "imageMime",
+              link_url AS "linkUrl", alt_text AS "altText", is_active AS "isActive", updated_at AS "updatedAt"
        FROM platform_dashboard_banners WHERE slot_index = $1`,
       [slot]
     );
-    res.json(row.rows[0]);
+    res.json(mapPlatformBannerSlideRow(row.rows[0]));
   }
 );
 
@@ -4264,12 +4522,12 @@ app.patch("/api/system-owner/dashboard-banners/:slot", authenticate, requireRole
     details: { slot, fields: Object.keys(b) }
   });
   const row = await query(
-    `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", link_url AS "linkUrl",
-            alt_text AS "altText", is_active AS "isActive", updated_at AS "updatedAt"
+    `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", image_bytes AS "imageBytes", image_mime AS "imageMime",
+            link_url AS "linkUrl", alt_text AS "altText", is_active AS "isActive", updated_at AS "updatedAt"
      FROM platform_dashboard_banners WHERE slot_index = $1`,
     [slot]
   );
-  res.json(row.rows[0]);
+  res.json(mapPlatformBannerSlideRow(row.rows[0]));
 });
 
 app.delete(
@@ -4281,7 +4539,8 @@ app.delete(
     if (slot == null) return res.status(400).json({ message: "slot must be 0, 1, or 2" });
     await clearPlatformBannerFiles(slot);
     await query(
-      `UPDATE platform_dashboard_banners SET image_url = NULL, updated_at = NOW() WHERE slot_index = $1`,
+      `UPDATE platform_dashboard_banners SET image_bytes = NULL, image_mime = NULL, image_url = NULL, updated_at = NOW()
+       WHERE slot_index = $1`,
       [slot]
     );
     await logAudit({
@@ -4292,12 +4551,12 @@ app.delete(
       details: { slot }
     });
     const row = await query(
-      `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", link_url AS "linkUrl",
-              alt_text AS "altText", is_active AS "isActive", updated_at AS "updatedAt"
+      `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", image_bytes AS "imageBytes", image_mime AS "imageMime",
+              link_url AS "linkUrl", alt_text AS "altText", is_active AS "isActive", updated_at AS "updatedAt"
        FROM platform_dashboard_banners WHERE slot_index = $1`,
       [slot]
     );
-    res.json(row.rows[0]);
+    res.json(mapPlatformBannerSlideRow(row.rows[0]));
   }
 );
 

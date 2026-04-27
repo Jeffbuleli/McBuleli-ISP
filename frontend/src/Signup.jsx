@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, setAuthToken } from "./api";
+import { mcbuleliLogoUrl } from "./brandAssets.js";
 import LangSwitch from "./LangSwitch.jsx";
 
 function getStoredUiLang() {
@@ -71,7 +72,7 @@ export default function Signup() {
     <main className="container container--login">
       <div className="login-layout">
         <section className="login-poster" aria-label="Présentation">
-            <img className="login-poster-logo-img" src="/mcbuleli-logo.svg" alt="McBuleli" width={72} height={72} />
+            <img className="login-poster-logo-img" src={mcbuleliLogoUrl} alt="McBuleli" width={72} height={72} />
           <p className="login-poster-lead">
               {isEn
                 ? "Launch your operator workspace in minutes: 1-month free trial, then monthly billing via Mobile Money. McBuleli centralizes billing, payments, and operations for your ISP."
@@ -86,7 +87,7 @@ export default function Signup() {
         <div className="login-stack">
           <header className="app-header app-header--login">
             <div className="login-brand-row">
-              <img className="login-brand-logo" src="/mcbuleli-logo.svg" alt="McBuleli" width={44} height={44} />
+              <img className="login-brand-logo" src={mcbuleliLogoUrl} alt="McBuleli" width={44} height={44} />
               <div>
                 <h1>{isEn ? "Create your McBuleli workspace" : "Créer votre espace McBuleli"}</h1>
                 <p className="app-meta">

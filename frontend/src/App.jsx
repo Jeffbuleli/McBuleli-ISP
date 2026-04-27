@@ -3,6 +3,10 @@ import { api, publicAssetUrl, setAuthToken } from "./api";
 import LangSwitch from "./LangSwitch.jsx";
 import DashboardHistograms from "./DashboardHistograms.jsx";
 import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
+import PublicHomePromos from "./PublicHomePromos.jsx";
+import DashboardAnnouncementStrip from "./DashboardAnnouncementStrip.jsx";
+import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
+import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
 import { IconAntenna, IconHome, IconPeople, IconSignOut, IconSliders, IconWallet } from "./icons.jsx";
 
@@ -54,6 +58,22 @@ function resolvePublicBrandName(displayName) {
   const s = displayName != null ? String(displayName).trim() : "";
   if (!s || s === "AA") return "McBuleli";
   return displayName;
+}
+
+/** Preview URL for system_owner banner cards (data URL, legacy URL, or public slot route). */
+function platformBannerThumbSrc(slot) {
+  if (!slot) return "";
+  const primary = slot.imageUrl != null ? String(slot.imageUrl).trim() : "";
+  if (primary) return publicAssetUrl(primary);
+  if (slot.slotIndex != null) return publicAssetUrl(`/api/public/platform-banner/${slot.slotIndex}`);
+  return "";
+}
+
+function platformBannerHasStoredImage(slot) {
+  if (!slot) return false;
+  if (slot.hasImage === true) return true;
+  const u = slot.imageUrl != null ? String(slot.imageUrl).trim() : "";
+  return Boolean(u);
 }
 
 function getStoredUiLang() {
@@ -417,6 +437,8 @@ function App() {
   const [auditLogs, setAuditLogs] = useState([]);
   const [notificationOutbox, setNotificationOutbox] = useState([]);
   const [branding, setBranding] = useState(null);
+  const [ispAnnouncements, setIspAnnouncements] = useState([]);
+  const [ispAnnouncementsManage, setIspAnnouncementsManage] = useState([]);
   const [networkStats, setNetworkStats] = useState(null);
   const [networkNodes, setNetworkNodes] = useState([]);
   const [provisioningEvents, setProvisioningEvents] = useState([]);
@@ -665,6 +687,8 @@ function App() {
         } catch (_e) {
           /* billing endpoints stay reachable */
         }
+        setIspAnnouncements([]);
+        setIspAnnouncementsManage([]);
         setLoading(false);
         return;
       }
@@ -820,6 +844,31 @@ function App() {
         const tail = loadFailures.length > max ? ` (+${loadFailures.length - max} de plus)` : "";
         setNotice(`Certaines rubriques n'ont pas pu être chargées (${head}${tail}). Les autres données ci-dessous sont à jour.`);
       }
+
+      let ann = [];
+      if (activeIspId) {
+        try {
+          const ar = await api.getAnnouncements(activeIspId);
+          ann = ar.items || [];
+        } catch (_e) {
+          ann = [];
+        }
+      }
+      setIspAnnouncements(ann);
+
+      const canManageAnn =
+        currentUser.role === "system_owner" ||
+        ["super_admin", "company_manager", "isp_admin"].includes(currentUser.role);
+      let annM = [];
+      if (activeIspId && canManageAnn) {
+        try {
+          const am = await api.getAnnouncementsManage(activeIspId);
+          annM = am.items || [];
+        } catch (_e) {
+          annM = [];
+        }
+      }
+      setIspAnnouncementsManage(annM);
 
       setIsps(allIsps);
       setSelectedIspId(activeIspId);
@@ -1046,6 +1095,8 @@ function App() {
     setInvoices([]);
     setPlatformBannerSlots([]);
     setPlatformBannerEdits({});
+    setIspAnnouncements([]);
+    setIspAnnouncementsManage([]);
   }
 
   async function reloadPlatformBannerSlots() {
@@ -1954,6 +2005,10 @@ function App() {
       return;
     }
     const brandTitle = resolvePublicBrandName(branding?.displayName);
+    const mcLogoPrint =
+      typeof window !== "undefined"
+        ? new URL(mcbuleliLogoUrl, window.location.origin).href
+        : mcbuleliLogoUrl;
     const html = `
       <html lang="fr">
       <head>
@@ -1965,7 +2020,7 @@ function App() {
       </head>
       <body style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;padding:16px;color:${branding?.secondaryColor || "#2d2420"};">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          ${branding?.logoUrl ? `<img src="${publicAssetUrl(branding.logoUrl)}" alt="" style="height:40px;" />` : ""}
+          <img src="${mcLogoPrint}" alt="McBuleli" style="height:40px;width:auto;object-fit:contain;" />
           <h2 style="margin:0;color:${branding?.primaryColor || "#5d4037"};">${brandTitle} — bons d'accès Wi‑Fi</h2>
         </div>
         ${printable
@@ -2006,7 +2061,7 @@ function App() {
       <main className="container container--login">
         <div className="login-layout">
           <section className="login-poster" aria-label="Présentation">
-            <img className="login-poster-logo-img" src="/mcbuleli-logo.svg" alt="McBuleli" width={72} height={72} />
+            <img className="login-poster-logo-img" src={mcbuleliLogoUrl} alt="McBuleli" width={72} height={72} />
             <p className="login-poster-lead">
               {isEn
                 ? "Billing, Mobile Money collections, customer portal, agents, MikroTik and reporting in one professional ISP workspace."
@@ -2021,7 +2076,7 @@ function App() {
           <div className="login-stack">
             <header className="app-header app-header--login">
               <div className="login-brand-row">
-                <img className="login-brand-logo" src="/mcbuleli-logo.svg" alt="McBuleli" width={44} height={44} />
+                <img className="login-brand-logo" src={mcbuleliLogoUrl} alt="McBuleli" width={44} height={44} />
                 <div>
                 <h1>{loginTitle}</h1>
                 <p className="app-meta">
@@ -2100,7 +2155,7 @@ function App() {
       <main className="container">
         <header className="app-header app-header--login">
           <div className="login-brand-row">
-            <img className="login-brand-logo" src="/mcbuleli-logo.svg" alt="McBuleli" width={48} height={48} />
+            <img className="login-brand-logo" src={mcbuleliLogoUrl} alt="McBuleli" width={48} height={48} />
             <div>
             <h1>McBuleli</h1>
             <p className="app-meta">
@@ -2149,19 +2204,13 @@ function App() {
         <header className="app-header app-header--dashboard">
           <div className="dashboard-header-top">
             <div className="dashboard-brandline">
-              {branding?.logoUrl ? (
-                <img
-                  className="dashboard-logo dashboard-logo--tenant"
-                  src={publicAssetUrl(branding.logoUrl)}
-                  alt=""
-                />
-              ) : (
-                <span className="dashboard-logo-fallback" aria-hidden="true">
-                  {(workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) || "?")
-                    .charAt(0)
-                    .toUpperCase()}
-                </span>
-              )}
+              <img
+                className="dashboard-logo dashboard-logo--mcbuleli"
+                src={mcbuleliLogoUrl}
+                alt="McBuleli"
+                width={44}
+                height={44}
+              />
               <div className="dashboard-brand-text">
                 <h1>
                   {workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
@@ -2206,11 +2255,23 @@ function App() {
               dangerouslySetInnerHTML={{ __html: user.dashboardBannerHtml }}
             />
           ) : null}
+          {ispAnnouncements.length ? (
+            <DashboardAnnouncementStrip items={ispAnnouncements} t={t} />
+          ) : !(user?.dashboardBanners?.length || user?.dashboardBannerHtml) ? (
+            <PublicHomePromos t={t} isEn={isEn} variant="dashboard" />
+          ) : null}
         </header>
         <nav className="dashboard-subnav" aria-label="Navigation tableau de bord">
           <a href="#dashboard-overview">{t("Vue d'ensemble", "Overview")}</a>
           {user.role === "system_owner" ? (
             <a href="#platform-banners">{t("Bannières publiques", "Public banners")}</a>
+          ) : null}
+          {!isFieldAgent &&
+          (user.role === "system_owner" ||
+            user.role === "super_admin" ||
+            user.role === "company_manager" ||
+            user.role === "isp_admin") ? (
+            <a href="#isp-announcements">{t("Annonces", "Announcements")}</a>
           ) : null}
           {!isFieldAgent ? (
             <>
@@ -2412,11 +2473,11 @@ function App() {
                   <h3 style={{ marginTop: 0 }}>
                     {t("Bannière", "Banner")} {slot.slotIndex + 1}
                   </h3>
-                  {slot.imageUrl ? (
+                  {platformBannerHasStoredImage(slot) ? (
                     <p style={{ margin: "8px 0" }}>
                       <img
-                        src={publicAssetUrl(slot.imageUrl)}
-                        alt=""
+                        src={platformBannerThumbSrc(slot)}
+                        alt={ed.altText || slot.altText || ""}
                         style={{ maxWidth: "100%", maxHeight: 120, objectFit: "contain" }}
                       />
                     </p>
@@ -2465,16 +2526,22 @@ function App() {
                     />
                     {t("Afficher dans le carrousel", "Show in carousel")}
                   </label>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                  <div className="platform-banner-card__actions">
                     <button type="button" onClick={() => onPlatformBannerSaveMeta(slot.slotIndex)}>
-                      {t("Enregistrer lien / texte / actif", "Save link / alt / active")}
+                      {t("Enregistrer", "Save")}
                     </button>
-                    {slot.imageUrl ? (
-                      <button type="button" onClick={() => onPlatformBannerDeleteImage(slot.slotIndex)}>
+                    {platformBannerHasStoredImage(slot) ? (
+                      <button type="button" className="btn-secondary-outline" onClick={() => onPlatformBannerDeleteImage(slot.slotIndex)}>
                         {t("Supprimer l'image", "Remove image")}
                       </button>
                     ) : null}
                   </div>
+                  <p className="app-meta" style={{ marginTop: 8, marginBottom: 0 }}>
+                    {t(
+                      "Enregistrer applique le lien WhatsApp, le texte alternatif et l’affichage dans le carrousel. Choisir un fichier envoie tout de suite l’image.",
+                      "Save applies the WhatsApp link, alt text, and carousel visibility. Choosing a file uploads the image immediately."
+                    )}
+                  </p>
                 </div>
               );
             })}
@@ -2667,6 +2734,12 @@ function App() {
                 )}
               </p>
             ) : null}
+            <p className="app-meta" style={{ marginTop: 8, maxWidth: "56ch" }}>
+              {t(
+                "L’en-tête du tableau de bord affiche le logo McBuleli. Le logo et les couleurs ci‑dessous servent surtout au portail client, au Wi‑Fi invité, aux factures et aux exports.",
+                "The dashboard header shows the McBuleli logo. The logo and colors below mainly apply to the customer portal, guest Wi‑Fi, invoices and exports."
+              )}
+            </p>
             <label style={{ display: "block", marginTop: 8 }}>
               Logo entreprise (depuis votre appareil)
               <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={onBrandingLogoFile} />
@@ -2760,6 +2833,19 @@ function App() {
           </form>
         )}
       </section>
+
+      {(isPlatformSuperRole(user.role) ||
+        user.role === "company_manager" ||
+        user.role === "isp_admin") &&
+      selectedIspId ? (
+        <IspAnnouncementsPanel
+          ispId={selectedIspId}
+          items={ispAnnouncementsManage}
+          t={t}
+          isEn={isEn}
+          onRefresh={refresh}
+        />
+      ) : null}
 
       <section className="grid" id="billing-ops">
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import LangSwitch from "./LangSwitch.jsx";
+import PublicHomePromos from "./PublicHomePromos.jsx";
+import { mcbuleliLogoUrl } from "./brandAssets.js";
 import { IconBuilding, IconPresentation, IconReceipt, IconUserCheck } from "./icons.jsx";
 
 function getStoredUiLang() {
@@ -327,7 +329,17 @@ const COMPANY_CONTACT = {
 };
 
 function PublicLogo() {
-  return <img className="public-logo-img" src="/mcbuleli-logo.svg" alt="McBuleli" />;
+  return (
+    <img
+      className="public-logo-img"
+      src={mcbuleliLogoUrl}
+      alt="McBuleli"
+      width={48}
+      height={48}
+      loading="eager"
+      decoding="async"
+    />
+  );
 }
 
 export default function PublicSite() {
@@ -370,6 +382,7 @@ export default function PublicSite() {
           </a>
           <nav className="public-nav" aria-label="Navigation principale">
             <a href="#services">{t("Services", "Services")}</a>
+            <a href="#promos">{t("Offres", "Offers")}</a>
             <a href="#interfaces">{t("Interfaces", "Workspaces")}</a>
             <a href="#pricing">{t("Tarifs", "Pricing")}</a>
             <a href="#testimonials">{t("Témoignages", "Testimonials")}</a>
@@ -405,9 +418,6 @@ export default function PublicSite() {
               </a>
               <a className="btn-secondary" href="/login">
                 {t("Se connecter", "Login")}
-              </a>
-              <a className="btn-secondary" href="/portal">
-                {t("Portail client", "Customer portal")}
               </a>
               <a className="btn-secondary" href="/wifi">
                 {t("Achat pass Wi‑Fi", "Buy Wi‑Fi pass")}
@@ -448,6 +458,8 @@ export default function PublicSite() {
           </aside>
         </div>
       </header>
+
+      <PublicHomePromos t={t} isEn={isEn} />
 
       <section className="public-section public-section--split" id="services">
         <div>

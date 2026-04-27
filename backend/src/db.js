@@ -1,6 +1,11 @@
 import "dotenv/config";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import pg from "pg";
 import bcrypt from "bcryptjs";
+
+const __dirnameDb = path.dirname(fileURLToPath(import.meta.url));
 
 const { Pool } = pg;
 
@@ -11,6 +16,32 @@ export const pool = new Pool({ connectionString });
 
 export async function query(text, params = []) {
   return pool.query(text, params);
+}
+
+/** Default carousel slides (PNG in backend/seeds/platform-banners/0..2.png) — McBulei / WhatsApp. */
+async function seedDefaultPlatformBannersFromFiles() {
+  const force = ["1", "true", "yes"].includes(String(process.env.SEED_PLATFORM_BANNERS_FORCE || "").toLowerCase());
+  const seedDir = path.join(__dirnameDb, "..", "seeds", "platform-banners");
+  const linkUrl = "https://wa.me/mcbuleli";
+  const altText = "McBulei";
+  for (let slot = 0; slot < 3; slot++) {
+    const fp = path.join(seedDir, `${slot}.png`);
+    if (!fs.existsSync(fp)) continue;
+    if (!force) {
+      const r = await query(
+        `SELECT 1 AS ok FROM platform_dashboard_banners
+         WHERE slot_index = $1 AND image_bytes IS NOT NULL AND octet_length(image_bytes) > 0`,
+        [slot]
+      );
+      if (r.rows[0]) continue;
+    }
+    const buf = await fs.promises.readFile(fp);
+    await query(
+      `UPDATE platform_dashboard_banners SET image_bytes = $1, image_mime = $2, image_url = NULL,
+        link_url = $3, alt_text = $4, is_active = TRUE, updated_at = NOW() WHERE slot_index = $5`,
+      [buf, "image/png", linkUrl, altText, slot]
+    );
+  }
 }
 
 export async function initDb() {
@@ -427,6 +458,8 @@ export async function initDb() {
   await query(
     "ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS portal_client_ref_prefix TEXT NULL;"
   );
+  await query("ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS logo_bytes BYTEA NULL;");
+  await query("ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS logo_mime TEXT NULL;");
 
   await query(`
     CREATE TABLE IF NOT EXISTS isp_expenses (
@@ -693,21 +726,44 @@ export async function initDb() {
   `);
 
   await query(`
+    CREATE TABLE IF NOT EXISTS isp_announcements (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      title VARCHAR(120) NOT NULL,
+      body_html TEXT NOT NULL DEFAULT '',
+      audience TEXT NOT NULL DEFAULT 'staff' CHECK (audience IN ('staff', 'portal', 'both')),
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_isp_announcements_isp ON isp_announcements (isp_id, is_active, sort_order);"
+  );
+
+  await query(`
     CREATE TABLE IF NOT EXISTS platform_dashboard_banners (
       slot_index SMALLINT PRIMARY KEY CHECK (slot_index >= 0 AND slot_index <= 2),
       image_url TEXT NULL,
+      image_bytes BYTEA NULL,
+      image_mime TEXT NULL,
       link_url TEXT NULL,
       alt_text TEXT NULL,
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
+  await query("ALTER TABLE platform_dashboard_banners ADD COLUMN IF NOT EXISTS image_bytes BYTEA NULL;");
+  await query("ALTER TABLE platform_dashboard_banners ADD COLUMN IF NOT EXISTS image_mime TEXT NULL;");
   for (let s = 0; s < 3; s++) {
     await query(
       `INSERT INTO platform_dashboard_banners (slot_index) VALUES ($1) ON CONFLICT (slot_index) DO NOTHING`,
       [s]
     );
   }
+  await seedDefaultPlatformBannersFromFiles();
 
   const ispCount = await query("SELECT COUNT(*)::int AS count FROM isps");
   if (ispCount.rows[0].count === 0) {

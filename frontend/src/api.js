@@ -59,15 +59,48 @@ function resolveApiBaseUrl() {
 
 export const API_URL = resolveApiBaseUrl();
 
-/** Resolve hosted logo paths for `<img src>` when API is on another origin (set VITE_PUBLIC_API_ORIGIN). */
+/**
+ * Build absolute URL for paths like `/api/public/...` when the UI is on Vercel and the API on Render.
+ * Prefer VITE_PUBLIC_API_ORIGIN (no /api suffix). Otherwise derive origin from VITE_API_URL even when
+ * API_URL was normalized to same-origin `/api` for JSON fetch.
+ */
+function absolutePublicAssetUrl(pathStartingWithSlash) {
+  const o = import.meta.env.VITE_PUBLIC_API_ORIGIN;
+  if (o) return `${String(o).replace(/\/$/, "")}${pathStartingWithSlash}`;
+  const raw = import.meta.env.VITE_API_URL;
+  if (!raw) return null;
+  const t = String(raw).trim();
+  if (!/^https?:\/\//i.test(t)) return null;
+  try {
+    const withApi = /\/api\/?$/i.test(t) ? t.replace(/\/$/, "") : `${t.replace(/\/$/, "")}/api`;
+    const origin = new URL(withApi).origin;
+    return `${origin}${pathStartingWithSlash}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Resolve hosted logo / banner paths for `<img src>` when API is on another host (Vercel + Render). */
 export function publicAssetUrl(pathOrUrl) {
   if (!pathOrUrl) return "";
   const s = String(pathOrUrl).trim();
   if (s.startsWith("http://") || s.startsWith("https://") || s.startsWith("data:")) return s;
   if (s.startsWith("/")) {
     if (import.meta.env.DEV) return s;
-    const o = import.meta.env.VITE_PUBLIC_API_ORIGIN;
-    if (o) return `${String(o).replace(/\/$/, "")}${s}`;
+    const abs = absolutePublicAssetUrl(s);
+    if (abs) return abs;
+    // Frontend on Vercel with same-origin `/api` but no proxy: build absolute URL from full VITE_API_URL if set.
+    const raw = import.meta.env.VITE_API_URL != null ? String(import.meta.env.VITE_API_URL).trim() : "";
+    if (/^https?:\/\//i.test(raw)) {
+      try {
+        const noTrail = raw.replace(/\/$/, "");
+        const base = /\/api\/?$/i.test(noTrail) ? noTrail.slice(0, -4).replace(/\/$/, "") : noTrail;
+        const origin = new URL(base).origin;
+        return `${origin}${s}`;
+      } catch {
+        /* ignore */
+      }
+    }
   }
   return s;
 }
@@ -297,6 +330,22 @@ export const api = {
       method: "DELETE"
     }),
   getBranding: (ispId) => request(withIsp("/branding", ispId)),
+  getAnnouncements: (ispId) => request(withIsp("/announcements", ispId)),
+  getAnnouncementsManage: (ispId) => request(withIsp("/announcements?scope=manage", ispId)),
+  createAnnouncement: (ispId, payload) =>
+    request(withIsp("/announcements", ispId), {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  patchAnnouncement: (ispId, id, payload) =>
+    request(withIsp(`/announcements/${encodeURIComponent(id)}`, ispId), {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+  deleteAnnouncement: (ispId, id) =>
+    request(withIsp(`/announcements/${encodeURIComponent(id)}`, ispId), {
+      method: "DELETE"
+    }),
   updateBranding: (ispId, payload) =>
     request(withIsp("/branding", ispId), {
       method: "POST",

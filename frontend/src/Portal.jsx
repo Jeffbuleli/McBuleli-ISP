@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { API_URL, api, publicAssetUrl } from "./api";
+import { API_URL, api } from "./api";
+import { mcbuleliLogoUrl } from "./brandAssets.js";
 import LangSwitch from "./LangSwitch.jsx";
 import { portalBrandTitle, portalT } from "./portalCopy.js";
 
@@ -42,12 +43,6 @@ function hasPortalIspContact(b) {
   const email = b.contactEmail != null ? String(b.contactEmail).trim() : "";
   const addr = b.address != null ? String(b.address).trim() : "";
   return Boolean(phone || email || addr);
-}
-
-function portalBrandInitial(displayName) {
-  const s = displayName != null ? String(displayName).trim() : "";
-  if (!s || s === "AA") return "?";
-  return s.charAt(0).toUpperCase();
 }
 
 async function portalFetch(path, auth, options = {}) {
@@ -93,6 +88,7 @@ export default function Portal() {
   const [setupTokenInput, setSetupTokenInput] = useState("");
   const [setupPasswordInput, setSetupPasswordInput] = useState("");
   const [session, setSession] = useState(null);
+  const [portalAnnouncements, setPortalAnnouncements] = useState([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [tidForm, setTidForm] = useState({ invoiceId: "", tid: "", submittedByPhone: "", amountUsd: "" });
@@ -119,16 +115,26 @@ export default function Portal() {
       setNotice("");
       if (!a || (a.type === "opaque" && (!a.token || a.token.length < 16))) {
         setSession(null);
+        setPortalAnnouncements([]);
         setError(portalT(uiLang, "errBootstrap"));
         return;
       }
       if (a.type === "subscriber" && !a.jwt) {
         setSession(null);
+        setPortalAnnouncements([]);
         setError(portalT(uiLang, "errNoSession"));
         return;
       }
       const data = await portalFetch("/portal/session", a);
       setSession(data);
+      let pa = [];
+      try {
+        const ann = await portalFetch("/portal/announcements", a);
+        pa = ann.items || [];
+      } catch {
+        pa = [];
+      }
+      setPortalAnnouncements(pa);
       if (a.type === "opaque" && a.token) {
         const url = new URL(window.location.href);
         url.searchParams.set("token", a.token);
@@ -142,7 +148,10 @@ export default function Portal() {
     if (!auth) return;
     if (auth.type === "opaque" && auth.token.length < 16) return;
     if (auth.type === "subscriber" && !auth.jwt) return;
-    loadSession(auth).catch((e) => setError(e.message));
+    loadSession(auth).catch((e) => {
+      setPortalAnnouncements([]);
+      setError(e.message);
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- bootstrap from URL or stored subscriber JWT
 
   useEffect(() => {
@@ -307,24 +316,14 @@ export default function Portal() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {brand?.logoUrl ? (
-              <img
-                className="portal-hero-logo"
-                src={publicAssetUrl(brand.logoUrl)}
-                alt=""
-                height={48}
-                width={48}
-                style={{ height: 48, width: "auto", objectFit: "contain" }}
-              />
-            ) : (
-              <div
-                className="portal-brand-fallback"
-                style={{ color: brand?.primaryColor || "#5d4037" }}
-                aria-hidden="true"
-              >
-                {portalBrandInitial(brand?.displayName)}
-              </div>
-            )}
+            <img
+              className="portal-hero-logo"
+              src={mcbuleliLogoUrl}
+              alt="McBuleli"
+              height={48}
+              width={48}
+              style={{ height: 48, width: "auto", objectFit: "contain" }}
+            />
             <div>
               <p className="eyebrow">{t("eyebrow")}</p>
               <h1 style={{ color: brand?.primaryColor || "#5d4037", margin: 0 }}>
@@ -335,6 +334,22 @@ export default function Portal() {
           <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="portal" />
         </div>
         <p>{t("heroLead")}</p>
+        {portalAnnouncements.length > 0 ? (
+          <section className="portal-announcements" aria-label={t("announcementsTitle")}>
+            <h2 className="portal-announcements__title">{t("announcementsTitle")}</h2>
+            <div className="portal-announcements__grid">
+              {portalAnnouncements.slice(0, 5).map((a) => (
+                <article key={a.id} className="portal-announcement-card">
+                  <h3 className="portal-announcement-card__title">{a.title}</h3>
+                  <div
+                    className="portal-announcement-card__body"
+                    dangerouslySetInnerHTML={{ __html: a.bodyHtml || "" }}
+                  />
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
         {session && brand && hasPortalIspContact(brand) ? (
           <aside className="portal-isp-contact" aria-label={t("contactTitle")}>
             <p className="portal-isp-contact__title">{t("contactTitle")}</p>
@@ -588,7 +603,7 @@ export default function Portal() {
         <footer className="portal-tenant-footer">{brand.portalFooterText}</footer>
       ) : null}
       <footer className="mcbuleli-site-footer">
-        <img src="/mcbuleli-logo.svg" alt="" width={28} height={28} className="mcbuleli-site-footer__logo" />
+        <img src={mcbuleliLogoUrl} alt="" width={28} height={28} className="mcbuleli-site-footer__logo" />
         <p>{t("mcbuleliFooter")}</p>
       </footer>
     </main>

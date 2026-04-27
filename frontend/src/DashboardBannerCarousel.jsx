@@ -5,7 +5,13 @@ const ROTATE_MS = 6000;
 
 export default function DashboardBannerCarousel({ slides }) {
   const list = useMemo(
-    () => (Array.isArray(slides) ? slides.filter((s) => s?.imageUrl) : []),
+    () =>
+      Array.isArray(slides)
+        ? slides.filter((s) => {
+            const u = s?.imageUrl != null ? String(s.imageUrl).trim() : "";
+            return Boolean(u);
+          })
+        : [],
     [slides]
   );
   const urlKey = useMemo(() => list.map((s) => s.imageUrl).join("|"), [list]);
@@ -33,8 +39,8 @@ export default function DashboardBannerCarousel({ slides }) {
       className="dashboard-banner-carousel__img"
       src={src}
       alt={s.altText || ""}
-      width={1200}
-      height={400}
+      width={720}
+      height={160}
       loading="lazy"
       decoding="async"
     />
