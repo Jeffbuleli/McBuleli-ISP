@@ -2704,6 +2704,12 @@ function App() {
     ? workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user)
     : workspaceHeaderTitle(null, tenantContext, [], tenantContext?.ispId, null);
 
+  const isFieldAgentForPwaNav = user?.role === "field_agent";
+  const pwaNavCategories = useMemo(
+    () => (user ? buildDashboardNavCategories(t, user, Boolean(isFieldAgentForPwaNav)) : []),
+    [t, user, isFieldAgentForPwaNav]
+  );
+
   if (!user) {
     const forgotHintPlain = (isEn ? publicAuthCopyForgot.en : publicAuthCopyForgot.fr).trim();
     return (
@@ -2982,11 +2988,6 @@ function App() {
       user.role === "isp_admin");
 
   const gateMobile = isMobileShell;
-
-  const pwaNavCategories = useMemo(
-    () => buildDashboardNavCategories(t, user, isFieldAgent),
-    [t, user, isFieldAgent]
-  );
 
   return (
     <>
