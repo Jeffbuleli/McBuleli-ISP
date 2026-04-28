@@ -445,6 +445,8 @@ function mapHomePromoRow(row) {
     linkUrl: row.link_url ?? row.linkUrl ?? null,
     altTextFr: row.alt_text_fr ?? row.altTextFr ?? null,
     altTextEn: row.alt_text_en ?? row.altTextEn ?? null,
+    captionFr: normalizePromoAlt(row.caption_fr ?? row.captionFr),
+    captionEn: normalizePromoAlt(row.caption_en ?? row.captionEn),
     orientation: row.orientation === "square" ? "square" : "landscape",
     isActive: row.is_active ?? row.isActive !== false,
     updatedAt: row.updated_at ?? row.updatedAt
@@ -506,6 +508,8 @@ function mapFaqAdRow(row) {
     linkUrl: row.link_url ?? row.linkUrl ?? null,
     altTextFr: normalizePromoAlt(row.alt_text_fr ?? row.altTextFr),
     altTextEn: normalizePromoAlt(row.alt_text_en ?? row.altTextEn),
+    captionFr: normalizePromoAlt(row.caption_fr ?? row.captionFr),
+    captionEn: normalizePromoAlt(row.caption_en ?? row.captionEn),
     imageUrl: bufferToDataUrl(mime, bytes),
     isActive: row.is_active ?? row.isActive !== false,
     createdAt: row.created_at ?? row.createdAt,
@@ -521,6 +525,8 @@ function mapFaqAdRowPublic(row) {
     linkUrl: m.linkUrl,
     altTextFr: m.altTextFr,
     altTextEn: m.altTextEn,
+    captionFr: m.captionFr,
+    captionEn: m.captionEn,
     imageUrl: m.imageUrl
   };
 }
@@ -616,7 +622,7 @@ app.get("/api/public/home-marketing", rlPublicRead, async (_req, res) => {
   try {
     const [promosR, blocksR, founderR, faqAdsR] = await Promise.all([
       query(
-        `SELECT slot_index, link_url, alt_text_fr, alt_text_en, orientation, image_bytes, image_mime, is_active, updated_at
+        `SELECT slot_index, link_url, alt_text_fr, alt_text_en, caption_fr, caption_en, orientation, image_bytes, image_mime, is_active, updated_at
          FROM platform_home_promos
          WHERE slot_index BETWEEN 0 AND 2 AND is_active = TRUE
          ORDER BY slot_index`
@@ -632,7 +638,7 @@ app.get("/api/public/home-marketing", rlPublicRead, async (_req, res) => {
         `SELECT caption, image_bytes, image_mime, updated_at FROM platform_public_founder_showcase WHERE id = 1`
       ),
       query(
-        `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, image_bytes, image_mime, is_active, updated_at
+        `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, caption_fr, caption_en, image_bytes, image_mime, is_active, updated_at
          FROM platform_public_faq_ads
          WHERE is_active = TRUE AND image_bytes IS NOT NULL AND octet_length(image_bytes) > 0
          ORDER BY sort_order ASC, updated_at DESC
@@ -5567,7 +5573,7 @@ app.delete(
 
 app.get("/api/system-owner/home-promos", authenticate, requireRoles("system_owner"), async (_req, res) => {
   const r = await query(
-    `SELECT slot_index, link_url, alt_text_fr, alt_text_en, orientation, image_bytes, image_mime, is_active, updated_at
+    `SELECT slot_index, link_url, alt_text_fr, alt_text_en, caption_fr, caption_en, orientation, image_bytes, image_mime, is_active, updated_at
      FROM platform_home_promos
      WHERE slot_index BETWEEN 0 AND 2
      ORDER BY slot_index`
@@ -5598,6 +5604,14 @@ app.patch("/api/system-owner/home-promos/:slot", authenticate, requireRoles("sys
     pieces.push(`alt_text_en = $${i++}`);
     vals.push(normalizePromoAlt(b.altTextEn));
   }
+  if (Object.prototype.hasOwnProperty.call(b, "captionFr")) {
+    pieces.push(`caption_fr = $${i++}`);
+    vals.push(normalizePromoAlt(b.captionFr));
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "captionEn")) {
+    pieces.push(`caption_en = $${i++}`);
+    vals.push(normalizePromoAlt(b.captionEn));
+  }
   if (Object.prototype.hasOwnProperty.call(b, "orientation")) {
     const o = String(b.orientation || "").toLowerCase() === "square" ? "square" : "landscape";
     pieces.push(`orientation = $${i++}`);
@@ -5608,7 +5622,9 @@ app.patch("/api/system-owner/home-promos/:slot", authenticate, requireRoles("sys
     vals.push(Boolean(b.isActive));
   }
   if (pieces.length === 0) {
-    return res.status(400).json({ message: "Provide linkUrl, altTextFr, altTextEn, orientation, and/or isActive." });
+    return res
+      .status(400)
+      .json({ message: "Provide linkUrl, altTextFr, altTextEn, captionFr, captionEn, orientation, and/or isActive." });
   }
   pieces.push("updated_at = NOW()");
   vals.push(slot);
@@ -5621,7 +5637,7 @@ app.patch("/api/system-owner/home-promos/:slot", authenticate, requireRoles("sys
     details: { fields: Object.keys(b) }
   });
   const row = await query(
-    `SELECT slot_index, link_url, alt_text_fr, alt_text_en, orientation, image_bytes, image_mime, is_active, updated_at
+    `SELECT slot_index, link_url, alt_text_fr, alt_text_en, caption_fr, caption_en, orientation, image_bytes, image_mime, is_active, updated_at
      FROM platform_home_promos WHERE slot_index = $1`,
     [slot]
   );
@@ -5655,7 +5671,7 @@ app.post(
       details: { mime: req.file.mimetype }
     });
     const row = await query(
-      `SELECT slot_index, link_url, alt_text_fr, alt_text_en, orientation, image_bytes, image_mime, is_active, updated_at
+      `SELECT slot_index, link_url, alt_text_fr, alt_text_en, caption_fr, caption_en, orientation, image_bytes, image_mime, is_active, updated_at
        FROM platform_home_promos WHERE slot_index = $1`,
       [slot]
     );
@@ -5678,7 +5694,7 @@ app.delete("/api/system-owner/home-promos/:slot/image", authenticate, requireRol
     details: {}
   });
   const row = await query(
-    `SELECT slot_index, link_url, alt_text_fr, alt_text_en, orientation, image_bytes, image_mime, is_active, updated_at
+    `SELECT slot_index, link_url, alt_text_fr, alt_text_en, caption_fr, caption_en, orientation, image_bytes, image_mime, is_active, updated_at
      FROM platform_home_promos WHERE slot_index = $1`,
     [slot]
   );
@@ -5966,7 +5982,7 @@ function normalizeFaqAdInternalLabel(raw) {
 
 app.get("/api/system-owner/faq-ads", authenticate, requireRoles("system_owner"), async (_req, res) => {
   const r = await query(
-    `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, image_bytes, image_mime, is_active, created_at, updated_at
+    `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, caption_fr, caption_en, image_bytes, image_mime, is_active, created_at, updated_at
      FROM platform_public_faq_ads
      ORDER BY sort_order ASC, updated_at DESC
      LIMIT 100`
@@ -5983,15 +5999,17 @@ app.post("/api/system-owner/faq-ads", authenticate, requireRoles("system_owner")
     return res.status(400).json({ message: "linkUrl must be a valid http(s) URL or empty." });
   }
   const inserted = await query(
-    `INSERT INTO platform_public_faq_ads (id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, is_active)
-     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
-     RETURNING id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, image_bytes, image_mime, is_active, created_at, updated_at`,
+    `INSERT INTO platform_public_faq_ads (id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, caption_fr, caption_en, is_active)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, caption_fr, caption_en, image_bytes, image_mime, is_active, created_at, updated_at`,
     [
       sortOrder,
       internalLabel,
       normLink,
       normalizePromoAlt(b.altTextFr),
       normalizePromoAlt(b.altTextEn),
+      normalizePromoAlt(b.captionFr),
+      normalizePromoAlt(b.captionEn),
       b.isActive !== false
     ]
   );
@@ -6036,6 +6054,14 @@ app.patch("/api/system-owner/faq-ads/:id", authenticate, requireRoles("system_ow
     pieces.push(`alt_text_en = $${i++}`);
     vals.push(normalizePromoAlt(b.altTextEn));
   }
+  if (Object.prototype.hasOwnProperty.call(b, "captionFr")) {
+    pieces.push(`caption_fr = $${i++}`);
+    vals.push(normalizePromoAlt(b.captionFr));
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "captionEn")) {
+    pieces.push(`caption_en = $${i++}`);
+    vals.push(normalizePromoAlt(b.captionEn));
+  }
   if (Object.prototype.hasOwnProperty.call(b, "isActive")) {
     pieces.push(`is_active = $${i++}`);
     vals.push(Boolean(b.isActive));
@@ -6054,7 +6080,7 @@ app.patch("/api/system-owner/faq-ads/:id", authenticate, requireRoles("system_ow
     details: { fields: Object.keys(b) }
   });
   const row = await query(
-    `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, image_bytes, image_mime, is_active, created_at, updated_at
+    `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, caption_fr, caption_en, image_bytes, image_mime, is_active, created_at, updated_at
      FROM platform_public_faq_ads WHERE id = $1`,
     [id]
   );
@@ -6106,7 +6132,7 @@ app.post(
       details: { mime: req.file.mimetype }
     });
     const row = await query(
-      `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, image_bytes, image_mime, is_active, created_at, updated_at
+      `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, caption_fr, caption_en, image_bytes, image_mime, is_active, created_at, updated_at
        FROM platform_public_faq_ads WHERE id = $1`,
       [id]
     );
@@ -6129,7 +6155,7 @@ app.delete("/api/system-owner/faq-ads/:id/image", authenticate, requireRoles("sy
     details: {}
   });
   const row = await query(
-    `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, image_bytes, image_mime, is_active, created_at, updated_at
+    `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, caption_fr, caption_en, image_bytes, image_mime, is_active, created_at, updated_at
      FROM platform_public_faq_ads WHERE id = $1`,
     [id]
   );

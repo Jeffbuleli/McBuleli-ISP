@@ -2749,6 +2749,12 @@ body:has(.auth-simple--dark) {
     grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
     gap: 28px;
   }
+
+  .public-faq-ad-column {
+    position: sticky;
+    top: 1.25rem;
+    align-self: start;
+  }
 }
 
 .public-faq-main {
@@ -2763,27 +2769,55 @@ body:has(.auth-simple--dark) {
 }
 
 .public-faq-ad-card {
-  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
   overflow: hidden;
-  border: 1px solid rgba(93, 64, 55, 0.14);
-  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(11, 21, 36, 0.2);
+  background: #0b1524;
+  box-shadow: 0 12px 36px rgba(11, 21, 36, 0.2);
 }
 
 .public-faq-ad-card__link {
-  display: block;
-  line-height: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  text-decoration: none;
+  color: inherit;
 }
 
-.public-faq-ad-column__img {
+.public-faq-ad-card__media {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.public-faq-ad-card__media img {
   width: 100%;
   height: auto;
   display: block;
-  vertical-align: top;
+  object-fit: contain;
+  max-height: 260px;
+}
+
+.public-faq-ad-card__caption {
+  flex-shrink: 0;
+}
+
+@media (max-width: 899px) {
+  .public-faq-ad-card__media img {
+    max-height: min(48vh, 360px);
+  }
 }
 
 .public-site--dark .public-faq-ad-card {
-  background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
 }
 
 .public-faq {

@@ -892,6 +892,8 @@ export async function initDb() {
       [s, s === 0 ? "square" : "landscape"]
     );
   }
+  await query("ALTER TABLE platform_home_promos ADD COLUMN IF NOT EXISTS caption_fr VARCHAR(400) NULL;");
+  await query("ALTER TABLE platform_home_promos ADD COLUMN IF NOT EXISTS caption_en VARCHAR(400) NULL;");
 
   await query(`
     CREATE TABLE IF NOT EXISTS platform_public_footer_blocks (
@@ -948,6 +950,8 @@ export async function initDb() {
   await query(
     "CREATE INDEX IF NOT EXISTS idx_platform_faq_ads_active ON platform_public_faq_ads (is_active, sort_order);"
   );
+  await query("ALTER TABLE platform_public_faq_ads ADD COLUMN IF NOT EXISTS caption_fr VARCHAR(400) NULL;");
+  await query("ALTER TABLE platform_public_faq_ads ADD COLUMN IF NOT EXISTS caption_en VARCHAR(400) NULL;");
 
   await query(`
     CREATE TABLE IF NOT EXISTS platform_dashboard_banners (

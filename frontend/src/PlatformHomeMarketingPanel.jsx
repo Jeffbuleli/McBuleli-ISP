@@ -24,6 +24,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     linkUrl: "",
     altTextFr: "",
     altTextEn: "",
+    captionFr: "",
+    captionEn: "",
     isActive: true
   });
   const [footerForm, setFooterForm] = useState({
@@ -58,6 +60,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
         linkUrl: s.linkUrl ?? "",
         altTextFr: s.altTextFr ?? "",
         altTextEn: s.altTextEn ?? "",
+        captionFr: s.captionFr ?? "",
+        captionEn: s.captionEn ?? "",
         orientation: s.orientation === "square" ? "square" : "landscape",
         isActive: s.isActive !== false
       };
@@ -102,6 +106,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
             linkUrl: it.linkUrl || "",
             altTextFr: it.altTextFr || "",
             altTextEn: it.altTextEn || "",
+            captionFr: it.captionFr || "",
+            captionEn: it.captionEn || "",
             isActive: it.isActive !== false
           };
         }
@@ -223,6 +229,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
         linkUrl: ed.linkUrl.trim() || null,
         altTextFr: ed.altTextFr.trim() || null,
         altTextEn: ed.altTextEn.trim() || null,
+        captionFr: ed.captionFr.trim() || null,
+        captionEn: ed.captionEn.trim() || null,
         orientation: ed.orientation,
         isActive: ed.isActive
       });
@@ -387,6 +395,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
         linkUrl: ed.linkUrl.trim() || null,
         altTextFr: ed.altTextFr.trim() || null,
         altTextEn: ed.altTextEn.trim() || null,
+        captionFr: ed.captionFr.trim() || null,
+        captionEn: ed.captionEn.trim() || null,
         isActive: ed.isActive
       });
       await loadFaqAds();
@@ -552,6 +562,12 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       </div>
 
       <h3 style={{ marginTop: 20 }}>{t("Les trois encarts (Offres / WhatsApp)", "The three offer tiles")}</h3>
+      <p className="app-meta" style={{ marginTop: 6, maxWidth: "52rem" }}>
+        {t(
+          "Légende : texte sous l’image (comme sur la page publique). Texte alt : description pour l’accessibilité et les lecteurs d’écran ; sert aussi de légende si la légende est vide.",
+          "Caption: text under the image (as on the public page). Alt text: description for accessibility and screen readers; also used as the caption if the caption field is empty."
+        )}
+      </p>
       <div className="grid">
         {[0, 1, 2].map((slot) => {
           const row = promoSlots.find((s) => s.slotIndex === slot);
@@ -559,6 +575,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
             linkUrl: "",
             altTextFr: "",
             altTextEn: "",
+            captionFr: "",
+            captionEn: "",
             orientation: slot === 0 ? "square" : "landscape",
             isActive: true
           };
@@ -626,6 +644,32 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
                 }
                 style={{ marginTop: 8 }}
               />
+              <input
+                placeholder={t("Légende FR (sous l’image)", "Caption FR (under image)")}
+                value={ed.captionFr}
+                disabled={saving}
+                maxLength={400}
+                onChange={(e) =>
+                  setPromoEdits((prev) => ({
+                    ...prev,
+                    [slot]: { ...ed, captionFr: e.target.value }
+                  }))
+                }
+                style={{ marginTop: 8 }}
+              />
+              <input
+                placeholder={t("Légende EN (sous l’image)", "Caption EN (under image)")}
+                value={ed.captionEn}
+                disabled={saving}
+                maxLength={400}
+                onChange={(e) =>
+                  setPromoEdits((prev) => ({
+                    ...prev,
+                    [slot]: { ...ed, captionEn: e.target.value }
+                  }))
+                }
+                style={{ marginTop: 8 }}
+              />
               <label style={{ display: "block", marginTop: 8 }}>
                 {t("Format carte", "Card shape")}
                 <select
@@ -670,8 +714,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       </h3>
       <p className="app-meta" style={{ marginTop: 4, maxWidth: "52rem" }}>
         {t(
-          "À droite de la FAQ sur grand écran ; sous la FAQ sur mobile. Seules les entrées actives avec une image s’affichent côté public.",
-          "To the right of the FAQ on desktop; below the FAQ on mobile. Only active rows with an uploaded image are shown on the public site."
+          "À droite de la FAQ sur grand écran ; sous la FAQ sur mobile. Seules les entrées actives avec une image s’affichent côté public. Optionnel : légende sous l’image (même style que les trois encarts) ; si vide, le texte alt est réutilisé comme légende.",
+          "To the right of the FAQ on desktop; below the FAQ on mobile. Only active rows with an uploaded image are shown on the public site. Optional: caption under the image (same style as the three offer tiles); if empty, alt text is reused as the caption."
         )}
       </p>
       <form
@@ -688,6 +732,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
               linkUrl: faqNew.linkUrl.trim() || null,
               altTextFr: faqNew.altTextFr.trim() || null,
               altTextEn: faqNew.altTextEn.trim() || null,
+              captionFr: faqNew.captionFr.trim() || null,
+              captionEn: faqNew.captionEn.trim() || null,
               isActive: faqNew.isActive
             });
             const newFile = faqNewImageInputRef.current?.files?.[0];
@@ -701,6 +747,8 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
               linkUrl: "",
               altTextFr: "",
               altTextEn: "",
+              captionFr: "",
+              captionEn: "",
               isActive: true
             });
             await loadFaqAds();
@@ -747,6 +795,22 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
           value={faqNew.altTextEn}
           disabled={saving}
           onChange={(e) => setFaqNew((f) => ({ ...f, altTextEn: e.target.value }))}
+          style={{ display: "block", marginBottom: 8, width: "100%", maxWidth: 480 }}
+        />
+        <input
+          placeholder={t("Légende FR (sous l’image, optionnel)", "Caption FR (under image, optional)")}
+          value={faqNew.captionFr}
+          disabled={saving}
+          maxLength={400}
+          onChange={(e) => setFaqNew((f) => ({ ...f, captionFr: e.target.value }))}
+          style={{ display: "block", marginBottom: 8, width: "100%", maxWidth: 480 }}
+        />
+        <input
+          placeholder={t("Légende EN (sous l’image, optionnel)", "Caption EN (under image, optional)")}
+          value={faqNew.captionEn}
+          disabled={saving}
+          maxLength={400}
+          onChange={(e) => setFaqNew((f) => ({ ...f, captionEn: e.target.value }))}
           style={{ display: "block", marginBottom: 8, width: "100%", maxWidth: 480 }}
         />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -862,6 +926,36 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
                   setFaqAdEditById((prev) => ({
                     ...prev,
                     [item.id]: { ...ed, altTextEn: e.target.value }
+                  }))
+                }
+                style={{ display: "block", marginTop: 4, width: "100%", maxWidth: 480 }}
+              />
+            </label>
+            <label style={{ display: "block", marginBottom: 6 }}>
+              {t("Légende FR", "Caption FR")}
+              <input
+                value={ed.captionFr}
+                disabled={saving}
+                maxLength={400}
+                onChange={(e) =>
+                  setFaqAdEditById((prev) => ({
+                    ...prev,
+                    [item.id]: { ...ed, captionFr: e.target.value }
+                  }))
+                }
+                style={{ display: "block", marginTop: 4, width: "100%", maxWidth: 480 }}
+              />
+            </label>
+            <label style={{ display: "block", marginBottom: 6 }}>
+              {t("Légende EN", "Caption EN")}
+              <input
+                value={ed.captionEn}
+                disabled={saving}
+                maxLength={400}
+                onChange={(e) =>
+                  setFaqAdEditById((prev) => ({
+                    ...prev,
+                    [item.id]: { ...ed, captionEn: e.target.value }
                   }))
                 }
                 style={{ display: "block", marginTop: 4, width: "100%", maxWidth: 480 }}

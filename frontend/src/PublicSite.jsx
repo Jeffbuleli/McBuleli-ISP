@@ -668,18 +668,41 @@ export default function PublicSite() {
           {faqAds.length > 0 ? (
             <aside className="public-faq-ad-column" aria-label={t("Espace publicitaire", "Advertisement")}>
               {faqAds.map((ad) => {
-                const alt = (isEn ? ad.altTextEn : ad.altTextFr) || t("Publicité", "Advertisement");
-                const img = (
-                  <img src={ad.imageUrl} alt={alt} className="public-faq-ad-column__img" loading="lazy" decoding="async" />
+                const capFr = ad.captionFr != null && String(ad.captionFr).trim() ? String(ad.captionFr).trim() : "";
+                const capEn = ad.captionEn != null && String(ad.captionEn).trim() ? String(ad.captionEn).trim() : "";
+                const altFr = ad.altTextFr != null && String(ad.altTextFr).trim() ? String(ad.altTextFr).trim() : "";
+                const altEn = ad.altTextEn != null && String(ad.altTextEn).trim() ? String(ad.altTextEn).trim() : "";
+                const legendFr = capFr || altFr;
+                const legendEn = capEn || altEn;
+                const legend = (isEn ? legendEn : legendFr).trim();
+                const imgAlt = (isEn ? altEn || capEn : altFr || capFr) || t("Publicité", "Advertisement");
+                const media = (
+                  <span className="public-faq-ad-card__media">
+                    <img src={ad.imageUrl} alt={imgAlt} loading="lazy" decoding="async" />
+                  </span>
                 );
+                const caption =
+                  legend.length > 0 ? (
+                    <span className="public-home-promo-card__caption public-faq-ad-card__caption">{legend}</span>
+                  ) : null;
                 return (
                   <div key={ad.id} className="public-faq-ad-card">
                     {ad.linkUrl ? (
-                      <a href={ad.linkUrl} target="_blank" rel="noopener noreferrer" className="public-faq-ad-card__link">
-                        {img}
+                      <a
+                        href={ad.linkUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="public-faq-ad-card__link"
+                        aria-label={legend || imgAlt}
+                      >
+                        {media}
+                        {caption}
                       </a>
                     ) : (
-                      img
+                      <>
+                        {media}
+                        {caption}
+                      </>
                     )}
                   </div>
                 );

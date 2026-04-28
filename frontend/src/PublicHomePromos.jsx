@@ -50,23 +50,35 @@ export default function PublicHomePromos({ t, isEn, variant = "marketing", apiPr
         remote?.linkUrl != null && String(remote.linkUrl).trim() ? String(remote.linkUrl).trim() : "";
       const href = linkTrim || WHATSAPP_MC;
       if (remote?.imageUrl) {
+        const altFr = (remote.altTextFr != null && String(remote.altTextFr).trim()) || fallback.altFr;
+        const altEn = (remote.altTextEn != null && String(remote.altTextEn).trim()) || fallback.altEn;
+        const capFr = remote.captionFr != null && String(remote.captionFr).trim() ? String(remote.captionFr).trim() : "";
+        const capEn = remote.captionEn != null && String(remote.captionEn).trim() ? String(remote.captionEn).trim() : "";
         return {
           key: `api-${idx}`,
           src: publicAssetUrl(remote.imageUrl),
           href,
           orientation: remote.orientation === "square" ? "square" : "landscape",
-          altFr: (remote.altTextFr != null && String(remote.altTextFr).trim()) || fallback.altFr,
-          altEn: (remote.altTextEn != null && String(remote.altTextEn).trim()) || fallback.altEn
+          altFr,
+          altEn,
+          captionFr: capFr || altFr,
+          captionEn: capEn || altEn
         };
       }
+      const altFr = (remote?.altTextFr != null && String(remote.altTextFr).trim()) || fallback.altFr;
+      const altEn = (remote?.altTextEn != null && String(remote.altTextEn).trim()) || fallback.altEn;
+      const capFr = remote?.captionFr != null && String(remote.captionFr).trim() ? String(remote.captionFr).trim() : "";
+      const capEn = remote?.captionEn != null && String(remote.captionEn).trim() ? String(remote.captionEn).trim() : "";
       return {
         key: fallback.key,
         src: fallback.src,
         href,
         orientation:
           remote?.orientation === "square" ? "square" : remote?.orientation === "landscape" ? "landscape" : fallback.orientation,
-        altFr: (remote?.altTextFr != null && String(remote.altTextFr).trim()) || fallback.altFr,
-        altEn: (remote?.altTextEn != null && String(remote.altTextEn).trim()) || fallback.altEn
+        altFr,
+        altEn,
+        captionFr: capFr || altFr,
+        captionEn: capEn || altEn
       };
     });
   }, [apiPromos]);
@@ -104,7 +116,8 @@ export default function PublicHomePromos({ t, isEn, variant = "marketing", apiPr
       </div>
       <div className="public-home-promos-grid">
         {ads.map((ad) => {
-          const caption = isEn ? ad.altEn : ad.altFr;
+          const caption = isEn ? ad.captionEn : ad.captionFr;
+          const imgAlt = isEn ? ad.altEn : ad.altFr;
           return (
             <a
               key={ad.key}
@@ -117,7 +130,7 @@ export default function PublicHomePromos({ t, isEn, variant = "marketing", apiPr
               <span className="public-home-promo-card__media">
                 <img
                   src={ad.src}
-                  alt=""
+                  alt={imgAlt}
                   loading="lazy"
                   decoding="async"
                   sizes="(min-width: 960px) 33vw, 100vw"
