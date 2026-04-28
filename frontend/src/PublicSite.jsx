@@ -485,6 +485,8 @@ export default function PublicSite() {
             ))}
           </nav>
           <div className="public-hero-toolbar public-hero-toolbar-row">
+            <PublicSocialLinks idPrefix="public" isEn={isEn} compact />
+            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="public" compact />
             <button
               type="button"
               className="public-hero-menu-btn btn-icon-toolbar"
@@ -494,8 +496,6 @@ export default function PublicSite() {
             >
               <IconMenuHamburger width={18} height={18} />
             </button>
-            <PublicSocialLinks idPrefix="public" isEn={isEn} compact />
-            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="public" compact />
           </div>
         </div>
         <PublicMobileNavMenu
