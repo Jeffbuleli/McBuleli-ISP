@@ -1484,6 +1484,14 @@ function App() {
 
   function onLogout() {
     setAuthToken("");
+    setLoginForm({ email: "", password: "" });
+    setForgotEmail("");
+    setForgotNotice("");
+    setForgotBusy(false);
+    setResetTokenState("");
+    setLoginAuthStep("signin");
+    setError("");
+    setNotice("");
     setUser(null);
     setMfaLogin(null);
     setMfaCode("");
@@ -3304,6 +3312,7 @@ function App() {
               >
                 <DashboardHistograms
                   t={t}
+                  isEn={isEn}
                   globalSummary={user.role === "system_owner" ? superDashboard : null}
                   tenantDashboard={dashboard}
                   networkStats={networkStats}
@@ -5903,50 +5912,52 @@ function App() {
       </section>
 
       <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
-      <section className="panel">
-        <h2>Factures</h2>
-        <div className="table">
-          <div className="row header">
-            <span>ID</span>
-            <span>Montant</span>
-            <span>Statut</span>
-            <span>Paiement</span>
-            <span>PDF</span>
-          </div>
-          {invoices.map((invoice) => (
-            <div className="row" key={invoice.id}>
-              <span>{invoice.id.slice(0, 8)}</span>
-              <span>${invoice.amountUsd}</span>
-              <span>{invoice.status}</span>
-              <span>
-                {invoice.status === "unpaid" || invoice.status === "overdue" ? (
-                  !isFieldAgent ? (
-                    <button type="button" onClick={() => onMarkPaid(invoice.id, invoice.amountUsd)}>
-                      Marquer payée
-                    </button>
-                  ) : (
-                    "—"
-                  )
-                ) : (
-                  "Payée"
-                )}
-              </span>
-              <span>
-                <button
-                  type="button"
-                  className="btn-secondary-outline"
-                  onClick={() => onDownloadInvoiceProforma(invoice.id)}
-                >
-                  Proforma
-                </button>
-              </span>
+      <section className="panel billing-invoices-panel">
+        <h2>{t("Factures", "Invoices")}</h2>
+        <div className="billing-invoices-scroll">
+          <div className="table billing-invoices-table">
+            <div className="row header">
+              <span>ID</span>
+              <span>{t("Montant", "Amount")}</span>
+              <span>{t("Statut", "Status")}</span>
+              <span>{t("Paiement", "Payment")}</span>
+              <span>PDF</span>
             </div>
-          ))}
+            {invoices.map((invoice) => (
+              <div className="row" key={invoice.id}>
+                <span>{invoice.id.slice(0, 8)}</span>
+                <span>${invoice.amountUsd}</span>
+                <span>{invoiceStatusShort(invoice.status, isEn)}</span>
+                <span>
+                  {invoice.status === "unpaid" || invoice.status === "overdue" ? (
+                    !isFieldAgent ? (
+                      <button type="button" onClick={() => onMarkPaid(invoice.id, invoice.amountUsd)}>
+                        {t("Marquer payée", "Mark paid")}
+                      </button>
+                    ) : (
+                      "—"
+                    )
+                  ) : (
+                    t("Payée", "Paid")
+                  )}
+                </span>
+                <span>
+                  <button
+                    type="button"
+                    className="btn-secondary-outline"
+                    onClick={() => onDownloadInvoiceProforma(invoice.id)}
+                  >
+                    {t("Proforma", "Proforma")}
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
       <section className="panel">
-        <h2>Abonnements</h2>
+        <h2>{t("Abonnements", "Subscriptions")}</h2>
         {subscriptions.map((subscription) => (
           <p key={subscription.id}>
             {subscription.id.slice(0, 8)} - {subscription.status} ({subscription.accessType || "pppoe"})

@@ -30,7 +30,7 @@ export function applyWorkspacePwaManifest(workspaceTitle) {
 
   const clean = workspaceTitle != null ? String(workspaceTitle).trim() : "";
   const partner = clean && clean !== "AA" ? clean : "";
-  const name = partner ? `${partner} — McBuleli` : "McBuleli ISP";
+  const name = partner ? `${partner} — McBuleli` : "McBuleli";
   const short_name = partner ? (partner.length > 16 ? `${partner.slice(0, 15)}…` : partner) : "McBuleli";
 
   const manifest = {

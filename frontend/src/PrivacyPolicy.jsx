@@ -22,7 +22,7 @@ export default function PrivacyPolicy() {
         <div className="public-hero-top">
           <a className="public-brand" href="/">
             <img className="public-logo-img" src={mcbuleliLogoUrl} alt="" width={40} height={40} loading="eager" />
-            <span>McBuleli ISP</span>
+            <span>McBuleli</span>
           </a>
           <div className="privacy-page-toolbar">
             <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="privacy" compact />
@@ -37,7 +37,7 @@ export default function PrivacyPolicy() {
         {isEn ? (
           <>
             <p>
-              McBuleli ISP (&quot;McBuleli&quot;, &quot;we&quot;) processes limited personal information to operate its
+              McBuleli processes limited personal information to operate its
               platform—authentication, invoicing and support—and to improve reliability and security. This page summarizes
               that processing in plain language.
             </p>
@@ -76,7 +76,7 @@ export default function PrivacyPolicy() {
         ) : (
           <>
             <p>
-              McBuleli ISP (« McBuleli », « nous ») traite uniquement les informations personnelles nécessaires au
+              McBuleli (« nous ») traite uniquement les informations personnelles nécessaires au
               fonctionnement de la plateforme — authentification, facturation, support — ainsi qu’à la sécurité et à la
               fiabilité du service.
             </p>

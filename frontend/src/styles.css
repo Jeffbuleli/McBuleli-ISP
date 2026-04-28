@@ -1122,12 +1122,31 @@ button.btn-secondary-outline:hover:not(:disabled) {
   overflow: hidden;
 }
 
-.dash-hist-bar-fill {
+.dash-hist-bar-fill.dash-hist-bar-fill--default {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #43a047, #66bb6a);
   min-width: 4px;
   transition: width 0.35s ease;
+}
+
+.dash-hist-bar-fill--tier-high {
+  background: linear-gradient(90deg, #15803d, #22c55e);
+}
+
+.dash-hist-bar-fill--tier-mid {
+  background: linear-gradient(90deg, #ea580c, #fb923c);
+}
+
+.dash-hist-bar-fill--tier-low {
+  background: linear-gradient(90deg, #b91c1c, #f87171);
+}
+
+.dash-hist-tier-legend {
+  margin: 8px 0 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--mb-muted);
 }
 
 .dash-hist-bar-meta {
@@ -1143,7 +1162,7 @@ button.btn-secondary-outline:hover:not(:disabled) {
   border: none;
   font-weight: 600;
   color: var(--mb-text);
-  max-width: 55%;
+  max-width: min(82%, 16rem);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1672,6 +1691,7 @@ button:disabled {
   justify-content: center;
   overflow: hidden;
   min-height: 0;
+  background: radial-gradient(ellipse 110% 120% at 50% 40%, rgba(42, 58, 78, 0.55), #070c14);
 }
 
 .public-home-promo-card__media img {
@@ -2010,6 +2030,17 @@ button:disabled {
   border-radius: 12px;
 }
 
+@media (max-width: 719px) {
+  .public-marketing-slot--footer .public-marketing-slot__img {
+    object-fit: contain;
+    background: #0e141c;
+  }
+
+  .public-marketing-slot--footer .public-marketing-slot__media {
+    background: radial-gradient(ellipse at center, #1a2736, #0b0f14);
+  }
+}
+
 /* Bloc marketing pleine largeur (bannière type captif / hero paysage) */
 .public-marketing-slot--wide {
   margin: 24px 0 10px;
@@ -2060,6 +2091,11 @@ button:disabled {
     aspect-ratio: 16 / 10;
     max-height: none;
     min-height: max(200px, 34vw);
+  }
+
+  .public-marketing-slot__wide-bg {
+    object-fit: contain;
+    background: radial-gradient(ellipse at center, #1a2736 0%, #0b1524 65%, #05080c 100%);
   }
 }
 
@@ -2287,8 +2323,8 @@ button:disabled {
 
 .auth-simple-logo {
   display: block;
-  width: 80px;
-  height: 80px;
+  width: clamp(96px, 28vw, 128px);
+  height: clamp(96px, 28vw, 128px);
   margin: 0 auto 10px;
   border-radius: 18px;
   object-fit: contain;
@@ -3434,12 +3470,6 @@ button.wifi-plan-card:focus-visible {
   text-align: center;
 }
 
-@media (min-width: 620px) {
-  .public-ceo-body {
-    text-align: start;
-  }
-}
-
 .public-ceo-name {
   margin: 0 0 6px;
   font-size: clamp(1.2rem, 2.8vw, 1.45rem);
@@ -3521,6 +3551,18 @@ button.wifi-plan-card:focus-visible {
   color: #fff;
 }
 
+@media (max-width: 720px) {
+  .public-footer-intro {
+    max-width: none;
+    margin-inline: auto;
+    text-align: center;
+  }
+
+  .public-brand.public-brand--footer {
+    justify-content: center;
+  }
+}
+
 .public-brand--footer {
   margin-bottom: 14px;
 }
@@ -3530,26 +3572,6 @@ button.wifi-plan-card:focus-visible {
   font-size: 0.98rem;
   line-height: 1.55;
   color: rgba(255, 255, 255, 0.72);
-}
-
-.public-footer-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 20px;
-  margin-top: 18px;
-}
-
-.public-footer-links a {
-  font-size: 0.91rem;
-  font-weight: 650;
-  color: rgba(200, 230, 201, 0.94);
-  text-decoration: none;
-  border-bottom: 1px solid transparent;
-}
-
-.public-footer-links a:hover {
-  border-bottom-color: rgba(200, 230, 201, 0.4);
-  color: #fff;
 }
 
 .public-footer-founder {
@@ -3864,39 +3886,60 @@ a.public-footer-card:hover {
   overflow: hidden;
   border: 1px solid rgba(93, 64, 55, 0.12);
   box-shadow: 0 10px 32px rgba(45, 36, 32, 0.08);
-  background: rgba(255, 255, 255, 0.72);
+  background: radial-gradient(ellipse 120% 80% at 50% 20%, #1a2332 0%, #0a0d12 55%, #050608 100%);
 }
 
 .wifi-portal-bottom-banner__img {
   display: block;
   width: 100%;
   height: auto;
-  max-height: min(380px, 58vw);
-  object-fit: cover;
+  max-height: min(420px, 70vh);
+  object-fit: contain;
   object-position: center;
 }
 
 .mcbuleli-site-footer {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
   margin-top: 28px;
-  padding-top: 20px;
+  padding: 20px 12px 12px;
   border-top: 1px solid rgba(93, 64, 55, 0.12);
+  text-align: center;
 }
 
 .mcbuleli-site-footer__logo {
   flex-shrink: 0;
-  border-radius: 8px;
-  margin-top: 2px;
+  border-radius: 12px;
+  width: clamp(44px, 14vw, 56px);
+  height: clamp(44px, 14vw, 56px);
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 4px;
+  box-sizing: border-box;
 }
 
-.mcbuleli-site-footer p {
+.mcbuleli-site-footer p,
+.mcbuleli-site-powered {
   margin: 0;
   font-size: 0.82rem;
   line-height: 1.5;
   color: var(--mb-muted);
-  max-width: 52rem;
+  max-width: 42rem;
+}
+
+.portal-page--dark .mcbuleli-site-footer,
+.wifi-portal-page--dark .mcbuleli-site-footer {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.portal-page--dark .mcbuleli-site-footer p,
+.portal-page--dark .mcbuleli-site-powered,
+.wifi-portal-page--dark .mcbuleli-site-footer p,
+.wifi-portal-page--dark .mcbuleli-site-powered {
+  color: #aeb4bf;
 }
 
 .portal-login-grid {
@@ -3927,6 +3970,26 @@ a.public-footer-card:hover {
 .row.header {
   font-weight: 700;
   border-bottom: 1px solid var(--mb-border);
+}
+
+.billing-invoices-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.billing-invoices-scroll .billing-invoices-table.table {
+  min-width: 600px;
+}
+
+.billing-invoices-scroll .billing-invoices-table .row > span {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.billing-invoices-scroll .billing-invoices-table button {
+  white-space: nowrap;
 }
 
 .tenant-pagination {
@@ -5135,6 +5198,18 @@ body:has(.app-shell--dashboard-dark) {
   color: #63b38f;
 }
 
+.app-shell--dashboard-dark .dash-hist-bar-track {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.app-shell--dashboard-dark .dash-hist-tier-legend {
+  color: #9aa5b8;
+}
+
+.app-shell--dashboard-dark .dash-hist-bar-meta abbr {
+  color: #e8eaed;
+}
+
 .app-shell--dashboard-dark .dashboard-nav-category-link--active {
   color: #63b38f;
   background: rgba(99, 179, 143, 0.16);
@@ -5822,7 +5897,7 @@ html:has(.app-shell--mobile-pwa) {
 }
 
 .app-shell--mobile-pwa .dashboard-banner-carousel--inline .dashboard-banner-carousel__img {
-  max-height: min(10vh, 88px);
+  max-height: min(22vh, 148px);
 }
 
 .dashboard-layout--mobile {

@@ -1,6 +1,6 @@
 {
   "id": "https://app.mcbuleli.live/",
-  "name": "McBuleli ISP",
+  "name": "McBuleli",
   "short_name": "McBuleli",
   "description": "Plateforme d’exploitation pour opérateurs FAI : facturation, réseau, portail abonnés.",
   "start_url": "/",

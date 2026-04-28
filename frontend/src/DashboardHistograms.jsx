@@ -1,6 +1,8 @@
 /**
- * Lightweight histograms (no chart library). Uses flex bars + optional dailyUsage from /network/stats.
+ * Lightweight histograms (no chart library). Flex bars + optional dailyUsage from /network/stats.
  */
+
+import { formatStaffRole } from "./staffRoleLabels.js";
 
 function maxOf(arr, pick) {
   let m = 0;
@@ -9,6 +11,14 @@ function maxOf(arr, pick) {
     if (v > m) m = v;
   }
   return m || 1;
+}
+
+function tierLevel(value, max) {
+  if (max <= 0) return "mid";
+  const r = value / max;
+  if (r >= 0.66) return "high";
+  if (r >= 0.33) return "mid";
+  return "low";
 }
 
 function BarGroup({ title, subtitle, labels, values, format = (v) => String(v) }) {
@@ -25,7 +35,7 @@ function BarGroup({ title, subtitle, labels, values, format = (v) => String(v) }
           return (
             <div key={i} className="dash-hist-bar-wrap">
               <div className="dash-hist-bar-track">
-                <div className="dash-hist-bar-fill" style={{ width: `${pct}%` }} />
+                <div className="dash-hist-bar-fill dash-hist-bar-fill--default" style={{ width: `${pct}%` }} />
               </div>
               <span className="dash-hist-bar-meta">
                 <abbr title={labels[i]}>{labels[i]}</abbr>
@@ -39,6 +49,45 @@ function BarGroup({ title, subtitle, labels, values, format = (v) => String(v) }
   );
 }
 
+function TeamRolesBarGroup({ title, subtitle, roleKeys, values, isEn, t }) {
+  const max = maxOf(values.map((v) => ({ v })), (x) => x.v);
+  const labels = roleKeys.map((k) => formatStaffRole(k, isEn));
+  return (
+    <div className="dash-hist-group dash-hist-group--roles">
+      <div className="dash-hist-group-head">
+        <strong>{title}</strong>
+        {subtitle ? <small>{subtitle}</small> : null}
+      </div>
+      <div className="dash-hist-bars" role="img" aria-label={title}>
+        {values.map((v, i) => {
+          const pct = Math.round((Number(v || 0) / max) * 100);
+          const tier = tierLevel(Number(v || 0), max);
+          return (
+            <div key={roleKeys[i] || i} className="dash-hist-bar-wrap">
+              <div className="dash-hist-bar-track">
+                <div
+                  className={`dash-hist-bar-fill dash-hist-bar-fill--tier dash-hist-bar-fill--tier-${tier}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="dash-hist-bar-meta">
+                <abbr title={roleKeys[i]}>{labels[i]}</abbr>
+                <span>{String(v)}</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="dash-hist-tier-legend">
+        {t(
+          "Légende : vert = part élevée (proche du maximum), orange = moyenne, rouge = faible (à surveiller). Vue instantanée des comptes actifs.",
+          "Legend: green = high share (near max), orange = medium, red = low (watch). Snapshot of active accounts."
+        )}
+      </p>
+    </div>
+  );
+}
+
 function formatShortDate(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -48,6 +97,7 @@ function formatShortDate(iso) {
 
 export default function DashboardHistograms({
   t,
+  isEn,
   globalSummary,
   tenantDashboard,
   networkStats,
@@ -187,10 +237,16 @@ export default function DashboardHistograms({
           />
         ) : null}
         {roleKeys.length ? (
-          <BarGroup
+          <TeamRolesBarGroup
             title={t("Équipe & rôles", "Team & roles")}
-            labels={roleKeys}
+            subtitle={t(
+              "Répartition des comptes par rôle (instantané).",
+              "Headcount share by role (live snapshot)."
+            )}
+            roleKeys={roleKeys}
             values={roleVals}
+            isEn={Boolean(isEn)}
+            t={t}
           />
         ) : null}
       </div>

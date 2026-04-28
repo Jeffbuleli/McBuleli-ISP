@@ -491,7 +491,7 @@ export default function WifiPortal() {
 
       <footer className="mcbuleli-site-footer">
         <img src={mcbuleliLogoUrl} alt="" width={28} height={28} className="mcbuleli-site-footer__logo" />
-        <p>{t("mcbuleliFooter")}</p>
+        <p className="mcbuleli-site-powered">{t("mcbuleliFooter")}</p>
       </footer>
     </main>
   );

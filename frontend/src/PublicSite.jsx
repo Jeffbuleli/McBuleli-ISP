@@ -486,7 +486,7 @@ export default function PublicSite() {
         <div className="public-hero-top">
           <a className="public-brand" href="/">
             <PublicLogo />
-            <span>McBuleli ISP</span>
+            <span>McBuleli</span>
           </a>
           <nav className="public-nav" aria-label={t("Navigation principale", "Main navigation")}>
             {PUBLIC_NAV_LINKS.map((item) => (
@@ -534,8 +534,8 @@ export default function PublicSite() {
             </h1>
             <p className="public-hero-lead">
               {t(
-                "McBuleli ISP aligne abonnés, trésorerie et infrastructure : facturation & encaissements Mobile Money, portail client, Wi‑Fi invité, équipes terrain, workflows de dépenses et synchronisation MikroTik — avec traçabilité complète pour les opérations critiques.",
-                "McBuleli ISP aligns subscribers, cash and infrastructure: billing & mobile collections, customer portal, guest Wi‑Fi, field teams, expense workflows and MikroTik sync—with full traceability for critical operations."
+                "McBuleli aligne abonnés, trésorerie et infrastructure : facturation & encaissements Mobile Money, portail client, Wi‑Fi invité, équipes terrain, workflows de dépenses et synchronisation MikroTik — avec traçabilité complète pour les opérations critiques.",
+                "McBuleli aligns subscribers, cash and infrastructure: billing & mobile collections, customer portal, guest Wi‑Fi, field teams, expense workflows and MikroTik sync—with full traceability for critical operations."
               )}
             </p>
             <div className="public-cta">
@@ -670,7 +670,7 @@ export default function PublicSite() {
       </section>
 
       <section className="public-section public-section--highlight">
-        <h2>{t("Pourquoi McBuleli ISP ?", "Why McBuleli ISP?")}</h2>
+        <h2>{t("Pourquoi McBuleli ?", "Why McBuleli?")}</h2>
         <ul>
           <li>{t("Moins de pertes grâce au suivi des paiements, références et suspensions orchestrées.", "Less revenue leakage thanks to routed payments, reference queues and coordinated suspensions.")}</li>
           <li>{t("Une seule vérité financière pour la direction, le terrain et le support.", "One financial truth shared by executives, field teams and support.")}</li>
@@ -701,7 +701,7 @@ export default function PublicSite() {
       ))}
 
       <section className="public-section" id="testimonials">
-        <p className="eyebrow">{t("Ils nous font confiance", "Teams that trust McBuleli ISP")}</p>
+        <p className="eyebrow">{t("Ils nous font confiance", "Teams that trust McBuleli")}</p>
         <h2>{t("Ce que disent les opérateurs", "What operators say")}</h2>
         <p className="public-section-lead">
           {t(
@@ -792,7 +792,7 @@ export default function PublicSite() {
           <div className="public-footer-intro">
             <a className="public-brand public-brand--footer" href="/">
               <PublicLogo />
-              <span>McBuleli ISP</span>
+              <span>McBuleli</span>
             </a>
             <p className="public-footer-tagline">
               {t(
@@ -800,11 +800,6 @@ export default function PublicSite() {
                 "Operations suite built for broadband providers: intelligent billing, treasury, portals, telemetry and audited workflows."
               )}
             </p>
-            <nav className="public-footer-links" aria-label={t("Liens utiles", "Helpful links")}>
-              <a href="#contact">{t("Coordonnées", "Contact details")}</a>
-              <a href={`mailto:${COMPANY_CONTACT.email}`}>{t("Support technique", "Technical support")}</a>
-              <a href="/privacy">{t("Politique de confidentialité", "Privacy policy")}</a>
-            </nav>
           </div>
           <div className="public-footer-cards" role="group" aria-label={t("Coordonnées", "Contact details")}>
             <a
@@ -853,7 +848,7 @@ export default function PublicSite() {
         <div className="public-footer-legal">
           <p className="public-footer-legal-inner">
             <span className="public-footer-meta">
-              © {year} McBuleli ISP
+              © {year} McBuleli
             </span>
             <span className="public-footer-sep" aria-hidden="true">
               |

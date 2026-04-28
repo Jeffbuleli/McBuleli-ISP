@@ -633,7 +633,7 @@ export default function Portal() {
       ) : null}
       <footer className="mcbuleli-site-footer">
         <img src={mcbuleliLogoUrl} alt="" width={28} height={28} className="mcbuleli-site-footer__logo" />
-        <p>{t("mcbuleliFooter")}</p>
+        <p className="mcbuleli-site-powered">{t("mcbuleliFooter")}</p>
       </footer>
     </main>
     <PwaInstallPrompt enabled={portalPwaSubscriberReady} workspaceLabel={portalWorkspaceLabel} isEn={uiLang === "en"} />
