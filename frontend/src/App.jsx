@@ -1,6 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
-import LangSwitch from "./LangSwitch.jsx";
 import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
 import DashboardAnnouncementsBell from "./DashboardAnnouncementsBell.jsx";
@@ -16,6 +15,8 @@ import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
 import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
+import { formatStaffRole } from "./staffRoleLabels.js";
+import { UI_LANG_SYNC_EVENT, getStoredUiLang } from "./uiLangSync.js";
 import {
   IconArrowLeft,
   IconHome,
@@ -60,34 +61,6 @@ function readDashboardNavCompact() {
 
 function isPlatformSuperRole(role) {
   return role === "super_admin" || role === "system_owner";
-}
-
-function humanizeRoleKey(role) {
-  if (role == null || role === "") return "";
-  const s = String(role).replace(/_/g, " ");
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-function formatStaffRole(role, isEn) {
-  const fr = {
-    system_owner: "Propriétaire plateforme",
-    super_admin: "Super administrateur",
-    company_manager: "Directeur d'entreprise",
-    isp_admin: "Administrateur FAI",
-    billing_agent: "Agent facturation",
-    noc_operator: "Opérateur réseau (NOC)",
-    field_agent: "Agent terrain"
-  };
-  const en = {
-    system_owner: "Platform owner",
-    super_admin: "Super administrator",
-    company_manager: "Company manager",
-    isp_admin: "ISP administrator",
-    billing_agent: "Billing agent",
-    noc_operator: "NOC operator",
-    field_agent: "Field agent"
-  };
-  return (isEn ? en : fr)[role] || humanizeRoleKey(role);
 }
 
 function workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) {
@@ -157,12 +130,6 @@ function platformBannerHasStoredImage(slot) {
   if (slot.hasImage === true) return true;
   const u = slot.imageUrl != null ? String(slot.imageUrl).trim() : "";
   return Boolean(u);
-}
-
-function getStoredUiLang() {
-  if (typeof window === "undefined") return "fr";
-  const saved = window.localStorage.getItem("ui_lang");
-  return saved === "en" ? "en" : "fr";
 }
 
 const DEFAULT_PAWAPAY_NETWORKS = [
@@ -1195,6 +1162,21 @@ function App() {
       window.localStorage.setItem("ui_lang", uiLang);
     }
   }, [uiLang]);
+
+  useEffect(() => {
+    const sync = () => {
+      const next = getStoredUiLang();
+      setUiLang((prev) => (prev !== next ? next : prev));
+    };
+    window.addEventListener("storage", sync);
+    window.addEventListener("focus", sync);
+    window.addEventListener(UI_LANG_SYNC_EVENT, sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("focus", sync);
+      window.removeEventListener(UI_LANG_SYNC_EVENT, sync);
+    };
+  }, []);
 
   useEffect(() => {
     if (user) return;
@@ -2757,7 +2739,7 @@ function App() {
                       onClick={() => completeLoginWithWorkspace(w.ispId)}
                     >
                       <strong>{w.name}</strong>
-                      <span className="app-meta">{w.role}</span>
+                      <span className="auth-simple-workspace-role">{formatStaffRole(w.role, isEn)}</span>
                     </button>
                   </li>
                 ))}
@@ -3039,17 +3021,8 @@ function App() {
                 <div
                   className="dashboard-toolbar dashboard-toolbar--icons"
                   role="toolbar"
-                  aria-label={t("Langue et navigation", "Language and navigation")}
+                  aria-label={t("Navigation", "Navigation")}
                 >
-                  <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash" />
-                  <a
-                    className="btn-icon-toolbar"
-                    href="/?site=public"
-                    title={t("Site public (accueil)", "Public site (home)")}
-                    aria-label={t("Site public", "Public site")}
-                  >
-                    <IconHome width={22} height={22} />
-                  </a>
                   <DashboardAnnouncementsBell
                     items={ispAnnouncements}
                     t={t}
@@ -3068,6 +3041,14 @@ function App() {
                   >
                     <IconSignOut width={22} height={22} />
                   </button>
+                  <a
+                    className="btn-icon-toolbar"
+                    href="/?site=public"
+                    title={t("Site public (accueil)", "Public site (home)")}
+                    aria-label={t("Site public", "Public site")}
+                  >
+                    <IconHome width={22} height={22} />
+                  </a>
                 </div>
               </div>
             </>
@@ -3104,15 +3085,6 @@ function App() {
                   </div>
                 </div>
                 <div className="dashboard-mobile-toolbar-row" role="toolbar" aria-label={t("Raccourcis", "Shortcuts")}>
-                  <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash-mob" compact />
-                  <a
-                    className="dashboard-mobile-icon-btn dashboard-mobile-icon-btn--toolbar"
-                    href="/?site=public"
-                    title={t("Site public (accueil)", "Public site (home)")}
-                    aria-label={t("Site public", "Public site")}
-                  >
-                    <IconHome width={18} height={18} />
-                  </a>
                   <DashboardAnnouncementsBell
                     items={ispAnnouncements}
                     t={t}
@@ -3145,6 +3117,14 @@ function App() {
                     fullName={user.fullName}
                     t={t}
                   />
+                  <a
+                    className="dashboard-mobile-icon-btn dashboard-mobile-icon-btn--toolbar"
+                    href="/?site=public"
+                    title={t("Site public (accueil)", "Public site (home)")}
+                    aria-label={t("Site public", "Public site")}
+                  >
+                    <IconHome width={18} height={18} />
+                  </a>
                 </div>
               </div>
               <div className="dashboard-header-ad dashboard-header-ad--mobile-pwa">
@@ -4597,12 +4577,12 @@ function App() {
               onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
             >
               {isPlatformSuperRole(user.role) && (
-                <option value="company_manager">Dirigeant entreprise (company_manager)</option>
+                <option value="company_manager">Dirigeant entreprise</option>
               )}
-              <option value="isp_admin">Administrateur FAI (isp_admin)</option>
-              <option value="billing_agent">Agent facturation (billing_agent)</option>
-              <option value="noc_operator">Opérateur NOC (noc_operator)</option>
-              <option value="field_agent">Agent terrain (field_agent)</option>
+              <option value="isp_admin">Administrateur FAI</option>
+              <option value="billing_agent">Agent facturation</option>
+              <option value="noc_operator">Opérateur NOC</option>
+              <option value="field_agent">Agent terrain</option>
             </select>
             <select
               value={userForm.accreditationLevel}
@@ -4661,12 +4641,12 @@ function App() {
                 />
                 <select value={teamImportRole} onChange={(e) => setTeamImportRole(e.target.value)}>
                   {isPlatformSuperRole(user.role) && (
-                    <option value="company_manager">Dirigeant entreprise (company_manager)</option>
+                    <option value="company_manager">Dirigeant entreprise</option>
                   )}
-                  <option value="isp_admin">Administrateur FAI (isp_admin)</option>
-                  <option value="billing_agent">Agent facturation (billing_agent)</option>
-                  <option value="noc_operator">Opérateur NOC (noc_operator)</option>
-                  <option value="field_agent">Agent terrain (field_agent)</option>
+                  <option value="isp_admin">Administrateur FAI</option>
+                  <option value="billing_agent">Agent facturation</option>
+                  <option value="noc_operator">Opérateur NOC</option>
+                  <option value="field_agent">Agent terrain</option>
                 </select>
                 <button type="submit" disabled={!selectedIspId}>
                   {t("Importer le CSV équipe", "Import team CSV")}

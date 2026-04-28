@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_URL, publicAssetUrl, publicRequest } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
-import LangSwitch from "./LangSwitch.jsx";
+import { useReadOnlyUiLang } from "./uiLangSync.js";
 import HomeShortcut from "./HomeShortcut.jsx";
 import {
   IconAntenna,
@@ -12,11 +12,6 @@ import {
   IconZap
 } from "./icons.jsx";
 import { wifiT } from "./wifiCopy.js";
-
-function getStoredUiLang() {
-  if (typeof window === "undefined") return "fr";
-  return window.localStorage.getItem("ui_lang") === "en" ? "en" : "fr";
-}
 
 function wifiDisplayName(name, lang) {
   const s = name != null ? String(name).trim() : "";
@@ -222,9 +217,8 @@ export default function WifiPortal() {
             <h1>{t("heroTitle")}</h1>
             <p className="wifi-lead">{t("heroLead")}</p>
           </div>
-          <div className="wifi-hero-toolbar">
+          <div className="wifi-hero-toolbar wifi-hero-toolbar--end">
             <HomeShortcut title={t("homeShortcut")} idPrefix="wifi" />
-            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="wifi" />
           </div>
         </div>
         {activeIspId && hasIspContact(branding) ? (

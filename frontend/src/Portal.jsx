@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { API_URL, api, publicAssetUrl } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
-import LangSwitch from "./LangSwitch.jsx";
+import { useReadOnlyUiLang } from "./uiLangSync.js";
 import HomeShortcut from "./HomeShortcut.jsx";
 import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
 import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
@@ -13,11 +13,6 @@ const DEFAULT_PAWAPAY_NETWORKS = [
   { key: "airtel", label: "Airtel Money" },
   { key: "mpesa", label: "M-Pesa (Vodacom)" }
 ];
-
-function getStoredUiLang() {
-  if (typeof window === "undefined") return "fr";
-  return window.localStorage.getItem("ui_lang") === "en" ? "en" : "fr";
-}
 
 function money(value, currency = "USD", lang = "fr") {
   return Number(value || 0).toLocaleString(lang === "en" ? "en-GB" : "fr-FR", {
@@ -103,14 +98,8 @@ export default function Portal() {
     networkKey: "orange"
   });
   const [mobilePaySession, setMobilePaySession] = useState(null);
-  const [uiLang, setUiLang] = useState(getStoredUiLang);
+  const uiLang = useReadOnlyUiLang();
   const t = useCallback((key) => portalT(uiLang, key), [uiLang]);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("ui_lang", uiLang);
-    }
-  }, [uiLang]);
 
   const loadSession = useCallback(
     async (a) => {
@@ -368,9 +357,8 @@ export default function Portal() {
               </h1>
             </div>
           </div>
-          <div className="portal-hero-toolbar">
+          <div className="portal-hero-toolbar portal-hero-toolbar--end">
             <HomeShortcut title={t("homeShortcut")} idPrefix="portal" />
-            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="portal" />
           </div>
         </div>
         <p>{t("heroLead")}</p>

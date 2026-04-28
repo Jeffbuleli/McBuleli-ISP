@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api.js";
 import LangSwitch from "./LangSwitch.jsx";
+import { UI_LANG_SYNC_EVENT, getStoredUiLang } from "./uiLangSync.js";
 import PublicSocialLinks from "./PublicSocialLinks.jsx";
 import PublicMobileNavMenu from "./PublicMobileNavMenu.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
@@ -18,12 +19,6 @@ import {
   IconWhatsApp,
   IconMenuHamburger
 } from "./icons.jsx";
-
-function getStoredUiLang() {
-  if (typeof window === "undefined") return "fr";
-  const saved = window.localStorage.getItem("ui_lang");
-  return saved === "en" ? "en" : "fr";
-}
 
 const PUBLIC_NAV_LINKS = [
   { href: "#services", fr: "Services", en: "Services" },
@@ -423,6 +418,7 @@ export default function PublicSite() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("ui_lang", uiLang);
+      window.dispatchEvent(new Event(UI_LANG_SYNC_EVENT));
     }
   }, [uiLang]);
 
