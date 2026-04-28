@@ -471,7 +471,7 @@ export default function PublicSite() {
 
   return (
     <main className="public-site public-site--dark">
-      <header className="public-hero">
+      <div className="public-sticky-bar-wrap">
         <div className="public-hero-top">
           <a className="public-brand" href="/">
             <PublicLogo />
@@ -498,13 +498,15 @@ export default function PublicSite() {
             </button>
           </div>
         </div>
-        <PublicMobileNavMenu
-          open={publicMenuOpen}
-          onClose={() => setPublicMenuOpen(false)}
-          title={t("Navigation", "Navigation")}
-          closeLabel={t("Fermer", "Close")}
-          items={publicNavLabeled}
-        />
+      </div>
+      <PublicMobileNavMenu
+        open={publicMenuOpen}
+        onClose={() => setPublicMenuOpen(false)}
+        title={t("Navigation", "Navigation")}
+        closeLabel={t("Fermer", "Close")}
+        items={publicNavLabeled}
+      />
+      <header className="public-hero">
         <div className="public-hero-grid">
           <section>
             <p className="eyebrow public-hero-eyebrow">
