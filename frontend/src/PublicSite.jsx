@@ -9,6 +9,7 @@ import { COMPANY_CONTACT } from "./companyContact.js";
 import {
   IconBuilding,
   IconMail,
+  IconMapPin,
   IconPhone,
   IconPresentation,
   IconReceipt,
@@ -79,12 +80,12 @@ const SERVICES = [
   {
     icon: "payments",
     fr: {
-      title: "Mobile Money & TID",
-      text: "Encaissements Pawapay, files TID, confirmations manuelles et callbacks pour activer le service sans délai."
+      title: "Encaissements mobiles & références",
+      text: "Paiements mobiles, files de références (TID), confirmation automatique ou manuelle, et rappels serveur sécurisés pour activer le service rapidement."
     },
     en: {
-      title: "Mobile Money & TID",
-      text: "Pawapay collections, TID queues, manual confirmations and callbacks to activate service quickly."
+      title: "Mobile money & payment references",
+      text: "Mobile payments, TID queues, automatic or manual verification, and secure server callbacks to activate service quickly."
     }
   },
   {
@@ -113,22 +114,22 @@ const SERVICES = [
     icon: "team",
     fr: {
       title: "Équipes, agents & rôles",
-      text: "Accréditations, agents terrain, gestion d'équipe, import CSV, audit et suivi des commissions."
+      text: "Accréditations, agents terrain, import CSV, validation à deux niveaux des dépenses, clôtures comptables après inventaire et audit des opérations."
     },
     en: {
       title: "Teams, agents & roles",
-      text: "Accreditations, field agents, team management, CSV imports, audit and commission tracking."
+      text: "Accreditations, field agents, CSV imports, two-step expense approval, post-inventory period locks, and audited operations."
     }
   },
   {
     icon: "brand",
     fr: {
-      title: "Marque blanche & domaines",
-      text: "Logo, couleurs, sous-domaines, portail Wi-Fi et espace client personnalisés pour chaque entreprise."
+      title: "Marque blanche & documents",
+      text: "Logo, couleurs, domaines, portail Wi‑Fi invité et factures pro forma PDF aux couleurs de chaque entreprise."
     },
     en: {
-      title: "White-label branding",
-      text: "Logo, colors, subdomains, Wi-Fi portal and customer space customized for each company."
+      title: "White-label & documents",
+      text: "Logo, colors, domains, guest Wi‑Fi portal and downloadable pro forma PDF invoices per company brand."
     }
   }
 ];
@@ -211,8 +212,10 @@ const WORKSPACES = [
     icon: "billing",
     fr: "Facturation & encaissements",
     en: "Billing & collections",
-    bodyFr: "Impayés, paiements confirmés, Mobile Money, files TID, abonnement plateforme et relances.",
-    bodyEn: "Outstanding invoices, confirmed payments, Mobile Money, TID queue, platform billing and reminders."
+    bodyFr:
+      "Impayés, paiements confirmés, validation à deux étapes des dépenses, clôtures de période après inventaire, abonnement plateforme et relances.",
+    bodyEn:
+      "Overdue accounts, confirmed payments, two-step expense approval, accounting period locks after inventory checks, platform billing and dunning."
   }
 ];
 
@@ -283,11 +286,11 @@ const FAQ_ITEMS = [
   {
     fr: {
       q: "Quels moyens de paiement sont pris en charge ?",
-      a: "Mobile Money via Pawapay (selon réseaux configurés), virement, espèces, passerelles personnalisées avec callback, et file de vérification manuelle des TID."
+      a: "Mobile Money et autres canaux configurés sur votre espace, virement, espèces, passerelles avec rappel serveur (webhook), et file de vérification manuelle des références de paiement (TID)."
     },
     en: {
       q: "Which payment methods are supported?",
-      a: "Mobile Money via Pawapay (per configured networks), bank transfer, cash, custom gateways with callbacks, and a manual TID verification queue."
+      a: "Mobile Money and other channels configured in your workspace, bank transfer, cash, gateways with server callbacks, and a manual TID verification queue."
     }
   },
   {
@@ -430,7 +433,7 @@ export default function PublicSite() {
   }, []);
 
   return (
-    <main className="public-site">
+    <main className="public-site public-site--dark">
       <header className="public-hero">
         <div className="public-hero-top">
           <a className="public-brand" href="/">
@@ -468,8 +471,8 @@ export default function PublicSite() {
             </h1>
             <p className="public-hero-lead">
               {t(
-                "McBuleli centralise relances, Mobile Money, portail abonné, Wi‑Fi invité, équipes terrain et synchronisation MikroTik — avec la traçabilité attendue par les opérateurs sérieux.",
-                "McBuleli unifies dunning, Mobile Money, the subscriber portal, guest Wi‑Fi, field teams and MikroTik sync—with the traceability serious operators expect."
+                "McBuleli centralise relances, paiements mobiles, portail abonné, Wi‑Fi invité, équipes terrain, validation des dépenses, clôtures de période après inventaire et synchronisation MikroTik — avec la traçabilité attendue des opérateurs exigeants.",
+                "McBuleli unifies dunning, mobile payments, the subscriber portal, guest Wi‑Fi, field teams, expense workflows with maker-checker approval, fiscal period locks after inventory, and MikroTik sync—with the traceability serious operators expect."
               )}
             </p>
             <div className="public-cta">
@@ -511,7 +514,7 @@ export default function PublicSite() {
               <span>{t("Sites réseau", "Network sites")}<strong>12</strong></span>
             </div>
             <div className="hero-flow">
-              <p>{t("Paiement Mobile Money confirmé", "Mobile Money payment confirmed")}</p>
+              <p>{t("Paiement mobile confirmé côté opérateur", "Operator-confirmed mobile payment")}</p>
               <p>{t("Activation PPPoE / Hotspot automatique", "Automatic PPPoE / Hotspot activation")}</p>
               <p>{t("Portail client mis à jour", "Customer portal updated")}</p>
             </div>
@@ -528,8 +531,8 @@ export default function PublicSite() {
         </div>
         <p>
           {t(
-            "Comme les plateformes FAI les plus abouties, McBuleli privilégie la simplicité, l'automatisation et une expérience digne d'une marque professionnelle — côté client et côté équipe.",
-            "Like leading ISP platforms, McBuleli emphasizes simplicity, automation and a polished, professional experience—on the customer side and inside your team."
+            "Les plateformes FAI les plus exigeantes unissent simplicité, automatisation et image professionnelle : McBuleli suit cette ligne, côté client comme côté équipes internes.",
+            "The most demanding ISP platforms combine simplicity, automation and a polished brand—McBuleli follows that standard for customers and internal teams."
           )}
         </p>
       </section>
@@ -669,8 +672,8 @@ export default function PublicSite() {
             </a>
             <p className="public-footer-tagline">
               {t(
-                "Suite d'exploitation pour FAI : facturation, encaissements, portail abonné et réseau.",
-                "Operations suite for ISPs: billing, collections, subscriber portal and network."
+                "Suite d’exploitation pour FAI : facturation, trésorerie, portail abonnés, réseau et conformité des opérations.",
+                "Operations suite for ISPs: billing, treasury, subscriber portal, network and operational compliance."
               )}
             </p>
             {showFounderBlock ? (
@@ -731,7 +734,13 @@ export default function PublicSite() {
               role="group"
               aria-label={`${t("Siège", "Head office")}: ${COMPANY_CONTACT.address}`}
             >
-              <span className="public-footer-card-value">{COMPANY_CONTACT.address}</span>
+              <span className="public-footer-card-icon" aria-hidden="true">
+                <IconMapPin width={24} height={24} />
+              </span>
+              <div className="public-footer-card-stack">
+                <span className="public-footer-card-label">{t("Adresse", "Address")}</span>
+                <span className="public-footer-card-value">{COMPANY_CONTACT.address}</span>
+              </div>
             </div>
           </div>
         </div>

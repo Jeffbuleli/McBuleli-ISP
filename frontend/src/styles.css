@@ -2188,6 +2188,143 @@ button:disabled {
   color: var(--mb-primary);
 }
 
+/* —— Auth sombre (connexion, inscription, MFA) —— */
+body:has(.auth-simple--dark) {
+  background: #0f0f0f;
+  color: #eaeaea;
+}
+
+.auth-simple--dark {
+  max-width: 440px;
+}
+
+.auth-simple--dark .auth-simple-title {
+  color: #fafafa;
+}
+
+.auth-simple--dark .auth-simple-platform-hint {
+  text-align: center;
+  margin: -4px 0 14px;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #63b38f;
+}
+
+.auth-simple--dark .auth-simple-sub,
+.auth-simple--dark .auth-simple-footer-links {
+  color: #a0a0a0;
+}
+
+.auth-simple--dark .app-meta {
+  color: #9a9a9a;
+}
+
+.auth-simple--dark .panel {
+  background: #1c1c1c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #eaeaea;
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+
+.auth-simple--dark .panel h2 {
+  color: #fff;
+}
+
+.auth-simple--dark .auth-simple-notice {
+  background: rgba(99, 179, 143, 0.14);
+  border-color: rgba(99, 179, 143, 0.35);
+  color: #e2e8e4;
+}
+
+.auth-simple--dark .auth-simple-forgot-hint {
+  background: rgba(36, 36, 36, 0.95);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #d0d0d0;
+}
+
+.auth-simple--dark .auth-simple-panel input,
+.auth-simple--dark .auth-simple-panel select {
+  background: #252525;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f5f5;
+  border-radius: 10px;
+  min-height: 44px;
+}
+
+.auth-simple--dark .auth-simple-panel button[type="submit"] {
+  background: #63b38f;
+  color: #0a0a0a;
+  font-weight: 750;
+  border: none;
+  border-radius: 12px;
+  min-height: 44px;
+  margin-top: 12px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.auth-simple--dark .auth-simple-panel button[type="submit"]:hover {
+  filter: brightness(1.06);
+}
+
+.auth-simple--dark .btn-secondary,
+.auth-simple--dark .auth-simple-workspace-btn {
+  background: #2a2a2a;
+  color: #eaeaea;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  min-height: 44px;
+}
+
+.auth-simple--dark .btn-secondary:hover,
+.auth-simple--dark .auth-simple-workspace-btn:hover {
+  border-color: rgba(99, 179, 143, 0.45);
+  color: #63b38f;
+}
+
+.auth-simple--dark .btn-secondary-outline {
+  background: transparent;
+  color: #b8e0cc;
+  border: 1px solid rgba(99, 179, 143, 0.45);
+  border-radius: 12px;
+  min-height: 44px;
+}
+
+.auth-simple--dark .btn-secondary-outline:hover {
+  background: rgba(99, 179, 143, 0.12);
+}
+
+.auth-simple--dark .auth-simple-link-btn {
+  color: #7fd4ae;
+}
+
+.auth-simple--dark .auth-simple-link-btn:hover {
+  color: #63b38f;
+}
+
+.auth-simple--dark .auth-simple-footer-links a {
+  color: #63b38f;
+}
+
+.auth-simple--dark .auth-simple-back {
+  color: #888;
+}
+
+.auth-simple--dark .auth-simple-back:hover {
+  color: #63b38f;
+}
+
+.auth-simple--dark .auth-simple-logo {
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  border-radius: 20px;
+}
+
+.auth-simple--dark .error {
+  color: #ff8a80;
+}
+
 .isp-enduser-brand-head {
   display: flex;
   align-items: center;
@@ -3838,4 +3975,534 @@ a.public-footer-card:hover {
 
 .portal-announcement-card__body a {
   color: #1565c0;
+}
+
+/* ---- Address row in public footer (icon + label stack) ---- */
+.public-footer-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  text-align: left;
+}
+
+.public-footer-card-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mb-muted);
+}
+
+/* ---- PWA install bar (production) ---- */
+.pwa-install-bar {
+  position: fixed;
+  z-index: 9999;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0));
+  background: linear-gradient(180deg, rgba(14, 14, 14, 0.92), rgba(8, 8, 8, 0.98));
+  border-top: 1px solid rgba(99, 179, 143, 0.35);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+}
+
+.pwa-install-bar__inner {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pwa-install-bar__text {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: rgba(245, 245, 245, 0.92);
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.pwa-install-bar__text strong {
+  color: #63b38f;
+  font-weight: 800;
+}
+
+.pwa-install-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pwa-install-bar__btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5f5f5;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pwa-install-bar__btn--primary {
+  border-color: transparent;
+  background: #63b38f;
+  color: #0a0a0a;
+}
+
+.pwa-install-bar__btn--primary:hover {
+  filter: brightness(1.06);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* ---- Public marketing site: international dark shell ---- */
+body:has(.public-site--dark) {
+  background: #0a0a0a;
+  color: #eaeaea;
+}
+
+.public-site--dark a {
+  color: #7fd4ae;
+}
+
+.public-site--dark a:hover {
+  color: #63b38f;
+}
+
+.public-site--dark .public-hero {
+  border-color: rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(99, 179, 143, 0.18), transparent 42%),
+    radial-gradient(circle at 88% 20%, rgba(120, 160, 255, 0.08), transparent 38%),
+    linear-gradient(155deg, #141414 0%, #1a1f1c 45%, #0f1210 100%);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+}
+
+.public-site--dark .public-hero h1,
+.public-site--dark .public-hero-title {
+  color: #fafafa;
+}
+
+.public-site--dark .public-hero-lead {
+  color: #b8b8b8;
+}
+
+.public-site--dark .public-brand {
+  color: #f0f0f0;
+}
+
+.public-site--dark .public-logo-img,
+.public-site--dark .public-logo-mark {
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
+.public-site--dark .public-home-promos {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: linear-gradient(145deg, rgba(28, 28, 28, 0.95) 0%, rgba(18, 22, 20, 0.92) 100%);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+
+.public-site--dark .public-home-promos-head h2 {
+  color: #f2f2f2;
+}
+
+.public-site--dark .public-section,
+.public-site--dark .public-card,
+.public-site--dark .public-panel {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(24, 24, 24, 0.92);
+  color: #e8e8e8;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+
+.public-site--dark .public-section h2,
+.public-site--dark .public-card h3 {
+  color: #fff;
+}
+
+.public-site--dark .public-muted,
+.public-site--dark .public-lead,
+.public-site--dark .public-section-lead {
+  color: #a8a8a8;
+}
+
+.public-site--dark .public-cta,
+.public-site--dark .public-btn-primary {
+  background: #63b38f;
+  color: #0a0a0a;
+  border: none;
+  font-weight: 750;
+  border-radius: 12px;
+  min-height: 44px;
+  padding: 12px 20px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.public-site--dark .public-cta:hover,
+.public-site--dark .public-btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+.public-site--dark .public-nav a {
+  color: rgba(245, 245, 245, 0.88);
+}
+
+.public-site--dark .public-nav a:hover {
+  color: #63b38f;
+}
+
+.public-site--dark .public-quote-card {
+  background: linear-gradient(165deg, #1e1e1e, #181818);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+}
+
+.public-site--dark .public-quote-text {
+  color: #e2e2e2;
+}
+
+.public-site--dark .public-quote-card footer strong {
+  color: #63b38f;
+}
+
+.public-site--dark .public-faq-item {
+  background: #222;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.public-site--dark .public-faq-item summary {
+  color: #63b38f;
+}
+
+.public-site--dark .public-faq-item p {
+  color: #b0b0b0;
+}
+
+.public-site--dark .demo-board-row {
+  background: #252525;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.public-site--dark .demo-board-row span,
+.public-site--dark .demo-board-row b {
+  color: #d8d8d8;
+}
+
+.public-site--dark .service-icon {
+  background: rgba(99, 179, 143, 0.15);
+  color: #63b38f;
+}
+
+.public-site--dark .hero-flow p {
+  background: rgba(99, 179, 143, 0.12);
+  border-color: rgba(99, 179, 143, 0.35);
+  color: #e8e8e8;
+}
+
+.public-site--dark .pricing-card--featured {
+  border-color: rgba(99, 179, 143, 0.5);
+  box-shadow: 0 20px 50px rgba(99, 179, 143, 0.12);
+}
+
+.public-site--dark .public-marketing-slot--hero .public-marketing-slot__inner {
+  background: rgba(30, 30, 30, 0.92);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.public-site--dark .public-marketing-slot--hero .public-marketing-slot__title {
+  color: #63b38f;
+}
+
+.public-site--dark .public-marketing-slot--hero .public-marketing-slot__body {
+  color: #c8c8c8;
+}
+
+.public-site--dark .public-cta a {
+  color: inherit;
+}
+
+.public-site--dark .public-price {
+  color: #63b38f !important;
+}
+
+.public-site--dark .public-footer {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.public-site--dark .public-footer-intro,
+.public-site--dark .public-footer-tagline {
+  color: #b0b0b0;
+}
+
+.public-site--dark .public-footer-card {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(30, 30, 30, 0.95);
+  color: #eee;
+}
+
+.public-site--dark a.public-footer-card:hover {
+  border-color: rgba(99, 179, 143, 0.45);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.public-site--dark .public-footer-card-icon {
+  color: #63b38f;
+}
+
+.public-site--dark .public-footer-card-label {
+  color: #8a9e92;
+}
+
+.public-site--dark .public-footer-legal {
+  color: #888;
+}
+
+.public-site--dark .public-footer-powered {
+  color: #63b38f;
+  opacity: 0.85;
+}
+
+/* ---- Agent / admin dashboard: dark shell (Centipid-style) ---- */
+body:has(.app-shell--dashboard-dark) {
+  background: #0f0f0f;
+  color: #eaeaea;
+}
+
+.app-shell--dashboard-dark {
+  --mb-text: #eaeaea;
+  --mb-muted: #a0a0a0;
+  --mb-border: rgba(255, 255, 255, 0.09);
+  --mb-bg: #121212;
+  --mb-surface: #1a1a1a;
+  --mb-primary: #63b38f;
+  --mb-primary-hover: #52a680;
+}
+
+.app-shell--dashboard-dark .app-header {
+  border-bottom-color: var(--mb-border);
+}
+
+.app-shell--dashboard-dark .dashboard-sticky-stack {
+  background: #121212;
+  border-bottom: 1px solid var(--mb-border);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+
+.app-shell--dashboard-dark .dashboard-sidenav {
+  background: linear-gradient(180deg, #1c1c1c 0%, #161616 100%);
+  border: 1px solid var(--mb-border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.app-shell--dashboard-dark .dashboard-sidenav-toolbar {
+  border-bottom-color: var(--mb-border);
+}
+
+.app-shell--dashboard-dark .dashboard-sidenav-search-input {
+  background: #252525;
+  border-color: var(--mb-border);
+  color: #f0f0f0;
+}
+
+.app-shell--dashboard-dark .dashboard-nav-category {
+  border-bottom-color: var(--mb-border);
+}
+
+.app-shell--dashboard-dark .dashboard-nav-category-head {
+  color: #e6e6e6;
+}
+
+.app-shell--dashboard-dark .dashboard-nav-category-head:hover {
+  color: #63b38f;
+}
+
+.app-shell--dashboard-dark .dashboard-nav-category-icon {
+  color: #63b38f;
+}
+
+.app-shell--dashboard-dark .dashboard-nav-category-label {
+  color: #e8e8e8;
+}
+
+.app-shell--dashboard-dark .dashboard-nav-category-chevron {
+  color: #888;
+}
+
+.app-shell--dashboard-dark .dashboard-nav-category-link {
+  color: #d4d4d4;
+}
+
+.app-shell--dashboard-dark .dashboard-nav-category-link:hover {
+  background: rgba(99, 179, 143, 0.12);
+  color: #63b38f;
+}
+
+.app-shell--dashboard-dark .dashboard-nav-category-link--active {
+  color: #63b38f;
+  background: rgba(99, 179, 143, 0.16);
+  border-color: rgba(99, 179, 143, 0.35);
+}
+
+.app-shell--dashboard-dark .dashboard-nav-flyout {
+  background: #1e1e1e;
+  border-color: var(--mb-border);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+}
+
+.app-shell--dashboard-dark .dashboard-nav-flyout-heading {
+  color: #888;
+}
+
+.app-shell--dashboard-dark .dashboard-header-announcements {
+  background: rgba(30, 30, 30, 0.95);
+  border-color: var(--mb-border);
+}
+
+.app-shell--dashboard-dark .dashboard-header-announcements__chip {
+  background: #252525;
+  border-color: var(--mb-border);
+}
+
+.app-shell--dashboard-dark .dashboard-header-announcements__chip-title {
+  color: #63b38f;
+}
+
+.app-shell--dashboard-dark .panel,
+.app-shell--dashboard-dark .card,
+.app-shell--dashboard-dark table {
+  background: #1a1a1a;
+  border-color: var(--mb-border);
+  color: #eaeaea;
+}
+
+.app-shell--dashboard-dark .panel h2,
+.app-shell--dashboard-dark .panel h3 {
+  color: #fff;
+}
+
+.app-shell--dashboard-dark input,
+.app-shell--dashboard-dark select,
+.app-shell--dashboard-dark textarea {
+  background: #252525;
+  border-color: var(--mb-border);
+  color: #f0f0f0;
+}
+
+.app-shell--dashboard-dark a {
+  color: #7fd4ae;
+}
+
+.app-shell--dashboard-dark a:hover {
+  color: #63b38f;
+}
+
+.app-shell--dashboard-dark button:not(.dashboard-nav-category-head):not(.icon-btn):not(.link-plain) {
+  border-radius: 10px;
+}
+
+/* ---- Subscriber portal + Wi‑Fi purchase: dark polish ---- */
+body:has(.portal-page--dark),
+body:has(.wifi-portal-page--dark) {
+  background: #0f0f0f;
+}
+
+.portal-page--dark,
+.wifi-portal-page--dark {
+  color: #eaeaea;
+}
+
+.portal-page--dark .eyebrow,
+.wifi-portal-page--dark .eyebrow {
+  color: #63b38f;
+}
+
+.portal-page--dark .portal-hero,
+.wifi-portal-page--dark .wifi-hero {
+  border-radius: 20px;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(165deg, #1a1a1a 0%, #141414 100%);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.4);
+}
+
+.portal-page--dark h1,
+.wifi-portal-page--dark h1 {
+  color: #fafafa !important;
+}
+
+.portal-page--dark .panel,
+.wifi-portal-page--dark .panel,
+.wifi-portal-page--dark .demo-board {
+  background: #1c1c1c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #eaeaea;
+  border-radius: 16px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+}
+
+.portal-page--dark .portal-announcements,
+.portal-page--dark .portal-announcement-card {
+  background: rgba(28, 28, 28, 0.95);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #eaeaea;
+}
+
+.portal-page--dark .portal-isp-contact,
+.wifi-portal-page--dark .wifi-isp-contact {
+  background: rgba(99, 179, 143, 0.08);
+  border: 1px solid rgba(99, 179, 143, 0.28);
+  border-radius: 14px;
+  color: #e2e2e2;
+}
+
+.portal-page--dark a,
+.wifi-portal-page--dark a {
+  color: #7fd4ae;
+}
+
+.portal-page--dark input,
+.portal-page--dark select,
+.wifi-portal-page--dark input,
+.wifi-portal-page--dark select {
+  background: #252525;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f5f5;
+  border-radius: 10px;
+  min-height: 44px;
+}
+
+.portal-page--dark button[type="submit"],
+.wifi-portal-page--dark button[type="submit"] {
+  background: #63b38f;
+  color: #0a0a0a;
+  font-weight: 750;
+  border: none;
+  border-radius: 12px;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wifi-portal-page--dark .isp-enduser-brand-head {
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.wifi-portal-page--dark .wifi-captive-banner {
+  background: rgba(30, 40, 38, 0.95);
+  border: 1px solid rgba(99, 179, 143, 0.25);
+  color: #e8e8e8;
 }

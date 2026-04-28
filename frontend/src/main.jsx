@@ -5,7 +5,11 @@ import Portal from "./Portal.jsx";
 import Signup from "./Signup.jsx";
 import WifiPortal from "./WifiPortal.jsx";
 import PublicSite from "./PublicSite.jsx";
+import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
+import { registerServiceWorker } from "./pwaRegister.js";
 import "./styles.css";
+
+registerServiceWorker();
 
 function Root() {
   const path = typeof window !== "undefined" ? window.location.pathname : "";
@@ -39,6 +43,9 @@ function Root() {
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <Root />
+    <>
+      <Root />
+      <PwaInstallPrompt />
+    </>
   </React.StrictMode>
 );

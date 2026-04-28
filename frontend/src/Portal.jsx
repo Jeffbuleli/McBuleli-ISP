@@ -305,7 +305,7 @@ export default function Portal() {
 
   return (
     <main
-      className="container portal-page"
+      className="container portal-page portal-page--dark"
       style={{
         color: brand?.secondaryColor || "#162030"
       }}
@@ -328,7 +328,11 @@ export default function Portal() {
               <img
                 className="portal-hero-logo"
                 src={portalLogoSrc}
-                alt=""
+                alt={
+                  brand?.displayName != null && String(brand.displayName).trim()
+                    ? String(brand.displayName).trim()
+                    : portalT(uiLang, "brandFallbackTitle")
+                }
                 width={40}
                 height={40}
                 style={{ width: 40, height: 40, objectFit: "contain" }}

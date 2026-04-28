@@ -2,7 +2,7 @@ const STR = {
   fr: {
     eyebrow: "Portail client",
     heroLead:
-      "Consultez votre service internet, payez vos factures par Mobile Money et envoyez votre référence TID dans un espace simple, sécurisé et professionnel.",
+      "Suivez abonnements et factures, lancez un paiement depuis le portail et transmettez votre référence de transaction — tout reste centralisé, lisible et sécurisé.",
     loginPhoneTitle: "Connexion par téléphone",
     loginPhoneHelp:
       "Indiquez l'identifiant FAI communiqué par votre opérateur, votre numéro enregistré (chiffres, indicatif pays) et votre mot de passe.",
@@ -69,7 +69,7 @@ const STR = {
   en: {
     eyebrow: "Customer portal",
     heroLead:
-      "Manage your internet service, pay invoices via Mobile Money and submit your payment reference (TID) in a simple, secure, professional space.",
+      "Track subscriptions and invoices, start a payment from the portal and share your transaction reference — one clear, secure place for everything.",
     loginPhoneTitle: "Sign in with phone",
     loginPhoneHelp:
       "Enter the ISP ID from your provider, your registered phone number (digits, country code) and your password.",

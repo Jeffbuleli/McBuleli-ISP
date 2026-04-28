@@ -2536,7 +2536,7 @@ function App() {
   if (!user) {
     const forgotHintPlain = (isEn ? publicAuthCopyForgot.en : publicAuthCopyForgot.fr).trim();
     return (
-      <main className="auth-simple">
+      <main className="auth-simple auth-simple--dark">
         <div className="auth-simple-card">
           <img
             className="auth-simple-logo"
@@ -2545,7 +2545,10 @@ function App() {
             width={80}
             height={80}
           />
-          <h1 className="auth-simple-title">McBuleli</h1>
+          <h1 className="auth-simple-title">{tenantSurfaceLogoAlt}</h1>
+          {tenantSurfaceLogoAlt !== "McBuleli" ? (
+            <p className="auth-simple-platform-hint">{isEn ? "Powered by McBuleli" : "Propulsé par McBuleli"}</p>
+          ) : null}
           {notice ? <p className="auth-simple-notice">{notice}</p> : null}
           {error ? <p className="error">{error}</p> : null}
           {forgotNotice && loginAuthStep === "forgot" ? (
@@ -2722,7 +2725,7 @@ function App() {
 
   if (user.mustChangePassword) {
     return (
-      <main className="auth-simple">
+      <main className="auth-simple auth-simple--dark">
         <div className="auth-simple-card">
           <img
             className="auth-simple-logo"
@@ -2732,6 +2735,11 @@ function App() {
             height={80}
           />
           <h1 className="auth-simple-title">{tenantSurfaceLogoAlt}</h1>
+          {tenantSurfaceLogoAlt !== "McBuleli" ? (
+            <p className="auth-simple-platform-hint">
+              {isEn ? "Powered by McBuleli" : "Propulsé par McBuleli"}
+            </p>
+          ) : null}
           <p className="auth-simple-sub">
               {t(
                 "Vous devez mettre à jour votre mot de passe avant de continuer.",
@@ -2778,7 +2786,7 @@ function App() {
     !ispAnnouncements.length;
 
   return (
-    <main className="container app-shell">
+    <main className="container app-shell app-shell--dashboard-dark">
       <div className="dashboard-sticky-stack">
       <header className="app-header app-header--dashboard">
           <div className="dashboard-header-top">
@@ -2788,7 +2796,15 @@ function App() {
                   dashboardTenantLogoSrc ? "dashboard-logo dashboard-logo--tenant" : "dashboard-logo dashboard-logo--mcbuleli"
                 }
                 src={dashboardTenantLogoSrc || mcbuleliLogoUrl}
-                alt={dashboardTenantLogoSrc ? "" : "McBuleli"}
+                alt={
+                  dashboardTenantLogoSrc
+                    ? String(
+                        workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
+                          branding?.displayName ||
+                          "Logo entreprise"
+                      ).trim() || "Logo entreprise"
+                    : "McBuleli"
+                }
                 width={44}
                 height={44}
               />

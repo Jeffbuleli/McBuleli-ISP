@@ -214,7 +214,7 @@ export default function WifiPortal() {
       : mcbuleliLogoUrl;
 
   return (
-    <main className="container">
+    <main className="container wifi-portal-page wifi-portal-page--dark">
       <section className="wifi-hero" aria-label={uiLang === "en" ? "Wi‑Fi guest overview" : "Présentation Wi‑Fi"}>
         <div className="wifi-hero-top">
           <div>
@@ -277,7 +277,12 @@ export default function WifiPortal() {
           className="isp-enduser-brand-head__logo-wrap"
           style={{ borderColor: branding?.primaryColor || "#43a047" }}
         >
-          <img src={wifiLogoSrc} alt="" width={40} height={40} />
+          <img
+            src={wifiLogoSrc}
+            alt={wifiDisplayName(branding?.displayName, uiLang) || (uiLang === "en" ? "Internet provider" : "Opérateur")}
+            width={40}
+            height={40}
+          />
         </div>
         <div className="isp-enduser-brand-head__text">
           <h1>{wifiDisplayName(branding?.displayName, uiLang)}</h1>

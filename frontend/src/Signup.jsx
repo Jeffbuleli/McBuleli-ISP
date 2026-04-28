@@ -3,6 +3,12 @@ import { api, publicAssetUrl, setAuthToken } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import { IconArrowLeft } from "./icons.jsx";
 
+function resolveSignupTitle(displayName) {
+  const s = displayName != null ? String(displayName).trim() : "";
+  if (!s || s === "AA") return "McBuleli";
+  return s;
+}
+
 function getStoredUiLang() {
   if (typeof window === "undefined") return "fr";
   const saved = window.localStorage.getItem("ui_lang");
@@ -32,6 +38,7 @@ export default function Signup() {
       : mcbuleliLogoUrl;
   const surfaceLogoAlt =
     (tenantContext?.displayName != null && String(tenantContext.displayName).trim()) || "McBuleli";
+  const headlineTitle = resolveSignupTitle(tenantContext?.displayName);
 
   useEffect(() => {
     api
@@ -82,10 +89,13 @@ export default function Signup() {
   }
 
   return (
-    <main className="auth-simple">
+    <main className="auth-simple auth-simple--dark">
       <div className="auth-simple-card">
         <img className="auth-simple-logo" src={surfaceLogoSrc} alt={surfaceLogoAlt} width={80} height={80} />
-        <h1 className="auth-simple-title">McBuleli</h1>
+        <h1 className="auth-simple-title">{headlineTitle}</h1>
+        {headlineTitle !== "McBuleli" ? (
+          <p className="auth-simple-platform-hint">{isEn ? "Powered by McBuleli" : "Propulsé par McBuleli"}</p>
+        ) : null}
         <p className="auth-simple-sub">
           {isEn ? "Create your workspace — 1-month trial." : "Créez votre espace — essai 1 mois."}
         </p>
