@@ -92,7 +92,9 @@ function formatStaffRole(role, isEn) {
   return (isEn ? en : fr)[role] || humanizeRoleKey(role);
 }
 
-function workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) {
+function workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) {
+  const fromSession = user?.workspaceDisplayName != null ? String(user.workspaceDisplayName).trim() : "";
+  if (fromSession && fromSession !== "AA") return fromSession;
   const fromBrand = branding?.displayName != null ? String(branding.displayName).trim() : "";
   if (fromBrand && fromBrand !== "AA") return fromBrand;
   const sid = selectedIspId || tenantContext?.ispId;
@@ -1305,13 +1307,35 @@ function App() {
     if (!import.meta.env.PROD) return;
     const link = document.querySelector('link[rel="manifest"]');
     if (!user || user.mustChangePassword) {
-      if (link) link.href = "/api/public/pwa-manifest";
+      const tenantTitle = tenantContext?.matched
+        ? workspaceHeaderTitle(null, tenantContext, [], tenantContext.ispId, null)
+        : "";
+      const t = tenantTitle && tenantTitle !== "AA" ? tenantTitle : "";
+      if (t) {
+        applyWorkspacePwaManifest(t);
+      } else if (link) {
+        link.href = "/api/public/pwa-manifest";
+      }
       return;
     }
     if (loading || loginWorkspaces || mfaLogin) return;
-    const title = workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId);
+    const title = workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user);
     applyWorkspacePwaManifest(title);
-  }, [user, loading, loginWorkspaces, mfaLogin, branding, tenantContext, isps, selectedIspId]);
+  }, [
+    user,
+    loading,
+    loginWorkspaces,
+    mfaLogin,
+    branding,
+    tenantContext,
+    isps,
+    selectedIspId,
+    user?.mustChangePassword,
+    user?.workspaceDisplayName,
+    tenantContext?.matched,
+    tenantContext?.ispId,
+    tenantContext?.displayName
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2675,14 +2699,16 @@ function App() {
       : mcbuleliLogoUrl;
   const tenantSurfaceLogoAlt = resolvePublicBrandName(tenantContext?.displayName) || "McBuleli";
 
-  const pwaDashReady =
-    Boolean(user) && !user?.mustChangePassword && !loading && !loginWorkspaces && !mfaLogin;
-  const workspaceTitleForPwa = user ? workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) : "";
+  const pwaPromptGateOk = import.meta.env.PROD && !user?.mustChangePassword;
+  const workspaceTitleForPwa = user
+    ? workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user)
+    : workspaceHeaderTitle(null, tenantContext, [], tenantContext?.ispId, null);
 
   if (!user) {
     const forgotHintPlain = (isEn ? publicAuthCopyForgot.en : publicAuthCopyForgot.fr).trim();
     return (
-      <main className="auth-simple auth-simple--dark">
+      <>
+        <main className="auth-simple auth-simple--dark">
         <div className="auth-simple-card">
           <img
             className="auth-simple-logo"
@@ -2876,6 +2902,12 @@ function App() {
           </a>
         </div>
       </main>
+      <PwaInstallPrompt
+        enabled={pwaPromptGateOk}
+        workspaceLabel={workspaceTitleForPwa || tenantSurfaceLogoAlt}
+        isEn={isEn}
+      />
+      </>
     );
   }
 
@@ -2973,7 +3005,7 @@ function App() {
                     alt={
                       dashboardTenantLogoSrc
                         ? String(
-                            workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
+                            workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) ||
                               branding?.displayName ||
                               "Logo entreprise"
                           ).trim() || "Logo entreprise"
@@ -2984,7 +3016,7 @@ function App() {
                   />
                   <div className="dashboard-brand-text">
                     <h1>
-                      {workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
+                      {workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) ||
                         t("Espace opérateur", "Operator workspace")}
                     </h1>
                     <p className="app-meta dashboard-user-role">
@@ -3052,7 +3084,7 @@ function App() {
                     alt={
                       dashboardTenantLogoSrc
                         ? String(
-                            workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
+                            workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) ||
                               branding?.displayName ||
                               "Logo entreprise"
                           ).trim() || "Logo entreprise"
@@ -3063,7 +3095,7 @@ function App() {
                   />
                   <div className="dashboard-brand-text">
                     <h1 className="dashboard-brand-text__title">
-                      {workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
+                      {workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) ||
                         t("Espace opérateur", "Operator workspace")}
                     </h1>
                     <p className="dashboard-brand-text__subtitle app-meta">
@@ -5969,7 +6001,7 @@ function App() {
         <div className="app-footer-inner">
           {(() => {
             const orgTitle =
-              workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
+              workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) ||
               String(branding?.displayName || "").trim();
             const addr = String(branding?.address || "").trim();
             const portalLeg = String(branding?.portalFooterText || "").trim();
@@ -6037,7 +6069,7 @@ function App() {
         <DashboardBottomNav t={t} isFieldAgent={isFieldAgent} navigateMobileScreen={navigateMobileScreen} />
       </>
     ) : null}
-    <PwaInstallPrompt enabled={pwaDashReady} workspaceLabel={workspaceTitleForPwa} />
+    <PwaInstallPrompt enabled={pwaPromptGateOk} workspaceLabel={workspaceTitleForPwa} isEn={isEn} />
     </>
   );
 }

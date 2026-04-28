@@ -769,11 +769,32 @@ async function dashboardPayloadFromDb() {
   return slides.length ? { dashboardBanners: slides } : {};
 }
 
+async function enrichPayloadWorkspaceDisplayName(basePayload) {
+  if (!basePayload.ispId) return basePayload;
+  try {
+    const r = await query(
+      `SELECT i.name AS "ispName", b.display_name AS "ispDisplayName"
+       FROM isps i
+       LEFT JOIN isp_branding b ON b.isp_id = i.id
+       WHERE i.id = $1::uuid`,
+      [basePayload.ispId]
+    );
+    const row = r.rows[0];
+    if (!row) return basePayload;
+    const label = String(row.ispDisplayName || row.ispName || "").trim();
+    if (!label) return basePayload;
+    return { ...basePayload, workspaceDisplayName: label };
+  } catch (_e) {
+    return basePayload;
+  }
+}
+
 async function attachDashboardPayload(basePayload) {
+  const enriched = await enrichPayloadWorkspaceDisplayName(basePayload);
   const fromDb = await dashboardPayloadFromDb();
-  if (fromDb.dashboardBanners?.length) return { ...basePayload, ...fromDb };
+  if (fromDb.dashboardBanners?.length) return { ...enriched, ...fromDb };
   const dashboardBannerHtml = String(process.env.PLATFORM_DASHBOARD_BANNER_HTML || "").trim();
-  return dashboardBannerHtml ? { ...basePayload, dashboardBannerHtml } : basePayload;
+  return dashboardBannerHtml ? { ...enriched, dashboardBannerHtml } : enriched;
 }
 
 function normalizeBannerLinkUrl(raw) {

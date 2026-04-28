@@ -648,7 +648,7 @@ export default function Portal() {
         <p>{t("mcbuleliFooter")}</p>
       </footer>
     </main>
-    <PwaInstallPrompt enabled={portalPwaSubscriberReady} workspaceLabel={portalWorkspaceLabel} />
+    <PwaInstallPrompt enabled={portalPwaSubscriberReady} workspaceLabel={portalWorkspaceLabel} isEn={uiLang === "en"} />
     </>
   );
 }
