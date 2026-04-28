@@ -751,7 +751,6 @@ export default function PublicSite() {
           <p className="public-footer-rccm">
             RCCM : <span className="public-footer-rccm-id">{COMPANY_CONTACT.rccm}</span>
           </p>
-          <p className="public-footer-powered">Powered by McBuleli</p>
         </div>
       </footer>
     </main>
