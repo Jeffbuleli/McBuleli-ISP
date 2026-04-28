@@ -43,6 +43,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const footerCreateImageInputRef = useRef(null);
+  const faqNewImageInputRef = useRef(null);
   const [authCopyFr, setAuthCopyFr] = useState("");
   const [authCopyEn, setAuthCopyEn] = useState("");
   const [authCopyUpdatedAt, setAuthCopyUpdatedAt] = useState(null);
@@ -681,7 +682,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
           setSaving(true);
           setError("");
           try {
-            await api.createSystemOwnerFaqAd({
+            const created = await api.createSystemOwnerFaqAd({
               internalLabel: faqNew.internalLabel,
               sortOrder: Number(faqNew.sortOrder) || 0,
               linkUrl: faqNew.linkUrl.trim() || null,
@@ -689,6 +690,11 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
               altTextEn: faqNew.altTextEn.trim() || null,
               isActive: faqNew.isActive
             });
+            const newFile = faqNewImageInputRef.current?.files?.[0];
+            if (newFile && created?.id) {
+              await api.uploadSystemOwnerFaqAdImage(created.id, newFile);
+            }
+            if (faqNewImageInputRef.current) faqNewImageInputRef.current.value = "";
             setFaqNew({
               internalLabel: "",
               sortOrder: 0,
@@ -752,6 +758,22 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
           />
           {t("Actif", "Active")}
         </label>
+        <label style={{ display: "block", marginBottom: 8 }}>
+          {t("Image (recommandé pour l’affichage public)", "Image (recommended for public display)")}
+          <input
+            ref={faqNewImageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            disabled={saving}
+            style={{ display: "block", marginTop: 6 }}
+          />
+        </label>
+        <p className="app-meta" style={{ margin: "0 0 10px", maxWidth: "40rem" }}>
+          {t(
+            "Le fichier est envoyé juste après la création de l’entrée (même clic sur Ajouter).",
+            "The file uploads right after the entry is created (same click on Add)."
+          )}
+        </p>
         <button type="submit" disabled={saving}>
           {t("Ajouter", "Add")}
         </button>
