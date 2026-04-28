@@ -1118,6 +1118,57 @@ app.get("/api/public/auth-copy", rlPublicRead, async (_req, res) => {
   }
 });
 
+function resolveRequestPublicOrigin(req) {
+  const host = extractTenantHost(req) || "localhost";
+  const xf = req.headers["x-forwarded-proto"];
+  const protoRaw = Array.isArray(xf) ? xf[0] : xf;
+  const proto = protoRaw === "https" || protoRaw === "http" ? protoRaw : req.secure ? "https" : "http";
+  return `${proto}://${host}`;
+}
+
+function buildPwaWebManifest(req) {
+  const origin = resolveRequestPublicOrigin(req);
+  const icons = [
+    { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+    { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+    { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
+  ];
+
+  let partner = null;
+  if (req.tenantContext) {
+    const raw = req.tenantContext.displayName || req.tenantContext.name;
+    const s = raw != null ? String(raw).trim() : "";
+    if (s && s !== "AA") partner = s;
+  }
+
+  const name = partner ? `${partner} — McBuleli` : "McBuleli ISP";
+  const short_name = partner ? (partner.length > 16 ? `${partner.slice(0, 15)}…` : partner) : "McBuleli";
+
+  return {
+    id: `${origin}/`,
+    name,
+    short_name,
+    description:
+      "Plateforme d'exploitation pour opérateurs FAI : facturation, réseau, portail abonnés.",
+    start_url: "/",
+    scope: "/",
+    display: "standalone",
+    orientation: "portrait",
+    dir: "ltr",
+    lang: "fr",
+    background_color: "#0a0a0a",
+    theme_color: "#0a0a0a",
+    categories: ["business", "finance", "productivity"],
+    icons
+  };
+}
+
+app.get("/api/public/pwa-manifest", rlPublicRead, (req, res) => {
+  res.type("application/manifest+json; charset=utf-8");
+  res.set("Cache-Control", "public, max-age=600");
+  res.json(buildPwaWebManifest(req));
+});
+
 app.get("/api/system-owner/auth-copy", authenticate, requireRoles("system_owner"), async (_req, res) => {
   const r = await query(
     `SELECT forgot_password_body_fr, forgot_password_body_en, updated_at FROM platform_auth_copy WHERE id = 1`

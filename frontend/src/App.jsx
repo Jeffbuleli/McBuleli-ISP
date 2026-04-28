@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
 import LangSwitch from "./LangSwitch.jsx";
 import DashboardHistograms from "./DashboardHistograms.jsx";
@@ -8,6 +8,8 @@ import DashboardHeaderAnnouncements from "./DashboardHeaderAnnouncements.jsx";
 import DashboardSideNav from "./DashboardSideNav.jsx";
 import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
 import PlatformHomeMarketingPanel from "./PlatformHomeMarketingPanel.jsx";
+import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
+import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
 import {
@@ -1184,6 +1186,18 @@ function App() {
     }
     bootstrap();
   }, []);
+
+  useLayoutEffect(() => {
+    if (!import.meta.env.PROD) return;
+    const link = document.querySelector('link[rel="manifest"]');
+    if (!user || user.mustChangePassword) {
+      if (link) link.href = "/api/public/pwa-manifest";
+      return;
+    }
+    if (loading || loginWorkspaces || mfaLogin) return;
+    const title = workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId);
+    applyWorkspacePwaManifest(title);
+  }, [user, loading, loginWorkspaces, mfaLogin, branding, tenantContext, isps, selectedIspId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2533,6 +2547,10 @@ function App() {
       : mcbuleliLogoUrl;
   const tenantSurfaceLogoAlt = resolvePublicBrandName(tenantContext?.displayName) || "McBuleli";
 
+  const pwaDashReady =
+    Boolean(user) && !user?.mustChangePassword && !loading && !loginWorkspaces && !mfaLogin;
+  const workspaceTitleForPwa = user ? workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) : "";
+
   if (!user) {
     const forgotHintPlain = (isEn ? publicAuthCopyForgot.en : publicAuthCopyForgot.fr).trim();
     return (
@@ -2786,6 +2804,7 @@ function App() {
     !ispAnnouncements.length;
 
   return (
+    <>
     <main className="container app-shell app-shell--dashboard-dark">
       <div className="dashboard-sticky-stack">
       <header className="app-header app-header--dashboard">
@@ -5564,6 +5583,8 @@ function App() {
         </div>
       </footer>
     </main>
+    <PwaInstallPrompt enabled={pwaDashReady} workspaceLabel={workspaceTitleForPwa} />
+    </>
   );
 }
 

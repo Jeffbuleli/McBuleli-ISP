@@ -5,14 +5,13 @@
  * - /api/* : toujours réseau, jamais mis en cache (données sensibles)
  */
 
-const VERSION = "mcbuleli-sw-v4";
+const VERSION = "mcbuleli-sw-v5";
 const CACHE_STATIC = `${VERSION}-static`;
 const CACHE_RUNTIME = `${VERSION}-runtime`;
 
 const PRECACHE_URLS = [
   "/offline.html",
   "/mcbuleli-logo.svg",
-  "/manifest.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/icon-maskable-512.png"

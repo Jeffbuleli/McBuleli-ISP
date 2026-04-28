@@ -3,22 +3,32 @@ import { useEffect, useState } from "react";
 const DISMISS_KEY = "mcbuleli_pwa_install_dismissed";
 
 /**
- * Barre discrète « Installer l’application » (beforeinstallprompt).
- * Ne s’affiche pas si l’app est déjà en mode standalone ou si l’utilisateur a refusé.
+ * Installation PWA — uniquement lorsque `enabled` (ex. après connexion et choix d’espace).
+ * `workspaceLabel` : nom de l’entreprise (affiché avec McBuleli).
  */
-export default function PwaInstallPrompt() {
+export default function PwaInstallPrompt({ enabled = false, workspaceLabel = "" }) {
   const [deferred, setDeferred] = useState(null);
   const [visible, setVisible] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
-    if (!import.meta.env.PROD) return;
-    if (typeof window === "undefined") return;
+    if (!import.meta.env.PROD || typeof window === "undefined") return;
 
     const standalone =
       window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
     setIsStandalone(standalone);
+  }, []);
 
+  useEffect(() => {
+    if (!import.meta.env.PROD || typeof window === "undefined") return;
+    if (!enabled) {
+      setDeferred(null);
+      setVisible(false);
+      return;
+    }
+
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
     if (standalone || window.localStorage.getItem(DISMISS_KEY) === "1") {
       return;
     }
@@ -31,7 +41,7 @@ export default function PwaInstallPrompt() {
 
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
     return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
-  }, []);
+  }, [enabled]);
 
   async function onInstallClick() {
     if (!deferred) return;
@@ -53,7 +63,9 @@ export default function PwaInstallPrompt() {
     setDeferred(null);
   }
 
-  if (!import.meta.env.PROD || isStandalone || !visible || !deferred) {
+  const label = workspaceLabel != null ? String(workspaceLabel).trim() : "";
+
+  if (!import.meta.env.PROD || isStandalone || !enabled || !visible || !deferred) {
     return null;
   }
 
@@ -61,8 +73,17 @@ export default function PwaInstallPrompt() {
     <div className="pwa-install-bar" role="region" aria-label="Installation application">
       <div className="pwa-install-bar__inner">
         <p className="pwa-install-bar__text">
-          <strong>McBuleli</strong> — Installez l’application sur votre écran d’accueil pour un accès rapide (mode hors
-          ligne partiel).
+          {label ? (
+            <>
+              <strong>{label}</strong> — McBuleli — Installez l’application sur votre écran d’accueil (accès rapide, mode
+              hors ligne partiel).
+            </>
+          ) : (
+            <>
+              <strong>McBuleli</strong> — Installez l’application sur votre écran d’accueil (accès rapide, mode hors ligne
+              partiel).
+            </>
+          )}
         </p>
         <div className="pwa-install-bar__actions">
           <button type="button" className="pwa-install-bar__btn pwa-install-bar__btn--primary" onClick={onInstallClick}>

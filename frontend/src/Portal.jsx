@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { API_URL, api, publicAssetUrl } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import LangSwitch from "./LangSwitch.jsx";
 import HomeShortcut from "./HomeShortcut.jsx";
+import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
+import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { portalBrandTitle, portalT } from "./portalCopy.js";
 
 const SUBSCRIBER_JWT_KEY = "subscriberJwt";
@@ -161,6 +163,18 @@ export default function Portal() {
     }).catch(() => {});
   }, []);
 
+  useLayoutEffect(() => {
+    if (!import.meta.env.PROD) return;
+    if (!session) {
+      const link = document.querySelector('link[rel="manifest"]');
+      if (link) link.href = "/api/public/pwa-manifest";
+      return;
+    }
+    const d = session.branding?.displayName;
+    const title = d != null ? String(d).trim() : "";
+    applyWorkspacePwaManifest(title && title !== "AA" ? title : "");
+  }, [session]);
+
   async function onOpenPortal(e) {
     e.preventDefault();
     setError("");
@@ -303,7 +317,16 @@ export default function Portal() {
       ? publicAssetUrl(brand.logoUrl)
       : mcbuleliLogoUrl;
 
+  const portalPwaSubscriberReady = Boolean(session);
+  const portalWorkspaceLabel = (() => {
+    const d = brand?.displayName;
+    const s = d != null ? String(d).trim() : "";
+    if (!s || s === "AA") return "";
+    return s;
+  })();
+
   return (
+    <>
     <main
       className="container portal-page portal-page--dark"
       style={{
@@ -624,5 +647,7 @@ export default function Portal() {
         <p>{t("mcbuleliFooter")}</p>
       </footer>
     </main>
+    <PwaInstallPrompt enabled={portalPwaSubscriberReady} workspaceLabel={portalWorkspaceLabel} />
+    </>
   );
 }
