@@ -328,4 +328,3 @@ export function registerTeamChatRoutes(app) {
     }
   );
 }
-Read
