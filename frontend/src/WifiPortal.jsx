@@ -66,14 +66,8 @@ export default function WifiPortal() {
   const [redirectUrl, setRedirectUrl] = useState(null);
   const [polling, setPolling] = useState(false);
   const [postPaySetup, setPostPaySetup] = useState(null);
-  const [uiLang, setUiLang] = useState(getStoredUiLang);
+  const uiLang = useReadOnlyUiLang();
   const t = (key) => wifiT(uiLang, key);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("ui_lang", uiLang);
-    }
-  }, [uiLang]);
 
   const loadCatalog = useCallback(async (isp) => {
     setError("");
