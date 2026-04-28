@@ -1179,6 +1179,8 @@ button.btn-secondary-outline:hover:not(:disabled) {
   display: block;
   border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.08);
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
 }
 
 .guest-wifi-share__qr-hint {
@@ -1241,6 +1243,43 @@ button.btn-secondary-outline:hover:not(:disabled) {
   white-space: pre-wrap;
   width: 100%;
   max-width: 100%;
+}
+
+/* Lisibilité bloc QR / liens Wi‑Fi sur fond sombre (tableau de bord) */
+.app-shell--dashboard-dark .guest-wifi-share {
+  background: rgba(26, 28, 32, 0.96);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.app-shell--dashboard-dark .guest-wifi-share__title {
+  color: #e8eaed;
+}
+
+.app-shell--dashboard-dark .guest-wifi-share__section-label {
+  color: #8fe3b4;
+}
+
+.app-shell--dashboard-dark .guest-wifi-share__hint,
+.app-shell--dashboard-dark .guest-wifi-share__qr-hint {
+  color: #c5cdd8;
+}
+
+.app-shell--dashboard-dark .guest-wifi-share__url {
+  background: rgba(0, 0, 0, 0.38);
+  color: #dbe2ec;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.app-shell--dashboard-dark .guest-wifi-share__qr-wrap img {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+.app-shell--dashboard-dark .guest-wifi-share__qr-placeholder {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
 }
 
 .wifi-captive-banner {
@@ -3143,13 +3182,9 @@ a.public-footer-card:hover {
 
 .public-footer-card--address {
   grid-column: 1 / -1;
-  flex-direction: row;
+  flex-direction: column;
   align-items: flex-start;
-}
-
-.public-footer-card--address .public-footer-card-value {
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.78);
+  gap: 6px;
 }
 
 .public-footer-card-icon {
@@ -3462,6 +3497,34 @@ a.public-footer-card:hover {
   font-size: 0.85rem;
   color: var(--mb-muted);
   line-height: 1.45;
+}
+
+.app-shell--dashboard-dark .network-event-line {
+  background: rgba(0, 0, 0, 0.35);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.app-shell--dashboard-dark .network-event-line__meta {
+  color: #e8eaed;
+  font-weight: 600;
+}
+
+.app-shell--dashboard-dark .network-event-line__hint {
+  color: #c4cad4;
+}
+
+.app-shell--dashboard-dark .panel code {
+  background: rgba(0, 0, 0, 0.35);
+  color: #b9e8cc;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.app-shell--dashboard-dark input::placeholder,
+.app-shell--dashboard-dark textarea::placeholder {
+  color: #8b93a0;
+  opacity: 1;
 }
 
 /* —— Expenses (accounting) —— */
@@ -4282,12 +4345,22 @@ body:has(.public-site--dark) {
   color: #fff;
 }
 
+.public-site--dark .public-nav {
+  background: rgba(22, 24, 28, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
 .public-site--dark .public-nav a {
-  color: rgba(245, 245, 245, 0.88);
+  color: #e8eaed;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .public-site--dark .public-nav a:hover {
-  color: #63b38f;
+  color: #7ad4a2;
 }
 
 .public-site--dark .public-quote-card {

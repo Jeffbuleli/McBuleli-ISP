@@ -5,7 +5,7 @@ import LangSwitch from "./LangSwitch.jsx";
 import HomeShortcut from "./HomeShortcut.jsx";
 import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
 import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
-import { portalBrandTitle, portalT } from "./portalCopy.js";
+import { portalBrandTitle, portalInvoiceStatusLabel, portalT } from "./portalCopy.js";
 
 const SUBSCRIBER_JWT_KEY = "subscriberJwt";
 const DEFAULT_PAWAPAY_NETWORKS = [
@@ -545,7 +545,8 @@ export default function Portal() {
               ) : (
                 session.invoices.map((inv) => (
                   <p key={inv.id}>
-                    {inv.id.slice(0, 8)} — {money(inv.amountUsd, "USD", uiLang)} — {inv.status} — {t("due")}{" "}
+                    {inv.id.slice(0, 8)} — {money(inv.amountUsd, "USD", uiLang)} —{" "}
+                    {portalInvoiceStatusLabel(uiLang, inv.status)} — {t("due")}{" "}
                     {new Date(inv.dueDate).toLocaleDateString(uiLang === "en" ? "en-GB" : "fr-FR")}
                   </p>
                 ))
@@ -564,7 +565,7 @@ export default function Portal() {
                 .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
                 .map((inv) => (
                   <option key={inv.id} value={inv.id}>
-                    {inv.id.slice(0, 8)} — {inv.amountUsd}&nbsp;$ ({inv.status})
+                    {inv.id.slice(0, 8)} — {inv.amountUsd}&nbsp;$ ({portalInvoiceStatusLabel(uiLang, inv.status)})
                   </option>
                 ))}
             </select>
@@ -572,8 +573,8 @@ export default function Portal() {
               value={mobilePayForm.currency}
               onChange={(e) => setMobilePayForm({ ...mobilePayForm, currency: e.target.value })}
             >
-              <option value="CDF">CDF (franc congolais)</option>
-              <option value="USD">USD</option>
+              <option value="CDF">{t("currencyCdf")}</option>
+              <option value="USD">{t("currencyUsd")}</option>
             </select>
             <input
               placeholder={t("payerPhonePh")}
@@ -595,7 +596,7 @@ export default function Portal() {
             </button>
             {mobilePaySession?.depositId ? (
               <p>
-                Deposit ID: <code>{mobilePaySession.depositId}</code>{" "}
+                {t("depositRef")}: <code>{mobilePaySession.depositId}</code>{" "}
                 <button type="button" onClick={onCheckMobileMoneyPayment}>
                   {t("checkPayment")}
                 </button>
@@ -614,7 +615,7 @@ export default function Portal() {
                 .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
                 .map((inv) => (
                   <option key={inv.id} value={inv.id}>
-                    {inv.id.slice(0, 8)} — {inv.amountUsd}&nbsp;$ ({inv.status})
+                    {inv.id.slice(0, 8)} — {inv.amountUsd}&nbsp;$ ({portalInvoiceStatusLabel(uiLang, inv.status)})
                   </option>
                 ))}
             </select>

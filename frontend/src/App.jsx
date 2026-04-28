@@ -81,6 +81,30 @@ function workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) {
   return "";
 }
 
+function tidSubmissionStatusLabel(status, isEn) {
+  const s = String(status || "").toLowerCase();
+  const m = {
+    pending: { fr: "en attente", en: "pending" },
+    approved: { fr: "approuvé", en: "approved" },
+    rejected: { fr: "rejeté", en: "rejected" },
+    cancelled: { fr: "annulé", en: "cancelled" },
+    expired: { fr: "expiré", en: "expired" }
+  };
+  const row = m[s];
+  return row ? (isEn ? row.en : row.fr) : status || "—";
+}
+
+function invoiceStatusShort(status, isEn) {
+  const s = String(status || "").toLowerCase();
+  const m = {
+    unpaid: { fr: "impayée", en: "unpaid" },
+    overdue: { fr: "en retard", en: "overdue" },
+    paid: { fr: "payée", en: "paid" }
+  };
+  const row = m[s];
+  return row ? (isEn ? row.en : row.fr) : status || "—";
+}
+
 /** Lien tel: à partir du numéro saisi dans l’image de marque (conserve + et chiffres). */
 function telHrefFromBrandingPhone(phone) {
   const s = String(phone || "").trim();
@@ -408,68 +432,113 @@ function CsvImportResultBlock({ createdCount, skipped, errors, maxRows = 40, onD
 }
 
 const EXPENSE_CATEGORY_OPTIONS = [
-  { value: "field_agent_fixed", label: "Agent terrain — paiement fixe" },
-  { value: "field_agent_percentage", label: "Agent terrain — pourcentage / commission" },
-  { value: "equipment", label: "Équipement" },
-  { value: "operations", label: "Exploitation" },
-  { value: "marketing", label: "Marketing" },
-  { value: "utilities", label: "Charges & services" },
-  { value: "transport", label: "Transport" },
-  { value: "salaries", label: "Salaires" },
-  { value: "taxes", label: "Impôts & taxes" },
-  { value: "other", label: "Autre" }
+  { value: "field_agent_fixed", labelFr: "Agent terrain — paiement fixe", labelEn: "Field agent — fixed payment" },
+  {
+    value: "field_agent_percentage",
+    labelFr: "Agent terrain — pourcentage / commission",
+    labelEn: "Field agent — percentage / commission"
+  },
+  { value: "equipment", labelFr: "Équipement", labelEn: "Equipment" },
+  { value: "operations", labelFr: "Exploitation", labelEn: "Operations" },
+  { value: "marketing", labelFr: "Marketing", labelEn: "Marketing" },
+  { value: "utilities", labelFr: "Charges & services", labelEn: "Utilities & services" },
+  { value: "transport", labelFr: "Transport", labelEn: "Transport" },
+  { value: "salaries", labelFr: "Salaires", labelEn: "Payroll" },
+  { value: "taxes", labelFr: "Impôts & taxes", labelEn: "Taxes" },
+  { value: "other", labelFr: "Autre", labelEn: "Other" }
 ];
 
-function expenseCategoryLabel(value) {
-  return EXPENSE_CATEGORY_OPTIONS.find((o) => o.value === value)?.label || value;
+function expenseCategoryLabel(value, isEn) {
+  const o = EXPENSE_CATEGORY_OPTIONS.find((x) => x.value === value);
+  if (!o) return value;
+  return isEn ? o.labelEn : o.labelFr;
 }
 
-function expenseApprovalStatusLabel(status) {
+function expenseApprovalStatusLabel(status, isEn) {
   const s = String(status || "");
-  if (s === "approved") return "Approuvée";
-  if (s === "rejected") return "Rejetée";
-  return "En attente";
+  if (s === "approved") return isEn ? "Approved" : "Approuvée";
+  if (s === "rejected") return isEn ? "Rejected" : "Rejetée";
+  return isEn ? "Pending" : "En attente";
+}
+
+function withdrawalStatusLabel(status, isEn) {
+  const s = String(status || "").toLowerCase();
+  if (s === "completed" || s === "success" || s === "paid") return isEn ? "Completed" : "Terminé";
+  if (s === "pending" || s === "processing") return isEn ? "Pending" : "En attente";
+  if (s === "failed" || s === "cancelled" || s === "canceled") return isEn ? "Failed" : "Échoué";
+  return status || "—";
 }
 
 const TENANTS_PAGE_SIZE = 6;
 
-function humanizeProvisioningEvent(ev) {
+function humanizeProvisioningEvent(ev, isEn) {
   const d = ev.details && typeof ev.details === "object" ? ev.details : {};
   const reason = d.reason || d.message;
   if (ev.status === "skipped") {
     if (reason === "No active network node configured") {
-      return "Aucun nœud MikroTik actif n’est défini comme défaut : l’étape a été ignorée. Enregistrez un nœud actif puis relancez une synchronisation (activer / suspendre).";
+      return isEn
+        ? "No active MikroTik node is set as default: the step was skipped. Save an active default node, then run synchronization again (activate / suspend)."
+        : "Aucun nœud MikroTik actif n'est défini comme défaut : l'étape a été ignorée. Enregistrez un nœud actif puis relancez une synchronisation (activer / suspendre).";
     }
-    return reason ? `Étape ignorée : ${reason}` : "Étape ignorée (aucun changement appliqué sur le routeur).";
+    return reason
+      ? isEn
+        ? `Step skipped: ${reason}`
+        : `Étape ignorée : ${reason}`
+      : isEn
+        ? "Step skipped (no change applied on the router)."
+        : "Étape ignorée (aucun changement appliqué sur le routeur).";
   }
   if (ev.status === "failed") {
     return reason
-      ? `Échec : ${reason}`
-      : "Échec de communication avec l’API REST du routeur (vérifiez l’hôte, le port, TLS et les identifiants).";
+      ? isEn
+        ? `Failed: ${reason}`
+        : `Échec : ${reason}`
+      : isEn
+        ? "Failed to reach the router REST API (check host, port, TLS and credentials)."
+        : "Échec de communication avec l'API REST du routeur (vérifiez l'hôte, le port, TLS et les identifiants).";
   }
   if (ev.status === "success") {
     const node = d.node || "";
-    return node
-      ? `Appliqué sur le nœud « ${node} » (${d.mode || "mis à jour"}).`
-      : "Paramètres appliqués sur le routeur MikroTik.";
+    if (node) {
+      return isEn
+        ? `Applied on node "${node}" (${d.mode || "updated"}).`
+        : `Appliqué sur le nœud « ${node} » (${d.mode || "mis à jour"}).`;
+    }
+    return isEn ? "Settings applied on the MikroTik router." : "Paramètres appliqués sur le routeur MikroTik.";
   }
   return "";
 }
 
-function humanizeRadiusSyncEvent(ev) {
+function humanizeRadiusSyncEvent(ev, isEn) {
   const d = ev.details && typeof ev.details === "object" ? ev.details : {};
   const reason = String(d.reason || "");
   if (ev.status === "skipped" && reason.includes("FREERADIUS_SYNC_ENABLED")) {
-    return "Synchronisation FreeRADIUS désactivée sur le serveur (FREERADIUS_SYNC_ENABLED≠true). Les entrées RADIUS ne sont pas mises à jour automatiquement ici.";
+    return isEn
+      ? "FreeRADIUS sync is disabled on the server (FREERADIUS_SYNC_ENABLED≠true). RADIUS entries are not updated automatically here."
+      : "Synchronisation FreeRADIUS désactivée sur le serveur (FREERADIUS_SYNC_ENABLED≠true). Les entrées RADIUS ne sont pas mises à jour automatiquement ici.";
   }
   if (ev.status === "skipped") {
-    return reason ? `Synchronisation ignorée : ${reason}` : "Synchronisation ignorée.";
+    return reason
+      ? isEn
+        ? `Sync skipped: ${reason}`
+        : `Synchronisation ignorée : ${reason}`
+      : isEn
+        ? "Sync skipped."
+        : "Synchronisation ignorée.";
   }
   if (ev.status === "success") {
-    return "Entrée FreeRADIUS mise à jour (secret, profil ou état).";
+    return isEn
+      ? "FreeRADIUS record updated (secret, profile or state)."
+      : "Entrée FreeRADIUS mise à jour (secret, profil ou état).";
   }
   if (ev.status === "failed") {
-    return d.message ? `Échec FreeRADIUS : ${d.message}` : "Échec lors de l’écriture dans les tables FreeRADIUS.";
+    return d.message
+      ? isEn
+        ? `FreeRADIUS error: ${d.message}`
+        : `Échec FreeRADIUS : ${d.message}`
+      : isEn
+        ? "Failed while writing to FreeRADIUS tables."
+        : "Échec lors de l'écriture dans les tables FreeRADIUS.";
   }
   return "";
 }
@@ -2344,19 +2413,33 @@ function App() {
       amountUsd: tidForm.amountUsd || undefined
     });
     setTidForm({ invoiceId: "", tid: "", submittedByPhone: "", amountUsd: "" });
-    setNotice("TID envoyée. En attente de vérification par l'administrateur.");
+    setNotice(
+      t(
+        "TID envoyée. En attente de vérification par l'administrateur.",
+        "TID submitted. Awaiting verification by an administrator."
+      )
+    );
     refresh();
   }
 
   async function onReviewTid(submissionId, decision) {
-    const note = window.prompt(`Note facultative pour ${decision}`, "");
+    const note = window.prompt(
+      t("Note facultative (audit) :", "Optional note (audit trail):"),
+      ""
+    );
+    if (note === null) return;
     await api.reviewTidSubmission(selectedIspId, submissionId, { decision, note: note || "" });
     refresh();
   }
 
   async function onQueueTidReminders() {
     const payload = await api.queueTidReminders(selectedIspId);
-    setNotice(`${payload.queued} rappel(s) mis en file pour ${payload.totalPending} TID en attente.`);
+    setNotice(
+      t(
+        `${payload.queued} rappel(s) mis en file pour ${payload.totalPending} TID en attente.`,
+        `${payload.queued} reminder(s) queued for ${payload.totalPending} pending TID(s).`
+      )
+    );
     refresh();
   }
 
@@ -3725,13 +3808,15 @@ function App() {
         )}
 
         <section className="panel">
-          <h2>Événements de provisionnement</h2>
+          <h2>{t("Événements de provisionnement", "Provisioning events")}</h2>
           <p className="app-meta">
-            Résumé lisible des tentatives d&apos;activation ou de suspension sur MikroTik (PPPoE / hotspot). Un statut
-            « Ignoré » indique souvent qu&apos;aucun nœud par défaut n&apos;était prêt, pas une erreur client.
+            {t(
+              "Résumé lisible des tentatives d'activation ou de suspension sur MikroTik (PPPoE / hotspot). Un statut « Ignoré » indique souvent qu'aucun nœud par défaut n'était prêt, pas une erreur client.",
+              "Readable summary of activation or suspension attempts on MikroTik (PPPoE / hotspot). “Skipped” usually means no default node was ready—not necessarily a subscriber error."
+            )}
           </p>
           {provisioningEvents.slice(0, 12).map((event) => {
-            const hint = humanizeProvisioningEvent(event);
+            const hint = humanizeProvisioningEvent(event, isEn);
             return (
               <p key={event.id} className="network-event-line">
                 <span className="network-event-line__meta">
@@ -3745,13 +3830,15 @@ function App() {
         </section>
 
         <section className="panel">
-          <h2>Synchronisation FreeRADIUS</h2>
+          <h2>{t("Synchronisation FreeRADIUS", "FreeRADIUS synchronization")}</h2>
           <p className="app-meta">
-            Quand la synchro est active, McBuleli écrit dans les tables RADIUS locales. Si elle est désactivée
-            globalement, les événements restent visibles à titre d&apos;historique avec le motif « ignoré ».
+            {t(
+              "Quand la synchro est active, McBuleli écrit dans les tables RADIUS locales. Si elle est désactivée globalement, les événements restent visibles à titre d'historique avec le motif « ignoré ».",
+              "When sync is enabled, McBuleli writes to local RADIUS tables. If it is disabled globally, events remain visible for history with an “ignored” reason."
+            )}
           </p>
           {radiusSyncEvents.slice(0, 12).map((event) => {
-            const hint = humanizeRadiusSyncEvent(event);
+            const hint = humanizeRadiusSyncEvent(event, isEn);
             return (
               <p key={event.id} className="network-event-line">
                 <span className="network-event-line__meta">
@@ -3999,66 +4086,73 @@ function App() {
 
       <section className="grid">
         <form className="panel" onSubmit={onSubmitTid}>
-          <h2>Mobile Money manuel (TID)</h2>
+          <h2>{t("Mobile Money manuel (TID)", "Manual Mobile Money (TID)")}</h2>
           <select
             value={tidForm.invoiceId}
             onChange={(e) => setTidForm({ ...tidForm, invoiceId: e.target.value })}
           >
-            <option value="">Choisir une facture ouverte (impayée / en retard)</option>
+            <option value="">
+              {t("Choisir une facture ouverte (impayée / en retard)", "Select an open invoice (unpaid / overdue)")}
+            </option>
             {invoices
               .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
               .map((inv) => (
                 <option key={inv.id} value={inv.id}>
-                  {inv.id.slice(0, 8)} - ${inv.amountUsd}
+                  {inv.id.slice(0, 8)} — ${inv.amountUsd} ({invoiceStatusShort(inv.status, isEn)})
                 </option>
               ))}
           </select>
           <input
-            placeholder="Référence de transaction (TID)"
+            placeholder={t("Référence de transaction (TID)", "Transaction reference (TID)")}
             value={tidForm.tid}
             onChange={(e) => setTidForm({ ...tidForm, tid: e.target.value })}
           />
           <input
-            placeholder="Téléphone payeur"
+            placeholder={t("Téléphone payeur", "Payer phone")}
             value={tidForm.submittedByPhone}
             onChange={(e) => setTidForm({ ...tidForm, submittedByPhone: e.target.value })}
           />
           <input
-            placeholder="Montant (facultatif)"
+            placeholder={t("Montant (facultatif)", "Amount (optional)")}
             value={tidForm.amountUsd}
             onChange={(e) => setTidForm({ ...tidForm, amountUsd: e.target.value })}
           />
           <button type="submit" disabled={!selectedIspId}>
-            Envoyer la TID
+            {t("Envoyer la TID", "Submit TID")}
           </button>
         </form>
 
         <section className="panel">
-          <h2>File de vérification des TID</h2>
-          <button onClick={onQueueTidReminders} disabled={!selectedIspId}>
-            Mettre en file les rappels TID en attente
+          <h2>{t("File de vérification des TID", "TID verification queue")}</h2>
+          <button type="button" onClick={onQueueTidReminders} disabled={!selectedIspId}>
+            {t("Mettre en file les rappels TID en attente", "Queue pending TID reminders")}
           </button>
           {tidSubmissions.map((row) => (
             <p key={row.id}>
-              {row.tid} — {row.status} — facture {row.invoiceId?.slice(0, 8)}{" "}
+              {row.tid} — {tidSubmissionStatusLabel(row.status, isEn)} — {t("facture", "invoice")}{" "}
+              {row.invoiceId?.slice(0, 8)}{" "}
               {(isPlatformSuperRole(user.role) ||
                 user.role === "company_manager" ||
                 user.role === "isp_admin" ||
                 user.role === "billing_agent") &&
                 row.status === "pending" && (
                   <>
-                    <button onClick={() => onReviewTid(row.id, "approved")}>Approuver</button>{" "}
-                    <button onClick={() => onReviewTid(row.id, "rejected")}>Rejeter</button>
+                    <button type="button" onClick={() => onReviewTid(row.id, "approved")}>
+                      {t("Approuver", "Approve")}
+                    </button>{" "}
+                    <button type="button" onClick={() => onReviewTid(row.id, "rejected")}>
+                      {t("Rejeter", "Reject")}
+                    </button>
                   </>
                 )}
             </p>
           ))}
           {tidConflicts.length > 0 && (
             <>
-              <h3>Conflits TID en double</h3>
+              <h3>{t("Conflits TID en double", "Duplicate TID conflicts")}</h3>
               {tidConflicts.map((c) => (
                 <p key={c.tid}>
-                  {c.tid} — {c.duplicates} envoi(s) — {c.statuses?.join(", ")}
+                  {c.tid} — {c.duplicates} {t("envoi(s)", "submission(s)")} — {c.statuses?.join(", ")}
                 </p>
               ))}
             </>
@@ -4076,7 +4170,7 @@ function App() {
             <option value="">Choisir une formule</option>
             {plans.map((plan) => (
               <option key={plan.id} value={plan.id}>
-                {plan.name} ({plan.rateLimit}, {plan.durationDays} days)
+                {plan.name} ({plan.rateLimit}, {plan.durationDays} {t("jours", "days")})
               </option>
             ))}
           </select>
@@ -4268,31 +4362,40 @@ function App() {
         )}
 
         <section className="panel">
-          <h2>Équipe du FAI</h2>
+          <h2>{t("Équipe du FAI", "ISP team")}</h2>
           {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
             <div style={{ marginBottom: 16 }}>
-              <h3>Import / export équipe (CSV)</h3>
+              <h3>{t("Import / export équipe (CSV)", "Import / export team (CSV)")}</h3>
               <p>
-                Téléchargez les comptes pour sauvegarde ou importez avec les colonnes : fullName, email, role, mot de
-                passe facultatif. Les lignes sans mot de passe utilisent le défaut ci-dessous (min. 6 caractères).
+                {t(
+                  "Téléchargez les comptes pour sauvegarde ou importez avec les colonnes : fullName, email, role, mot de passe facultatif. Les lignes sans mot de passe utilisent le défaut ci-dessous (min. 6 caractères).",
+                  "Download accounts for backup or import with columns: fullName, email, role, optional password. Rows without a password use the default below (min. 6 characters)."
+                )}
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                 <button type="button" onClick={onDownloadTeamUsersCsv} disabled={!selectedIspId}>
-                  Télécharger le CSV équipe
+                  {t("Télécharger le CSV équipe", "Download team users CSV")}
                 </button>
                 <button type="button" onClick={() => api.downloadTeamImportTemplate()}>
-                  Télécharger le modèle d'import
+                  {t("Télécharger le modèle d'import", "Download import template")}
                 </button>
               </div>
-              <p style={{ marginTop: 8, fontSize: "0.9em", color: "#444" }}>
-                Modèle : ligne d'en-tête uniquement — <code>fullName,email,role,password,accreditationLevel</code>.
-                Mot de passe vide = défaut ci-dessous ; rôle vide = rôle par défaut.
+              <p className="app-meta" style={{ marginTop: 8, fontSize: "0.9em" }}>
+                {t("Modèle : ligne d'en-tête uniquement —", "Template: header row only —")}{" "}
+                <code>fullName,email,role,password,accreditationLevel</code>.{" "}
+                {t(
+                  "Mot de passe vide = défaut ci-dessous ; rôle vide = rôle par défaut.",
+                  "Empty password = default below; empty role = default role."
+                )}
               </p>
               <form onSubmit={onImportTeamUsersCsv} style={{ marginTop: 12 }}>
                 <input ref={teamCsvInputRef} type="file" accept=".csv,text/csv" />
                 <input
                   type="password"
-                  placeholder="Mot de passe par défaut pour les lignes sans (min. 6)"
+                  placeholder={t(
+                    "Mot de passe par défaut pour les lignes sans (min. 6)",
+                    "Default password for rows without one (min. 6)"
+                  )}
                   value={teamImportPassword}
                   onChange={(e) => setTeamImportPassword(e.target.value)}
                 />
@@ -4306,7 +4409,7 @@ function App() {
                   <option value="field_agent">Agent terrain (field_agent)</option>
                 </select>
                 <button type="submit" disabled={!selectedIspId}>
-                  Importer le CSV équipe
+                  {t("Importer le CSV équipe", "Import team CSV")}
                 </button>
               </form>
               {teamImportReport ? (
@@ -4518,45 +4621,59 @@ function App() {
       )}
 
       <section className="grid metrics">
-        <Card title="Clients" value={dashboard?.totalCustomers ?? 0} />
-        <Card title="Abonnements actifs" value={dashboard?.activeSubscriptions ?? 0} />
-        <Card title="Factures impayées" value={dashboard?.unpaidInvoices ?? 0} />
-        <Card title="Chiffre d'affaires (USD)" value={dashboard?.revenueUsd ?? 0} />
+        <Card title={t("Clients", "Customers")} value={dashboard?.totalCustomers ?? 0} />
+        <Card title={t("Abonnements actifs", "Active subscriptions")} value={dashboard?.activeSubscriptions ?? 0} />
+        <Card title={t("Factures impayées", "Unpaid invoices")} value={dashboard?.unpaidInvoices ?? 0} />
+        <Card title={t("Chiffre d'affaires (USD)", "Revenue (USD)")} value={dashboard?.revenueUsd ?? 0} />
       </section>
 
       <section className="grid metrics">
-        <Card title="Cash encaissé (USD)" value={dashboard?.cashbox?.cashUsd ?? 0} />
-        <Card title="TID validés (USD)" value={dashboard?.cashbox?.tidUsd ?? 0} />
-        <Card title="Mobile Money Pawapay (USD)" value={dashboard?.cashbox?.mobileMoneyUsd ?? 0} />
-        <Card title="Retirable Mobile Money (USD)" value={dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0} />
+        <Card title={t("Cash encaissé (USD)", "Cash collected (USD)")} value={dashboard?.cashbox?.cashUsd ?? 0} />
+        <Card title={t("TID validés (USD)", "Validated TID (USD)")} value={dashboard?.cashbox?.tidUsd ?? 0} />
+        <Card title={t("Mobile Money Pawapay (USD)", "Mobile Money Pawapay (USD)")} value={dashboard?.cashbox?.mobileMoneyUsd ?? 0} />
+        <Card
+          title={t("Retirable Mobile Money (USD)", "Withdrawable Mobile Money (USD)")}
+          value={dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0}
+        />
       </section>
 
       {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
         <section className="panel" id="security-settings">
-          <h2>Retrait Mobile Money sécurisé</h2>
+          <h2>{t("Retrait Mobile Money sécurisé", "Secure Mobile Money withdrawal")}</h2>
           <p>
-            Les retraits sont limités aux paiements Mobile Money confirmés via Pawapay. Les encaissements cash et TID
-            manuel restent visibles dans les statistiques, mais ne sont pas retirables depuis le compte Pawapay.
+            {t(
+              "Les retraits sont limités aux paiements Mobile Money confirmés via Pawapay. Les encaissements cash et TID manuel restent visibles dans les statistiques, mais ne sont pas retirables depuis le compte Pawapay.",
+              "Withdrawals are limited to Mobile Money payments confirmed via Pawapay. Cash and manual TID collections still appear in statistics but cannot be withdrawn from the Pawapay account."
+            )}
           </p>
           <section className="panel" style={{ background: "#f8f9fb" }}>
-            <h3>Google Authenticator</h3>
+            <h3>{t("Google Authenticator", "Google Authenticator")}</h3>
             <p>
-              Statut : {user.mfaTotpEnabled ? "configuré" : "non configuré"}. Scannez l'URL otpauth avec Google
-              Authenticator/Authy, puis validez avec le code à 6 chiffres.
+              {t("Statut :", "Status:")}{" "}
+              {user.mfaTotpEnabled
+                ? t("configuré", "enabled")
+                : t("non configuré", "not configured")}
+              .{" "}
+              {t(
+                "Scannez l'URL otpauth avec Google Authenticator/Authy, puis validez avec le code à 6 chiffres.",
+                "Scan the otpauth URL with Google Authenticator or Authy, then confirm with the 6-digit code."
+              )}
             </p>
             <button type="button" onClick={onStartTotpSetup} disabled={totpSetupLoading}>
-              {user.mfaTotpEnabled ? "Regénérer le secret MFA" : "Configurer Google Authenticator"}
+              {user.mfaTotpEnabled
+                ? t("Regénérer le secret MFA", "Regenerate MFA secret")
+                : t("Configurer Google Authenticator", "Set up Google Authenticator")}
             </button>
             {totpSetup ? (
               <form onSubmit={onEnableTotp}>
                 <input readOnly value={totpSetup.secret || ""} />
                 <input readOnly value={totpSetup.otpauthUrl || ""} />
                 <input
-                  placeholder="Code Google Authenticator"
+                  placeholder={t("Code Google Authenticator", "Google Authenticator code")}
                   value={totpSetupCode}
                   onChange={(e) => setTotpSetupCode(e.target.value)}
                 />
-                <button type="submit">Activer MFA</button>
+                <button type="submit">{t("Activer MFA", "Enable MFA")}</button>
               </form>
             ) : null}
           </section>
@@ -4565,7 +4682,11 @@ function App() {
               type="number"
               min={withdrawalForm.currency === "CDF" ? "1000" : "0.5"}
               step="0.01"
-              placeholder={withdrawalForm.currency === "CDF" ? "Montant à retirer (CDF)" : "Montant à retirer (USD)"}
+              placeholder={
+                withdrawalForm.currency === "CDF"
+                  ? t("Montant à retirer (CDF)", "Amount to withdraw (CDF)")
+                  : t("Montant à retirer (USD)", "Amount to withdraw (USD)")
+              }
               value={withdrawalForm.amountUsd}
               onChange={(e) => setWithdrawalForm({ ...withdrawalForm, amountUsd: e.target.value })}
             />
@@ -4577,11 +4698,13 @@ function App() {
               <option value="CDF">CDF</option>
             </select>
             <p style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-              Le solde retirable est suivi en USD. Si vous choisissez CDF, le montant est converti au taux plateforme
-              avant comparaison, puis envoyé à Pawapay en CDF.
+              {t(
+                "Le solde retirable est suivi en USD. Si vous choisissez CDF, le montant est converti au taux plateforme avant comparaison, puis envoyé à Pawapay en CDF.",
+                "Withdrawable balance is tracked in USD. If you choose CDF, the amount is converted at the platform rate before validation, then sent to Pawapay in CDF."
+              )}
             </p>
             <input
-              placeholder="Téléphone bénéficiaire"
+              placeholder={t("Téléphone bénéficiaire", "Beneficiary phone")}
               value={withdrawalForm.phoneNumber}
               onChange={(e) => setWithdrawalForm({ ...withdrawalForm, phoneNumber: e.target.value })}
             />
@@ -4596,18 +4719,18 @@ function App() {
               ))}
             </select>
             <input
-              placeholder="Code Google Authenticator"
+              placeholder={t("Code Google Authenticator", "Google Authenticator code")}
               value={withdrawalForm.mfaCode}
               onChange={(e) => setWithdrawalForm({ ...withdrawalForm, mfaCode: e.target.value })}
             />
             <button type="submit" disabled={!selectedIspId || !user.mfaTotpEnabled}>
-              Valider le retrait
+              {t("Valider le retrait", "Submit withdrawal")}
             </button>
           </form>
           {withdrawals.slice(0, 8).map((w) => (
             <p key={w.id}>
-              {new Date(w.createdAt).toLocaleString()} — {w.amountUsd} {w.currency} vers {w.phoneNumber} ({w.provider}) —{" "}
-              {w.status}
+              {new Date(w.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR")} — {w.amountUsd} {w.currency}{" "}
+              {t("vers", "to")} {w.phoneNumber} ({w.provider}) — {withdrawalStatusLabel(w.status, isEn)}
               {w.failureMessage ? ` — ${w.failureMessage}` : ""}
             </p>
           ))}
@@ -4621,38 +4744,36 @@ function App() {
         user.role === "billing_agent" ||
         user.role === "noc_operator") && (
         <section className="expenses-section">
-          <h2>Dépenses &amp; suivi des fonds</h2>
+          <h2>{t("Dépenses & suivi des fonds", "Expenses & fund reporting")}</h2>
           <p className="expenses-lead">
-            Dépenses types d&apos;un FAI : liaisons et transit (fibre, radio, location de tours), énergie sur sites,
-            équipement (CPE, baies, onduleurs), salaires NOC et terrain, véhicule et carburant, licences et outils,
-            marketing, impôts et cotisations, cloud et prestataires. Chaque catégorie sert à documenter les sorties de
-            caisse pour les agents et la direction.
+            {t(
+              "Dépenses types d'un FAI : liaisons et transit (fibre, radio, location de tours), énergie sur sites, équipement (CPE, baies, onduleurs), salaires NOC et terrain, véhicule et carburant, licences et outils, marketing, impôts et cotisations, cloud et prestataires. Chaque catégorie sert à documenter les sorties de caisse pour les agents et la direction.",
+              "Typical ISP costs: backhaul and transit (fiber, radio, tower rent), on-site power, equipment (CPE, racks, UPS), NOC and field payroll, vehicle and fuel, licenses and tools, marketing, taxes and social contributions, cloud and vendors. Each category documents cash outflows for staff and management."
+            )}
           </p>
           <p className="expenses-lead app-meta">
-            <strong>Validation en deux étapes :</strong> une fois la saisie enregistrée, la ligne est « En attente ». Un
-            autre super administrateur, gestionnaire ou administrateur FAI doit l&apos;
-            <strong>approuver</strong> pour qu&apos;elle entre dans les totaux « dépenses validées » utilisés pour le net
-            (encaissements − dépenses). Si <strong>au moins deux validateurs</strong> sont inscrits sur l&apos;espace,
-            le demandeur ne peut pas approuver ni rejeter sa propre demande. Avec un seul validateur, l&apos;auto-approbation
-            reste possible (voir journal d&apos;audit). <strong>Rejet :</strong> motif optionnel ; ligne retirée des
-            totaux jusqu&apos;à nouvelle soumission.             Les rôles facturation et NOC consultent ; ils ne valident pas.
-            Création, approbation, rejet et suppression tracent une opération d&apos;audit. Les{" "}
-            <strong>clôtures de période</strong> (bloc ci-dessous) figent les dépenses après inventaire ou révision.
+            <strong>{t("Validation en deux étapes :", "Two-step validation:")}</strong>{" "}
+            {t(
+              "une fois la saisie enregistrée, la ligne est « En attente ». Un autre super administrateur, gestionnaire ou administrateur FAI doit l'approuver pour qu'elle entre dans les totaux « dépenses validées » utilisés pour le net (encaissements − dépenses). Si au moins deux validateurs sont inscrits sur l'espace, le demandeur ne peut pas approuver ni rejeter sa propre demande. Avec un seul validateur, l'auto-approbation reste possible (voir journal d'audit). Rejet : motif optionnel ; ligne retirée des totaux jusqu'à nouvelle soumission. Les rôles facturation et NOC consultent ; ils ne valident pas. Création, approbation, rejet et suppression tracent une opération d'audit. Les clôtures de période (bloc ci-dessous) figent les dépenses après inventaire ou révision.",
+              "once recorded, the line stays pending. Another super admin, company manager or ISP admin must approve it before it counts toward validated expenses used for net cash (collections − validated expenses). If at least two approvers are registered on the workspace, the requester cannot approve or reject their own request. With a single approver, self-approval may still apply (see audit log). Rejection: optional reason; the line is excluded from totals until resubmitted. Billing and NOC roles can view but cannot approve. Create, approve, reject and delete actions are audit-logged. Period closures (below) lock expenses after inventory or review."
+            )}
             {user.role === "system_owner" ? (
               <>
                 {" "}
-                Détail : <a href="#audit">Journal d&apos;audit récent</a>.
+                {t("Détail :", "Detail:")}{" "}
+                <a href="#audit">{t("Journal d'audit récent", "Recent audit log")}</a>.
               </>
             ) : null}
           </p>
           <div className="panel accounting-closures-panel">
-            <h3>Clôtures comptables (révision / inventaire)</h3>
+            <h3>
+              {t("Clôtures comptables (révision / inventaire)", "Accounting closures (review / inventory)")}
+            </h3>
             <p className="app-meta" style={{ maxWidth: "52rem" }}>
-              Après inventaire ou contrôle, enregistrez une <strong>clôture</strong> sur une plage de dates. Toute
-              dépense dont la période <strong>chevauche</strong> une clôture est figée : pas de nouvelle saisie,
-              approbation, rejet ni suppression tant que la clôture existe. Aucune dépense « en attente » ne doit
-              rester sur la plage au moment de la clôture. La levée d&apos;une clôture est possible pour correction
-              exceptionnelle et est inscrite au journal d&apos;audit.
+              {t(
+                "Après inventaire ou contrôle, enregistrez une clôture sur une plage de dates. Toute dépense dont la période chevauche une clôture est figée : pas de nouvelle saisie, approbation, rejet ni suppression tant que la clôture existe. Aucune dépense « en attente » ne doit rester sur la plage au moment de la clôture. La levée d'une clôture est possible pour correction exceptionnelle et est inscrite au journal d'audit.",
+                "After inventory or controls, record a closure on a date range. Any expense whose period overlaps a closure is frozen: no new entry, approval, rejection or deletion while the closure exists. No pending expenses should remain on the range when you close. Reopening a closure is allowed for exceptional corrections and is audit-logged."
+              )}
             </p>
             {(isPlatformSuperRole(user.role) ||
               user.role === "company_manager" ||
@@ -4660,7 +4781,7 @@ function App() {
               <form className="accounting-close-form" onSubmit={onCloseAccountingPeriod}>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
                   <label style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                    Du (clôture)
+                    {t("Début (clôture)", "Start date")}
                     <input
                       type="date"
                       style={{ display: "block", marginTop: 4 }}
@@ -4669,7 +4790,7 @@ function App() {
                     />
                   </label>
                   <label style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                    Au (inclus)
+                    {t("Fin (inclus)", "End date (inclusive)")}
                     <input
                       type="date"
                       style={{ display: "block", marginTop: 4 }}
@@ -4688,23 +4809,33 @@ function App() {
                       })
                     }
                   >
-                    Aligner sur le filtre du rapport
+                    {t("Aligner sur le filtre du rapport", "Match report filter dates")}
                   </button>
                 </div>
                 <input
-                  placeholder="Référence inventaire ou commentaire (facultatif)"
+                  placeholder={t(
+                    "Référence inventaire ou commentaire (facultatif)",
+                    "Inventory reference or note (optional)"
+                  )}
                   value={periodCloseForm.note}
                   onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, note: e.target.value })}
                   style={{ marginTop: 10, width: "100%", maxWidth: "36rem" }}
                 />
                 <button type="submit" disabled={!selectedIspId} style={{ marginTop: 12 }}>
-                  Clôturer cette période
+                  {t("Clôturer cette période", "Close this period")}
                 </button>
               </form>
             )}
-            <h4 style={{ marginTop: 18, marginBottom: 8, fontSize: "0.95rem" }}>Clôtures enregistrées</h4>
+            <h4 style={{ marginTop: 18, marginBottom: 8, fontSize: "0.95rem" }}>
+              {t("Clôtures enregistrées", "Recorded closures")}
+            </h4>
             {accountingPeriodClosures.length === 0 ? (
-              <p className="app-meta">Aucune clôture pour cet espace — toutes les périodes sont ouvertes à la saisie.</p>
+              <p className="app-meta">
+                {t(
+                  "Aucune clôture pour cet espace — toutes les périodes sont ouvertes à la saisie.",
+                  "No closures for this workspace — all periods are open for entry."
+                )}
+              </p>
             ) : (
               <ul className="accounting-closures-list">
                 {accountingPeriodClosures.map((c) => (
@@ -4715,8 +4846,10 @@ function App() {
                     {c.note ? ` — ${c.note}` : ""}
                     <span className="app-meta">
                       {" "}
-                      (clôturée le {c.closedAt ? new Date(c.closedAt).toLocaleString() : "—"}
-                      {c.closedByName ? ` · par ${c.closedByName}` : ""})
+                      (
+                      {t("clôturée le", "closed on")}{" "}
+                      {c.closedAt ? new Date(c.closedAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "—"}
+                      {c.closedByName ? ` ${t("· par", "· by")} ${c.closedByName}` : ""})
                     </span>
                     {(isPlatformSuperRole(user.role) ||
                       user.role === "company_manager" ||
@@ -4726,7 +4859,7 @@ function App() {
                         className="btn-secondary-outline accounting-closure-reopen"
                         onClick={() => onReopenAccountingPeriod(c.id)}
                       >
-                        Lever la clôture
+                        {t("Lever la clôture", "Reopen closure")}
                       </button>
                     )}
                   </li>
@@ -4736,7 +4869,7 @@ function App() {
           </div>
           <div className="expenses-filter">
             <label>
-              Du
+              {t("Du", "From")}
               <input
                 type="date"
                 value={expenseFilter.from}
@@ -4744,7 +4877,7 @@ function App() {
               />
             </label>
             <label>
-              Au
+              {t("Au", "To")}
               <input
                 type="date"
                 value={expenseFilter.to}
@@ -4752,13 +4885,13 @@ function App() {
               />
             </label>
             <button type="button" disabled={!selectedIspId} onClick={() => refresh()}>
-              Appliquer la période
+              {t("Appliquer la période", "Apply range")}
             </button>
           </div>
           {expenseSummary ? (
             <div className="expenses-summary">
               <div className="expenses-summary-card expenses-summary-card--green">
-                <span>Encaissé (paiements confirmés)</span>
+                <span>{t("Encaissé (paiements confirmés)", "Collected (confirmed payments)")}</span>
                 <strong>
                   {(expenseSummary.collectionsInPeriodUsd ?? 0).toLocaleString(undefined, {
                     style: "currency",
@@ -4767,7 +4900,7 @@ function App() {
                 </strong>
               </div>
               <div className="expenses-summary-card">
-                <span>Dépenses validées (approuvées)</span>
+                <span>{t("Dépenses validées (approuvées)", "Validated expenses (approved)")}</span>
                 <strong>
                   {(expenseSummary.totalExpensesUsd ?? 0).toLocaleString(undefined, {
                     style: "currency",
@@ -4776,7 +4909,7 @@ function App() {
                 </strong>
               </div>
               <div className="expenses-summary-card">
-                <span>En attente de validation</span>
+                <span>{t("En attente de validation", "Pending approval")}</span>
                 <strong>
                   {(expenseSummary.pendingExpensesUsd ?? 0).toLocaleString(undefined, {
                     style: "currency",
@@ -4785,7 +4918,9 @@ function App() {
                 </strong>
               </div>
               <div className="expenses-summary-card">
-                <span>Net (encaissements − dépenses validées)</span>
+                <span>
+                  {t("Net (encaissements − dépenses validées)", "Net (collections − validated expenses)")}
+                </span>
                 <strong>
                   {(
                     (expenseSummary.collectionsInPeriodUsd ?? 0) - (expenseSummary.totalExpensesUsd ?? 0)
@@ -4802,9 +4937,9 @@ function App() {
               user.role === "company_manager" ||
               user.role === "isp_admin") && (
               <form className="panel expenses-form" onSubmit={onCreateExpense}>
-                <h3>Nouvelle dépense</h3>
+                <h3>{t("Nouvelle dépense", "New expense")}</h3>
                 <label style={{ display: "block", marginBottom: 8, fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                  Catégorie
+                  {t("Catégorie", "Category")}
                   <select
                     style={{ display: "block", width: "100%", marginTop: 4 }}
                     value={expenseForm.category}
@@ -4821,7 +4956,7 @@ function App() {
                   >
                     {EXPENSE_CATEGORY_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
-                        {o.label}
+                        {isEn ? o.labelEn : o.labelFr}
                       </option>
                     ))}
                   </select>
@@ -4830,18 +4965,18 @@ function App() {
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="Montant (USD)"
+                  placeholder={t("Montant (USD)", "Amount (USD)")}
                   value={expenseForm.amountUsd}
                   onChange={(e) => setExpenseForm({ ...expenseForm, amountUsd: e.target.value })}
                 />
                 <input
-                  placeholder="Description (facultatif)"
+                  placeholder={t("Description (facultatif)", "Description (optional)")}
                   value={expenseForm.description}
                   onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
                 />
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
                   <label style={{ flex: "1 1 140px", fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                    Début de période
+                    {t("Début de période", "Period start")}
                     <input
                       type="date"
                       style={{ display: "block", width: "100%", marginTop: 4 }}
@@ -4850,7 +4985,7 @@ function App() {
                     />
                   </label>
                   <label style={{ flex: "1 1 140px", fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                    Fin de période
+                    {t("Fin de période", "Period end")}
                     <input
                       type="date"
                       style={{ display: "block", width: "100%", marginTop: 4 }}
@@ -4869,20 +5004,20 @@ function App() {
                       })
                     }
                   >
-                    Aligner sur le rapport
+                    {t("Aligner sur le rapport", "Match report")}
                   </button>
                 </div>
                 {(expenseForm.category === "field_agent_fixed" ||
                   expenseForm.category === "field_agent_percentage") && (
                   <>
                     <label style={{ display: "block", marginTop: 10, fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                      Agent terrain
+                      {t("Agent terrain", "Field agent")}
                       <select
                         style={{ display: "block", width: "100%", marginTop: 4 }}
                         value={expenseForm.fieldAgentId}
                         onChange={(e) => setExpenseForm({ ...expenseForm, fieldAgentId: e.target.value })}
                       >
-                        <option value="">Choisir un agent</option>
+                        <option value="">{t("Choisir un agent", "Choose an agent")}</option>
                         {users
                           .filter((u) => u.role === "field_agent")
                           .map((u) => (
@@ -4898,7 +5033,10 @@ function App() {
                         min="0.01"
                         max="100"
                         step="0.01"
-                        placeholder="Commission % (base CA ou encaissements)"
+                        placeholder={t(
+                          "Commission % (base CA ou encaissements)",
+                          "Commission % (revenue or collections basis)"
+                        )}
                         value={expenseForm.agentPayoutPercent}
                         onChange={(e) => setExpenseForm({ ...expenseForm, agentPayoutPercent: e.target.value })}
                       />
@@ -4909,20 +5047,26 @@ function App() {
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="Base CA USD (facultatif, traçabilité)"
+                  placeholder={t(
+                    "Base CA USD (facultatif, traçabilité)",
+                    "Revenue basis USD (optional, for audit trail)"
+                  )}
                   value={expenseForm.revenueBasisUsd}
                   onChange={(e) => setExpenseForm({ ...expenseForm, revenueBasisUsd: e.target.value })}
                 />
                 <button type="submit" disabled={!selectedIspId}>
-                  Enregistrer la dépense
+                  {t("Enregistrer la dépense", "Save expense")}
                 </button>
               </form>
             )}
             <div className="panel expenses-list">
-              <h3>Lignes sur la période</h3>
+              <h3>{t("Lignes sur la période", "Lines in this period")}</h3>
               {expenses.length === 0 ? (
                 <p style={{ color: "var(--mb-muted)", fontSize: "0.9rem" }}>
-                  Aucune dépense ne chevauche ces dates, ou les données se chargent encore.
+                  {t(
+                    "Aucune dépense ne chevauche ces dates, ou les données se chargent encore.",
+                    "No expenses overlap these dates, or data is still loading."
+                  )}
                 </p>
               ) : (
                 expenses.map((ex) => {
@@ -4937,54 +5081,63 @@ function App() {
                           })}
                         </strong>
                         <span className={`expense-status-badge expense-status-badge--${st}`}>
-                          {expenseApprovalStatusLabel(st)}
+                          {expenseApprovalStatusLabel(st, isEn)}
                         </span>
                         {ex.periodClosed ? (
-                          <span className="expense-status-badge expense-status-badge--locked">Période clôturée</span>
+                          <span className="expense-status-badge expense-status-badge--locked">
+                            {t("Période clôturée", "Period closed")}
+                          </span>
                         ) : null}
-                        <span className="expenses-row-category">— {expenseCategoryLabel(ex.category)}</span>
+                        <span className="expenses-row-category">— {expenseCategoryLabel(ex.category, isEn)}</span>
                     </div>
                     {ex.description ? <div>{ex.description}</div> : null}
                     <div className="expenses-row-meta">
-                      Période {ex.periodStart} → {ex.periodEnd}
-                      {ex.fieldAgentName ? ` · Agent : ${ex.fieldAgentName}` : ""}
+                      {t("Période", "Period")} {ex.periodStart} → {ex.periodEnd}
+                      {ex.fieldAgentName ? ` · ${t("Agent :", "Agent:")} ${ex.fieldAgentName}` : ""}
                       {ex.category === "field_agent_percentage" && ex.agentPayoutPercent != null
                         ? ` · ${ex.agentPayoutPercent}%`
                         : ""}
                       {ex.revenueBasisUsd != null
-                        ? ` · Base CA ${Number(ex.revenueBasisUsd).toLocaleString(undefined, {
+                        ? ` · ${t("Base CA", "Rev. basis")} ${Number(ex.revenueBasisUsd).toLocaleString(undefined, {
                             style: "currency",
                             currency: "USD"
                           })}`
                         : ""}
-                      {ex.createdByName ? ` · Saisi par ${ex.createdByName}` : ""}
+                      {ex.createdByName ? ` · ${t("Saisi par", "Entered by")} ${ex.createdByName}` : ""}
                     </div>
                       {st === "approved" && (ex.approvedByName || ex.approvedAt) ? (
                         <div className="expenses-row-meta">
-                          Approuvé
-                          {ex.approvedByName ? ` par ${ex.approvedByName}` : ""}
+                          {t("Approuvé", "Approved")}
+                          {ex.approvedByName ? ` ${t("par", "by")} ${ex.approvedByName}` : ""}
                           {ex.approvedAt
-                            ? ` — ${new Date(ex.approvedAt).toLocaleString()}`
+                            ? ` — ${new Date(ex.approvedAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}`
                             : ""}
                         </div>
                       ) : null}
                       {st === "rejected" ? (
                         <div className="expenses-row-meta expenses-row-meta--warn">
-                          Rejet
-                          {ex.rejectedByName ? ` par ${ex.rejectedByName}` : ""}
-                          {ex.rejectedAt ? ` — ${new Date(ex.rejectedAt).toLocaleString()}` : ""}
+                          {t("Rejet", "Rejected")}
+                          {ex.rejectedByName ? ` ${t("par", "by")} ${ex.rejectedByName}` : ""}
+                          {ex.rejectedAt
+                            ? ` — ${new Date(ex.rejectedAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}`
+                            : ""}
                           {ex.rejectionNote ? ` · ${ex.rejectionNote}` : ""}
                         </div>
                       ) : null}
                       {ex.approvalBlockedSelf && st === "pending" ? (
                         <p className="app-meta expenses-row-pending-hint">
-                          En attente d&apos;un autre validateur (vous êtes le demandeur).
+                          {t(
+                            "En attente d'un autre validateur (vous êtes le demandeur).",
+                            "Waiting for another approver (you are the requester)."
+                          )}
                         </p>
                       ) : null}
                       {ex.periodClosed ? (
                         <p className="app-meta expenses-row-pending-hint">
-                          Cette ligne chevauche une période <strong>clôturée</strong> (inventaire / révision) : aucune
-                          action n&apos;est possible tant que la clôture n&apos;est pas levée.
+                          {t(
+                            "Cette ligne chevauche une période clôturée (inventaire / révision) : aucune action n'est possible tant que la clôture n'est pas levée.",
+                            "This line overlaps a closed period (inventory / review): no action is possible until the closure is reopened."
+                          )}
                         </p>
                       ) : null}
                       <div className="expenses-row-actions">
@@ -4995,7 +5148,7 @@ function App() {
                             disabled={!selectedIspId}
                             onClick={() => onApproveExpense(ex.id)}
                           >
-                            Approuver
+                            {t("Approuver", "Approve")}
                           </button>
                         ) : null}
                         {ex.canReject ? (
@@ -5005,7 +5158,7 @@ function App() {
                             disabled={!selectedIspId}
                             onClick={() => onRejectExpense(ex.id)}
                           >
-                            Rejeter
+                            {t("Rejeter", "Reject")}
                           </button>
                         ) : null}
                         {(isPlatformSuperRole(user.role) ||
@@ -5019,7 +5172,7 @@ function App() {
                             disabled={!selectedIspId}
                             onClick={() => onDeleteExpense(ex.id)}
                           >
-                            Supprimer
+                            {t("Supprimer", "Delete")}
                           </button>
                         )}
                   </div>
@@ -5079,36 +5232,42 @@ function App() {
         </form>
 
         <div className="panel">
-          <h2>Import / export clients (CSV)</h2>
+          <h2>{t("Import / export clients (CSV)", "Import / export customers (CSV)")}</h2>
           <p>
-            Téléchargez votre liste d'abonnés ou importez depuis un autre outil ou un export MikroTik (colonnes du
-            type nom, secret → nom abonné et mot de passe portail facultatif). Les doublons de téléphone pour ce FAI
-            sont ignorés.
+            {t(
+              "Téléchargez votre liste d'abonnés ou importez depuis un autre outil ou un export MikroTik (colonnes du type nom, secret → nom abonné et mot de passe portail facultatif). Les doublons de téléphone pour ce FAI sont ignorés.",
+              "Download your subscriber list or import from another tool or a MikroTik export (e.g. name, secret → subscriber name and optional portal password). Duplicate phone numbers for this ISP are skipped."
+            )}
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <button type="button" onClick={onDownloadCustomersCsv} disabled={!selectedIspId}>
-              Télécharger le CSV clients
+              {t("Télécharger le CSV clients", "Download customers CSV")}
             </button>
             <button type="button" onClick={() => api.downloadCustomerImportTemplate()}>
-              Télécharger le modèle d'import
+              {t("Télécharger le modèle d'import", "Download import template")}
             </button>
           </div>
-          <p style={{ marginTop: 8, fontSize: "0.9em", color: "#444" }}>
-            Modèle : ligne d'en-tête uniquement — <code>fullName,phone,email,password</code>. E-mail et mot de passe
-            facultatifs par ligne (utilisez le mot de passe par défaut ci-dessous si vide). MikroTik exporte souvent{" "}
-            <code>name</code> — copiez dans <code>fullName</code> et <code>phone</code> ou renommez l'en-tête pour
-            correspondre.
+          <p className="app-meta" style={{ marginTop: 8, fontSize: "0.9em" }}>
+            {t("Modèle : ligne d'en-tête uniquement —", "Template: header row only —")}{" "}
+            <code>fullName,phone,email,password</code>.{" "}
+            {t(
+              "E-mail et mot de passe facultatifs par ligne (utilisez le mot de passe par défaut ci-dessous si vide). MikroTik exporte souvent name — copiez dans fullName et phone ou renommez l'en-tête pour correspondre.",
+              "Email and password are optional per row (use the default password below if empty). MikroTik often exports name — copy into fullName and phone, or rename the header to match."
+            )}
           </p>
           <form onSubmit={onImportCustomersCsv} style={{ marginTop: 12 }}>
             <input ref={customerCsvInputRef} type="file" accept=".csv,text/csv" />
             <input
               type="password"
-              placeholder="Mot de passe portail par défaut pour les lignes sans (facultatif, min. 6 car.)"
+              placeholder={t(
+                "Mot de passe portail par défaut pour les lignes sans (facultatif, min. 6 car.)",
+                "Default portal password for rows without one (optional, min. 6 chars)"
+              )}
               value={customerImportPassword}
               onChange={(e) => setCustomerImportPassword(e.target.value)}
             />
             <button type="submit" disabled={!selectedIspId}>
-              Importer CSV
+              {t("Importer CSV", "Import CSV")}
             </button>
           </form>
           {customerImportReport ? (

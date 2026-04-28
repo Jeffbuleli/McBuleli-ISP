@@ -64,7 +64,13 @@ const STR = {
     contactAddress: "Adresse",
     homeShortcut: "Accueil — site public McBuleli",
     mcbuleliFooter: "Propulsé par McBuleli — plateforme de gestion pour opérateurs et FAI.",
-    announcementsTitle: "Messages de votre opérateur"
+    announcementsTitle: "Messages de votre opérateur",
+    depositRef: "ID dépôt",
+    invStatusUnpaid: "Impayée",
+    invStatusOverdue: "En retard",
+    invStatusPaid: "Payée",
+    currencyCdf: "CDF (franc congolais)",
+    currencyUsd: "USD"
   },
   en: {
     eyebrow: "Customer portal",
@@ -130,7 +136,13 @@ const STR = {
     contactAddress: "Address",
     homeShortcut: "Home — McBuleli public site",
     mcbuleliFooter: "Powered by McBuleli — operations platform for ISPs and providers.",
-    announcementsTitle: "Messages from your provider"
+    announcementsTitle: "Messages from your provider",
+    depositRef: "Deposit ID",
+    invStatusUnpaid: "Unpaid",
+    invStatusOverdue: "Overdue",
+    invStatusPaid: "Paid",
+    currencyCdf: "CDF (Congolese franc)",
+    currencyUsd: "USD"
   }
 };
 
@@ -144,4 +156,12 @@ export function portalBrandTitle(displayName, lang) {
   if (!s || s === "AA") return portalT(lang, "brandFallbackTitle");
   const suffix = lang === "en" ? " — customer portal" : " — portail client";
   return `${s}${suffix}`;
+}
+
+export function portalInvoiceStatusLabel(lang, status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "unpaid") return portalT(lang, "invStatusUnpaid");
+  if (s === "overdue") return portalT(lang, "invStatusOverdue");
+  if (s === "paid") return portalT(lang, "invStatusPaid");
+  return status || "—";
 }

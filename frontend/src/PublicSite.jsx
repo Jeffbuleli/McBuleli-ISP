@@ -440,7 +440,7 @@ export default function PublicSite() {
             <PublicLogo />
             <span>McBuleli</span>
           </a>
-          <nav className="public-nav" aria-label="Navigation principale">
+          <nav className="public-nav" aria-label={t("Navigation principale", "Main navigation")}>
             <a href="#services">{t("Services", "Services")}</a>
             <a href="#promos">{t("Offres", "Offers")}</a>
             <a href="#interfaces">{t("Interfaces", "Workspaces")}</a>
@@ -448,7 +448,7 @@ export default function PublicSite() {
             <a href="#testimonials">{t("Témoignages", "Testimonials")}</a>
             <a href="#faq">{t("FAQ", "FAQ")}</a>
             <a href="/buy/packages">{t("Wi‑Fi invité", "Guest Wi‑Fi")}</a>
-            <a href="#contact">Contact</a>
+            <a href="#contact">{t("Contact", "Contact")}</a>
           </nav>
           <div className="public-hero-toolbar">
             <PublicSocialLinks idPrefix="public" isEn={isEn} />
@@ -737,10 +737,7 @@ export default function PublicSite() {
               <span className="public-footer-card-icon" aria-hidden="true">
                 <IconMapPin width={24} height={24} />
               </span>
-              <div className="public-footer-card-stack">
-                <span className="public-footer-card-label">{t("Adresse", "Address")}</span>
-                <span className="public-footer-card-value">{COMPANY_CONTACT.address}</span>
-              </div>
+              <span className="public-footer-card-value">{COMPANY_CONTACT.address}</span>
             </div>
           </div>
         </div>
