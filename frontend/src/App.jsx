@@ -1,11 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
 import LangSwitch from "./LangSwitch.jsx";
-import DashboardHistograms from "./DashboardHistograms.jsx";
 import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
 import DashboardHeaderAnnouncements from "./DashboardHeaderAnnouncements.jsx";
 import DashboardSideNav from "./DashboardSideNav.jsx";
+import DashboardBottomNav from "./DashboardBottomNav.jsx";
+import DashboardMobileFab from "./DashboardMobileFab.jsx";
+import DashboardScreenGate from "./DashboardScreenGate.jsx";
+import { useDashboardMobilePath } from "./useDashboardMobilePath.js";
 import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
 import PlatformHomeMarketingPanel from "./PlatformHomeMarketingPanel.jsx";
 import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
@@ -14,14 +17,20 @@ import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
 import {
   IconArrowLeft,
+  IconBell,
   IconHome,
   IconMail,
   IconPhone,
   IconSignOut
 } from "./icons.jsx";
 
+const DashboardHistograms = lazy(() => import("./DashboardHistograms.jsx"));
+
 function useMediaQuery(query) {
-  const [matches, setMatches] = useState(false);
+  const [matches, setMatches] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia(query).matches;
+  });
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia(query);
@@ -31,6 +40,16 @@ function useMediaQuery(query) {
     return () => mq.removeEventListener("change", fn);
   }, [query]);
   return matches;
+}
+
+function userInitials(fullName) {
+  const parts = String(fullName || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 function readDashboardNavCompact() {
@@ -831,7 +850,9 @@ function App() {
   const availablePawapayNetworks = pawapayNetworks.length ? pawapayNetworks : DEFAULT_PAWAPAY_NETWORKS;
 
   const dashboardLayoutStacked = useMediaQuery("(max-width: 1200px)");
-  const dashboardNavCompactEffective = Boolean(dashboardNavCompact && !dashboardLayoutStacked);
+  const isMobileShell = useMediaQuery("(max-width: 899px)");
+  const { mobileScreen, navigateMobileScreen } = useDashboardMobilePath(isMobileShell);
+  const dashboardNavCompactEffective = Boolean(dashboardNavCompact && !dashboardLayoutStacked && !isMobileShell);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2886,97 +2907,213 @@ function App() {
     !user?.dashboardBannerHtml &&
     !ispAnnouncements.length;
 
+  const canSeeAnnouncements =
+    !isFieldAgent &&
+    (user.role === "system_owner" ||
+      user.role === "super_admin" ||
+      user.role === "company_manager" ||
+      user.role === "isp_admin");
+
+  const gateMobile = isMobileShell;
+
   return (
     <>
-    <main className="container app-shell app-shell--dashboard-dark">
+    <main className={`container app-shell app-shell--dashboard-dark${isMobileShell ? " app-shell--mobile-pwa" : ""}`}>
       <div className="dashboard-sticky-stack">
-      <header className="app-header app-header--dashboard">
-          <div className="dashboard-header-top">
-        <div className="dashboard-brandline">
-              <img
-                className={
-                  dashboardTenantLogoSrc ? "dashboard-logo dashboard-logo--tenant" : "dashboard-logo dashboard-logo--mcbuleli"
-                }
-                src={dashboardTenantLogoSrc || mcbuleliLogoUrl}
-                alt={
-                  dashboardTenantLogoSrc
-                    ? String(
-                        workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
-                          branding?.displayName ||
-                          "Logo entreprise"
-                      ).trim() || "Logo entreprise"
-                    : "McBuleli"
-                }
-                width={44}
-                height={44}
-              />
-              <div className="dashboard-brand-text">
-                <h1>
-                  {workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
-                    t("Espace opérateur", "Operator workspace")}
-                </h1>
-                <p className="app-meta dashboard-user-role">
-                  <strong>{user.fullName}</strong>
-                  <span className="dashboard-role-paren"> ({formatStaffRole(user.role, isEn)})</span>
-            </p>
-          </div>
-        </div>
-            <div className="dashboard-header-ad">
-              {user?.dashboardBanners?.length ? (
-                <DashboardBannerCarousel slides={user.dashboardBanners} layout="inline" />
-              ) : user?.dashboardBannerHtml ? (
+        <header className="app-header app-header--dashboard">
+          {!isMobileShell ? (
+            <>
+              <div className="dashboard-header-top">
+                <div className="dashboard-brandline">
+                  <img
+                    className={
+                      dashboardTenantLogoSrc ? "dashboard-logo dashboard-logo--tenant" : "dashboard-logo dashboard-logo--mcbuleli"
+                    }
+                    src={dashboardTenantLogoSrc || mcbuleliLogoUrl}
+                    alt={
+                      dashboardTenantLogoSrc
+                        ? String(
+                            workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
+                              branding?.displayName ||
+                              "Logo entreprise"
+                          ).trim() || "Logo entreprise"
+                        : "McBuleli"
+                    }
+                    width={44}
+                    height={44}
+                  />
+                  <div className="dashboard-brand-text">
+                    <h1>
+                      {workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
+                        t("Espace opérateur", "Operator workspace")}
+                    </h1>
+                    <p className="app-meta dashboard-user-role">
+                      <strong>{user.fullName}</strong>
+                      <span className="dashboard-role-paren"> ({formatStaffRole(user.role, isEn)})</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="dashboard-header-ad">
+                  {user?.dashboardBanners?.length ? (
+                    <DashboardBannerCarousel slides={user.dashboardBanners} layout="inline" />
+                  ) : user?.dashboardBannerHtml ? (
+                    <div
+                      className="dashboard-ad-slot dashboard-ad-slot--inline"
+                      dangerouslySetInnerHTML={{ __html: user.dashboardBannerHtml }}
+                    />
+                  ) : showDashboardHeaderPromos ? (
+                    <PublicHomePromos t={t} isEn={isEn} variant="dashboard" />
+                  ) : null}
+                </div>
                 <div
-                  className="dashboard-ad-slot dashboard-ad-slot--inline"
-                  dangerouslySetInnerHTML={{ __html: user.dashboardBannerHtml }}
-                />
-              ) : showDashboardHeaderPromos ? (
-                <PublicHomePromos t={t} isEn={isEn} variant="dashboard" />
-              ) : null}
-            </div>
-            <div
-              className="dashboard-toolbar dashboard-toolbar--icons"
-              role="toolbar"
-              aria-label={t("Langue et navigation", "Language and navigation")}
-            >
-              <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash" />
-              <a
-                className="btn-icon-toolbar"
-                href="/?site=public"
-                title={t("Site public (accueil)", "Public site (home)")}
-                aria-label={t("Site public", "Public site")}
+                  className="dashboard-toolbar dashboard-toolbar--icons"
+                  role="toolbar"
+                  aria-label={t("Langue et navigation", "Language and navigation")}
+                >
+                  <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash" />
+                  <a
+                    className="btn-icon-toolbar"
+                    href="/?site=public"
+                    title={t("Site public (accueil)", "Public site (home)")}
+                    aria-label={t("Site public", "Public site")}
+                  >
+                    <IconHome width={22} height={22} />
+                  </a>
+                  <button
+                    type="button"
+                    className="btn-icon-toolbar"
+                    onClick={onLogout}
+                    title={t("Sortie — déconnexion", "Sign out")}
+                    aria-label={t("Déconnexion", "Logout")}
+                  >
+                    <IconSignOut width={22} height={22} />
+                  </button>
+                </div>
+              </div>
+              <DashboardHeaderAnnouncements
+                items={ispAnnouncements}
+                t={t}
+                isFieldAgent={isFieldAgent}
+                onOpenAnnouncements={isMobileShell ? () => navigateMobileScreen("users") : undefined}
+              />
+            </>
+          ) : (
+            <>
+              <div className="dashboard-header-top dashboard-header-top--mobile-pwa">
+                <div className="dashboard-brandline dashboard-brandline--mobile-pwa">
+                  <img
+                    className={
+                      dashboardTenantLogoSrc ? "dashboard-logo dashboard-logo--tenant" : "dashboard-logo dashboard-logo--mcbuleli"
+                    }
+                    src={dashboardTenantLogoSrc || mcbuleliLogoUrl}
+                    alt={
+                      dashboardTenantLogoSrc
+                        ? String(
+                            workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
+                              branding?.displayName ||
+                              "Logo entreprise"
+                          ).trim() || "Logo entreprise"
+                        : "McBuleli"
+                    }
+                    width={40}
+                    height={40}
+                  />
+                  <div className="dashboard-brand-text">
+                    <h1 className="dashboard-brand-text__title">
+                      {workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId) ||
+                        t("Espace opérateur", "Operator workspace")}
+                    </h1>
+                    <p className="dashboard-brand-text__subtitle app-meta">
+                      <span className="dashboard-brand-text__user-name">{user.fullName}</span>
+                      <span className="dashboard-role-paren"> · {formatStaffRole(user.role, isEn)}</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="dashboard-mobile-quick-actions" role="toolbar" aria-label={t("Raccourcis", "Shortcuts")}>
+                  <button
+                    type="button"
+                    className="dashboard-mobile-icon-btn"
+                    onClick={() =>
+                      navigateMobileScreen(canSeeAnnouncements ? "users" : "settings")
+                    }
+                    aria-label={t("Annonces et alertes", "Announcements & alerts")}
+                  >
+                    <IconBell width={22} height={22} />
+                    {ispAnnouncements.length > 0 ? (
+                      <span className="dashboard-mobile-badge">
+                        {ispAnnouncements.length > 9 ? "9+" : ispAnnouncements.length}
+                      </span>
+                    ) : null}
+                  </button>
+                  <div className="dashboard-mobile-avatar" title={user.fullName}>
+                    {userInitials(user.fullName)}
+                  </div>
+                </div>
+              </div>
+              <div
+                className="dashboard-mobile-subtoolbar"
+                role="toolbar"
+                aria-label={t("Langue et navigation", "Language and navigation")}
               >
-                <IconHome width={22} height={22} />
-              </a>
-              <button
-                type="button"
-                className="btn-icon-toolbar"
-                onClick={onLogout}
-                title={t("Sortie — déconnexion", "Sign out")}
-                aria-label={t("Déconnexion", "Logout")}
-              >
-                <IconSignOut width={22} height={22} />
-          </button>
-        </div>
-          </div>
-          <DashboardHeaderAnnouncements items={ispAnnouncements} t={t} isFieldAgent={isFieldAgent} />
-      </header>
+                <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash-mob" />
+                <a
+                  className="btn-icon-toolbar dashboard-mobile-subtoolbar__btn"
+                  href="/?site=public"
+                  title={t("Site public (accueil)", "Public site (home)")}
+                  aria-label={t("Site public", "Public site")}
+                >
+                  <IconHome width={22} height={22} />
+                </a>
+                <button
+                  type="button"
+                  className="btn-icon-toolbar dashboard-mobile-subtoolbar__btn"
+                  onClick={onLogout}
+                  title={t("Sortie — déconnexion", "Sign out")}
+                  aria-label={t("Déconnexion", "Logout")}
+                >
+                  <IconSignOut width={22} height={22} />
+                </button>
+              </div>
+              <div className="dashboard-header-ad dashboard-header-ad--mobile-pwa">
+                {user?.dashboardBanners?.length ? (
+                  <DashboardBannerCarousel slides={user.dashboardBanners} layout="inline" />
+                ) : user?.dashboardBannerHtml ? (
+                  <div
+                    className="dashboard-ad-slot dashboard-ad-slot--inline"
+                    dangerouslySetInnerHTML={{ __html: user.dashboardBannerHtml }}
+                  />
+                ) : showDashboardHeaderPromos ? (
+                  <PublicHomePromos t={t} isEn={isEn} variant="dashboard" />
+                ) : null}
+              </div>
+              <DashboardHeaderAnnouncements
+                items={ispAnnouncements}
+                t={t}
+                isFieldAgent={isFieldAgent}
+                onOpenAnnouncements={isMobileShell ? () => navigateMobileScreen("users") : undefined}
+              />
+            </>
+          )}
+        </header>
       </div>
       <div
         className={`dashboard-layout${
           dashboardNavCompactEffective ? " dashboard-layout--nav-compact" : ""
-        }`}
+        }${isMobileShell ? " dashboard-layout--mobile" : ""}`}
       >
-        <DashboardSideNav
-          t={t}
-          user={user}
-          isFieldAgent={isFieldAgent}
-          compact={dashboardNavCompactEffective}
-          navCompactEffective={dashboardNavCompactEffective}
-          navCompactPreference={dashboardNavCompact}
-          onToggleNavCompact={() => setDashboardNavCompact((v) => !v)}
-          navSearch={dashboardSidebarSearch}
-          setNavSearch={setDashboardSidebarSearch}
-        />
+        {!isMobileShell ? (
+          <DashboardSideNav
+            t={t}
+            user={user}
+            isFieldAgent={isFieldAgent}
+            compact={dashboardNavCompactEffective}
+            navCompactEffective={dashboardNavCompactEffective}
+            navCompactPreference={dashboardNavCompact}
+            onToggleNavCompact={() => setDashboardNavCompact((v) => !v)}
+            navSearch={dashboardSidebarSearch}
+            setNavSearch={setDashboardSidebarSearch}
+          />
+        ) : null}
         <div className="dashboard-main-column">
       {loading && <p>{t("Chargement…", "Loading...")}</p>}
       {error && <p className="error">{isEn ? translateToEnglish(error) : error}</p>}
@@ -2989,7 +3126,8 @@ function App() {
         if (user.role === "system_owner") return null;
         const locked = billing.accessAllowed === false;
         return (
-          <section className={`panel ${locked ? "error" : ""}`} id="mcbuleli-billing">
+          <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
+            <section className={`panel ${locked ? "error" : ""}`} id="mcbuleli-billing">
             <h2>{t("Abonnement McBuleli (Mobile Money)", "McBuleli subscription (Mobile Money)")}</h2>
             {locked ? (
               <p>
@@ -3081,34 +3219,47 @@ function App() {
               </p>
             ) : null}
           </section>
+          </DashboardScreenGate>
         );
       })()}
 
       {!isFieldAgent ? (
-      <section className="grid metrics dashboard-section-anchor" id="dashboard-overview">
-        <Card title={t("FAI", "ISPs")} value={superDashboard?.totalIsps ?? 0} />
-        <Card title={t("Clients (tous FAI)", "All Customers")} value={superDashboard?.totalCustomers ?? 0} />
-        <Card
-          title={t("Abonnements actifs (tous)", "All Active Subscriptions")}
-          value={superDashboard?.totalActiveSubscriptions ?? 0}
-        />
-        <Card title={t("Chiffre d'affaires global (USD)", "Global Revenue (USD)")} value={superDashboard?.totalRevenueUsd ?? 0} />
-      </section>
-      ) : null}
+        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="dashboard">
+          <>
+            <section className="grid metrics dashboard-section-anchor" id="dashboard-overview">
+              <Card title={t("FAI", "ISPs")} value={superDashboard?.totalIsps ?? 0} />
+              <Card title={t("Clients (tous FAI)", "All Customers")} value={superDashboard?.totalCustomers ?? 0} />
+              <Card
+                title={t("Abonnements actifs (tous)", "All Active Subscriptions")}
+                value={superDashboard?.totalActiveSubscriptions ?? 0}
+              />
+              <Card
+                title={t("Chiffre d'affaires global (USD)", "Global Revenue (USD)")}
+                value={superDashboard?.totalRevenueUsd ?? 0}
+              />
+            </section>
 
-      {!isFieldAgent && !loading && selectedIspId ? (
-        <DashboardHistograms
-          t={t}
-          globalSummary={user.role === "system_owner" ? superDashboard : null}
-          tenantDashboard={dashboard}
-          networkStats={networkStats}
-          users={users}
-          invoices={invoices}
-          telemetrySnapshots={telemetrySnapshots}
-        />
-      ) : null}
+            {!loading && selectedIspId ? (
+              <Suspense
+                fallback={
+                  <p className="app-meta dashboard-suspense-fallback">
+                    {t("Préparation des graphiques…", "Preparing charts…")}
+                  </p>
+                }
+              >
+                <DashboardHistograms
+                  t={t}
+                  globalSummary={user.role === "system_owner" ? superDashboard : null}
+                  tenantDashboard={dashboard}
+                  networkStats={networkStats}
+                  users={users}
+                  invoices={invoices}
+                  telemetrySnapshots={telemetrySnapshots}
+                />
+              </Suspense>
+            ) : null}
 
-      {user.role === "system_owner" ? (
+            {user.role === "system_owner" ? (
         <section className="panel" id="platform-banners">
           <h2>{t("Bannières tableau de bord (3 visuels)", "Dashboard banners (3 slides)")}</h2>
           <p className="app-meta" style={{ maxWidth: "56rem", marginBottom: 12 }}>
@@ -3288,42 +3439,63 @@ function App() {
         </section>
       ) : null}
 
-      {!isFieldAgent ? (
-        <>
-      <section className="grid metrics">
-        <Card title={t("Utilisateurs hotspot", "Hotspot Users")} value={networkStats?.hotspotUsers ?? 0} />
-        <Card title={t("Utilisateurs PPPoE", "PPPoE Users")} value={networkStats?.pppoeUsers ?? 0} />
-        <Card title={t("Appareils connectés", "Connected Devices")} value={networkStats?.connectedDevices ?? 0} />
-        <Card title={t("Bande passante (Go)", "Bandwidth (GB)")} value={networkStats?.bandwidthTotalGb ?? 0} />
-        <Card title={t("Encaissements sur la période (USD)", "Revenue In Period (USD)")} value={networkStats?.revenueCollectedUsd ?? 0} />
-      </section>
+            <section className="grid metrics">
+              <Card title={t("Utilisateurs hotspot", "Hotspot Users")} value={networkStats?.hotspotUsers ?? 0} />
+              <Card title={t("Utilisateurs PPPoE", "PPPoE Users")} value={networkStats?.pppoeUsers ?? 0} />
+              <Card
+                title={t("Appareils connectés", "Connected Devices")}
+                value={networkStats?.connectedDevices ?? 0}
+              />
+              <Card title={t("Bande passante (Go)", "Bandwidth (GB)")} value={networkStats?.bandwidthTotalGb ?? 0} />
+              <Card
+                title={t("Encaissements sur la période (USD)", "Revenue In Period (USD)")}
+                value={networkStats?.revenueCollectedUsd ?? 0}
+              />
+            </section>
 
-      <section className="grid metrics">
-        <Card title={t("Caisse cash (USD)", "Cash till (USD)")} value={networkStats?.cashbox?.cashUsd ?? dashboard?.cashbox?.cashUsd ?? 0} />
-        <Card title={t("Caisse TID (USD)", "TID till (USD)")} value={networkStats?.cashbox?.tidUsd ?? dashboard?.cashbox?.tidUsd ?? 0} />
-        <Card title={t("Mobile Money (USD)", "Mobile Money (USD)")} value={networkStats?.cashbox?.mobileMoneyUsd ?? dashboard?.cashbox?.mobileMoneyUsd ?? 0} />
-        <Card title={t("Retirable Mobile Money (USD)", "Withdrawable Mobile Money (USD)")} value={networkStats?.cashbox?.withdrawableMobileMoneyUsd ?? dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0} />
-      </section>
+            <section className="grid metrics">
+              <Card
+                title={t("Caisse cash (USD)", "Cash till (USD)")}
+                value={networkStats?.cashbox?.cashUsd ?? dashboard?.cashbox?.cashUsd ?? 0}
+              />
+              <Card
+                title={t("Caisse TID (USD)", "TID till (USD)")}
+                value={networkStats?.cashbox?.tidUsd ?? dashboard?.cashbox?.tidUsd ?? 0}
+              />
+              <Card
+                title={t("Mobile Money (USD)", "Mobile Money (USD)")}
+                value={networkStats?.cashbox?.mobileMoneyUsd ?? dashboard?.cashbox?.mobileMoneyUsd ?? 0}
+              />
+              <Card
+                title={t("Retirable Mobile Money (USD)", "Withdrawable Mobile Money (USD)")}
+                value={
+                  networkStats?.cashbox?.withdrawableMobileMoneyUsd ??
+                  dashboard?.cashbox?.withdrawableMobileMoneyUsd ??
+                  0
+                }
+              />
+            </section>
 
-      <section className="panel">
-        <h2>{t("Période des statistiques", "Statistics Period")}</h2>
-        <form onSubmit={onRefreshStats}>
-          <input
-            type="date"
-            value={statsPeriod.from}
-            onChange={(e) => setStatsPeriod({ ...statsPeriod, from: e.target.value })}
-          />
-          <input
-            type="date"
-            value={statsPeriod.to}
-            onChange={(e) => setStatsPeriod({ ...statsPeriod, to: e.target.value })}
-          />
-          <button type="submit" disabled={!selectedIspId}>
-            {t("Actualiser les stats", "Refresh stats")}
-          </button>
-        </form>
-      </section>
-        </>
+            <section className="panel">
+              <h2>{t("Période des statistiques", "Statistics Period")}</h2>
+              <form onSubmit={onRefreshStats}>
+                <input
+                  type="date"
+                  value={statsPeriod.from}
+                  onChange={(e) => setStatsPeriod({ ...statsPeriod, from: e.target.value })}
+                />
+                <input
+                  type="date"
+                  value={statsPeriod.to}
+                  onChange={(e) => setStatsPeriod({ ...statsPeriod, to: e.target.value })}
+                />
+                <button type="submit" disabled={!selectedIspId}>
+                  {t("Actualiser les stats", "Refresh stats")}
+                </button>
+              </form>
+            </section>
+          </>
+        </DashboardScreenGate>
       ) : null}
 
       {(isPlatformSuperRole(user.role) ||
@@ -3332,6 +3504,7 @@ function App() {
         user.role === "noc_operator" ||
         user.role === "billing_agent") &&
         !isFieldAgent && (
+        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
         <section className="panel">
           <h2>{t("Facturation en retard", "Overdue billing")}</h2>
           <p>
@@ -3347,8 +3520,10 @@ function App() {
             {t("Générer les factures de renouvellement maintenant", "Generate renewal invoices now")}
           </button>
         </section>
+        </DashboardScreenGate>
       )}
 
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} always>
       <section className="grid" id="tenant-workspace">
         {isPlatformSuperRole(user.role) && (
           <form className="panel" onSubmit={onCreateIsp}>
@@ -3388,9 +3563,11 @@ function App() {
           </select>
         </section>
       </section>
+      </DashboardScreenGate>
 
       {!isFieldAgent && (
         <>
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
       <section className="grid" id="workspace-settings">
         {(isPlatformSuperRole(user.role) ||
           user.role === "company_manager" ||
@@ -3579,7 +3756,9 @@ function App() {
           </form>
         )}
       </section>
+      </DashboardScreenGate>
 
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
       {(isPlatformSuperRole(user.role) ||
         user.role === "company_manager" ||
         user.role === "isp_admin") &&
@@ -3592,7 +3771,9 @@ function App() {
           onRefresh={refresh}
         />
       ) : null}
+      </DashboardScreenGate>
 
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
       <section className="grid" id="billing-ops">
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreatePaymentMethod}>
@@ -3706,7 +3887,9 @@ function App() {
           </form>
         )}
       </section>
+      </DashboardScreenGate>
 
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="network">
       <section className="grid" id="network-ops">
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreateNetworkNode}>
@@ -3902,7 +4085,9 @@ function App() {
           )}
         </section>
       </section>
+      </DashboardScreenGate>
 
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
       <section className="grid" id="team-settings">
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onUpsertNotificationProvider}>
@@ -4548,7 +4733,9 @@ function App() {
           })}
         </section>
       </section>
+      </DashboardScreenGate>
 
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
       {user.role === "system_owner" ? (
         <section className="panel" id="audit">
           <h2>{t("Journal d'audit récent", "Recent audit log")}</h2>
@@ -4616,10 +4803,12 @@ function App() {
           </button>
         </form>
       </section>
+      </DashboardScreenGate>
 
         </>
       )}
 
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="dashboard">
       <section className="grid metrics">
         <Card title={t("Clients", "Customers")} value={dashboard?.totalCustomers ?? 0} />
         <Card title={t("Abonnements actifs", "Active subscriptions")} value={dashboard?.activeSubscriptions ?? 0} />
@@ -4636,7 +4825,37 @@ function App() {
           value={dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0}
         />
       </section>
+      </DashboardScreenGate>
 
+      {isFieldAgent ? (
+        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="network">
+          <section className="panel">
+            <h2>{t("Réseau", "Network")}</h2>
+            <p className="app-meta">
+              {t(
+                "La configuration réseau (routeurs, RADIUS, télémétrie) est réservée aux administrateurs. En cas de panne d’accès abonné, contactez votre NOC ou votre responsable FAI.",
+                "Network configuration (routers, RADIUS, telemetry) is managed by administrators. If a subscriber cannot connect, contact your NOC or ISP manager."
+              )}
+            </p>
+          </section>
+        </DashboardScreenGate>
+      ) : null}
+
+      {isFieldAgent ? (
+        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
+          <section className="panel">
+            <h2>{t("Réglages", "Settings")}</h2>
+            <p className="app-meta">
+              {t(
+                "L’image de marque, les intégrations et la sécurité des retraits sont gérées par les administrateurs. Les contacts d’aide figurent en bas de l’application.",
+                "Branding, integrations, and withdrawal security are managed by administrators. Support contacts are listed at the bottom of the app."
+              )}
+            </p>
+          </section>
+        </DashboardScreenGate>
+      ) : null}
+
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
       {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
         <section className="panel" id="security-settings">
           <h2>{t("Retrait Mobile Money sécurisé", "Secure Mobile Money withdrawal")}</h2>
@@ -4736,7 +4955,9 @@ function App() {
           ))}
         </section>
       )}
+      </DashboardScreenGate>
 
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
       {!isFieldAgent &&
         (isPlatformSuperRole(user.role) ||
         user.role === "company_manager" ||
@@ -5184,8 +5405,10 @@ function App() {
           </div>
         </section>
       )}
+      </DashboardScreenGate>
 
       <section className="grid" id="field-clients">
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
         {!isFieldAgent ? (
           <>
         <form className="panel" onSubmit={onCreateCustomer}>
@@ -5341,7 +5564,13 @@ function App() {
             {isFieldAgent ? "Enregistrer l'e-mail" : "Enregistrer e-mail et agent"}
           </button>
         </form>
+      </DashboardScreenGate>
 
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        ids={isFieldAgent ? ["billing"] : ["users"]}
+      >
         {(isPlatformSuperRole(user.role) ||
           user.role === "company_manager" ||
           user.role === "isp_admin" ||
@@ -5393,9 +5622,11 @@ function App() {
             )}
           </form>
         )}
+      </DashboardScreenGate>
 
-        {!isFieldAgent ? (
-          <>
+      {!isFieldAgent ? (
+        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
+        <>
         <form className="panel" onSubmit={onCreatePlan}>
           <h2>Créer une formule Wi‑Fi / accès</h2>
           <input
@@ -5612,9 +5843,11 @@ function App() {
           </button>
         </form>
           </>
+        </DashboardScreenGate>
         ) : null}
       </section>
 
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
       <section className="panel">
         <h2>Factures</h2>
         <div className="table">
@@ -5683,11 +5916,12 @@ function App() {
           </p>
         ))}
       </section>
+      </DashboardScreenGate>
 
         </div>
       </div>
 
-      <footer className="app-footer app-footer--dashboard">
+      <footer className="app-footer app-footer--dashboard" id="dashboard-support-hub">
         <div className="app-footer-inner">
           {(() => {
             const orgTitle =
@@ -5742,6 +5976,16 @@ function App() {
         </div>
       </footer>
     </main>
+    {isMobileShell ? (
+      <>
+        <DashboardMobileFab
+          t={t}
+          userRole={user.role}
+          navigateMobileScreen={navigateMobileScreen}
+        />
+        <DashboardBottomNav t={t} isFieldAgent={isFieldAgent} navigateMobileScreen={navigateMobileScreen} />
+      </>
+    ) : null}
     <PwaInstallPrompt enabled={pwaDashReady} workspaceLabel={workspaceTitleForPwa} />
     </>
   );

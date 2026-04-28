@@ -17,6 +17,17 @@ function Root() {
     typeof window !== "undefined" &&
     new URLSearchParams(search).get("site") === "public";
   const hasToken = typeof window !== "undefined" && Boolean(window.localStorage.getItem("token"));
+  const dashScreenPaths = new Set([
+    "/dashboard",
+    "/network",
+    "/billing",
+    "/users",
+    "/settings"
+  ]);
+  const normalizedDashPath = path.replace(/\/$/, "") || "/";
+  if (dashScreenPaths.has(normalizedDashPath)) {
+    return hasToken && !forcePublic ? <App /> : <PublicSite />;
+  }
   if (path === "/" || path === "") {
     return hasToken && !forcePublic ? <App /> : <PublicSite />;
   }
