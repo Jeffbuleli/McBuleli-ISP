@@ -1,17 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  IconAntenna,
-  IconHome,
-  IconMail,
-  IconPeople,
-  IconPresentation,
   IconSidebarCompact,
-  IconSidebarWide,
-  IconSliders,
-  IconSmartphone,
-  IconUserCheck,
-  IconWallet
+  IconSidebarWide
 } from "./icons.jsx";
+import { buildDashboardNavCategories } from "./dashboardNavCategories.js";
 
 function categoryIdForItemHref(categories, href) {
   const c = categories.find((cat) => cat.items.some((it) => it.href === href));
@@ -31,112 +23,10 @@ export default function DashboardSideNav({
 }) {
   const q = (navSearch || "").trim().toLowerCase();
 
-  const canSeeAnnouncements =
-    !isFieldAgent &&
-    (user.role === "system_owner" ||
-      user.role === "super_admin" ||
-      user.role === "company_manager" ||
-      user.role === "isp_admin");
-
-  const canSeeSecurity =
-    user.role === "system_owner" ||
-    user.role === "super_admin" ||
-    user.role === "company_manager" ||
-    user.role === "isp_admin";
-
-  const categories = useMemo(() => {
-    if (isFieldAgent) {
-      return [
-        {
-          id: "field",
-          label: t("Terrain", "Field"),
-          Icon: IconSmartphone,
-          items: [
-            {
-              href: "#field-clients",
-              label: t("Clients et portail", "Clients & portal")
-            }
-          ]
-        }
-      ];
-    }
-
-    const cats = [];
-
-    cats.push({
-      id: "overview",
-      label: t("Vue d'ensemble", "Overview"),
-      Icon: IconHome,
-      items: [{ href: "#dashboard-overview", label: t("Indicateurs", "KPIs & summary") }]
-    });
-
-    if (user.role === "system_owner") {
-      cats.push({
-        id: "platform",
-        label: t("Plateforme", "Platform"),
-        Icon: IconPresentation,
-        items: [
-          { href: "#platform-banners", label: t("Bannières publiques", "Public banners") },
-          { href: "#platform-home-marketing", label: t("Accueil public", "Public home") },
-          { href: "#system-tenants", label: t("Espaces entreprises", "Tenant workspaces") }
-        ]
-      });
-    }
-
-    if (canSeeAnnouncements) {
-      cats.push({
-        id: "communication",
-        label: t("Communication", "Communication"),
-        Icon: IconMail,
-        items: [{ href: "#isp-announcements", label: t("Annonces", "Announcements") }]
-      });
-    }
-
-    cats.push({
-      id: "workspace",
-      label: t("Espace & marque", "Workspace & brand"),
-      Icon: IconSliders,
-      items: [{ href: "#workspace-settings", label: t("Paramètres entreprise", "Company settings") }]
-    });
-
-    cats.push({
-      id: "network",
-      label: t("Réseau", "Network"),
-      Icon: IconAntenna,
-      items: [{ href: "#network-ops", label: t("MikroTik & télémétrie", "MikroTik & telemetry") }]
-    });
-
-    const billingItems = [
-      ...(user.role === "system_owner"
-        ? []
-        : [{ href: "#mcbuleli-billing", label: t("Abonnement McBuleli", "McBuleli subscription") }]),
-      { href: "#billing-ops", label: t("Opérations de facturation", "Billing operations") }
-    ];
-    cats.push({
-      id: "billing",
-      label: t("Facturation", "Billing"),
-      Icon: IconWallet,
-      items: billingItems
-    });
-
-    cats.push({
-      id: "team",
-      label: t("Équipe", "Team"),
-      Icon: IconPeople,
-      items: [{ href: "#team-settings", label: t("Utilisateurs et rôles", "Users & roles") }]
-    });
-
-    if (canSeeSecurity) {
-      cats.push({
-        id: "security",
-        label: t("Sécurité", "Security"),
-        Icon: IconUserCheck,
-        items: [{ href: "#security-settings", label: t("MFA & retraits", "MFA & withdrawals") }]
-      });
-    }
-
-    return cats;
-  }, [user.role, isFieldAgent, canSeeAnnouncements, canSeeSecurity, t]);
+  const categories = useMemo(
+    () => buildDashboardNavCategories(t, user, isFieldAgent),
+    [t, user, isFieldAgent]
+  );
 
   const defaultHash = isFieldAgent ? "#field-clients" : "#dashboard-overview";
   const defaultExpand = isFieldAgent ? "field" : "overview";

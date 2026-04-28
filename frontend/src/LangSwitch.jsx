@@ -1,13 +1,13 @@
 /**
  * Language toggle: French (tricolore) and English (Union Jack — not US flag).
  */
-export function FlagFrance({ className = "", title }) {
+export function FlagFrance({ className = "", title, width = 20, height = 14 }) {
   return (
     <svg
       className={className}
       viewBox="0 0 3 2"
-      width="20"
-      height="14"
+      width={width}
+      height={height}
       aria-hidden={title ? undefined : "true"}
       role={title ? "img" : undefined}
     >
@@ -19,13 +19,13 @@ export function FlagFrance({ className = "", title }) {
   );
 }
 
-export function FlagUnitedKingdom({ className = "", title }) {
+export function FlagUnitedKingdom({ className = "", title, width = 20, height = 10 }) {
   return (
     <svg
       className={className}
       viewBox="0 0 60 30"
-      width="20"
-      height="10"
+      width={width}
+      height={height}
       aria-hidden={title ? undefined : "true"}
       role={title ? "img" : undefined}
     >
@@ -39,10 +39,18 @@ export function FlagUnitedKingdom({ className = "", title }) {
   );
 }
 
-export default function LangSwitch({ value, onChange, className = "", idPrefix = "lang" }) {
+export default function LangSwitch({ value, onChange, className = "", idPrefix = "lang", compact = false }) {
   const isFr = value === "fr";
+  const frW = compact ? 14 : 20;
+  const frH = compact ? 10 : 14;
+  const ukW = compact ? 16 : 20;
+  const ukH = compact ? 8 : 10;
   return (
-    <div className={`lang-switch ${className}`.trim()} role="group" aria-label="Language">
+    <div
+      className={`lang-switch${compact ? " lang-switch--compact" : ""} ${className}`.trim()}
+      role="group"
+      aria-label="Language"
+    >
       <button
         type="button"
         id={`${idPrefix}-fr`}
@@ -52,7 +60,7 @@ export default function LangSwitch({ value, onChange, className = "", idPrefix =
         aria-pressed={isFr}
         title="Français"
       >
-        <FlagFrance title="Français" />
+        <FlagFrance title="Français" width={frW} height={frH} />
         <span className="visually-hidden">Français</span>
       </button>
       <button
@@ -64,7 +72,7 @@ export default function LangSwitch({ value, onChange, className = "", idPrefix =
         aria-pressed={!isFr}
         title="English (UK)"
       >
-        <FlagUnitedKingdom title="English" />
+        <FlagUnitedKingdom title="English" width={ukW} height={ukH} />
         <span className="visually-hidden">English</span>
       </button>
     </div>

@@ -134,8 +134,8 @@ export default function IspAnnouncementsPanel({
       <h2>{t("Annonces & messages", "Announcements & messages")}</h2>
       <p className="app-meta">
         {t(
-          `Publiez jusqu’à plusieurs messages pour votre équipe et/ou vos abonnés (portail). Titre max. ${ANNOUNCE_TITLE_MAX} caractères ; corps max. ${ANNOUNCE_BODY_PLAIN_MAX} caractères (texte visible). Les trois dernières annonces actives « équipe » apparaissent sous l’en-tête du tableau de bord.`,
-          `Publish messages for your team and/or subscribers (portal). Title max ${ANNOUNCE_TITLE_MAX} chars; body max ${ANNOUNCE_BODY_PLAIN_MAX} plain-text chars. Up to three active staff announcements show under the dashboard header.`
+          `Publiez jusqu’à plusieurs messages pour votre équipe et/ou vos abonnés (portail). Titre max. ${ANNOUNCE_TITLE_MAX} caractères ; corps max. ${ANNOUNCE_BODY_PLAIN_MAX} caractères (texte visible). Les messages « équipe » actifs s’affichent dans le panneau ouvert par la cloche de notification.`,
+          `Publish messages for your team and/or subscribers (portal). Title max ${ANNOUNCE_TITLE_MAX} chars; body max ${ANNOUNCE_BODY_PLAIN_MAX} plain-text chars. Active staff messages appear in the panel opened from the notification bell.`
         )}
       </p>
       {error ? <p className="error">{error}</p> : null}

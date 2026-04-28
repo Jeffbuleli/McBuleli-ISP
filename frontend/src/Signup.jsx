@@ -99,8 +99,16 @@ export default function Signup() {
         <p className="auth-simple-sub">
           {isEn ? "Create your workspace — 1-month trial." : "Créez votre espace — essai 1 mois."}
         </p>
-        {error ? <p className="error">{error}</p> : null}
-        {notice ? <p className="auth-simple-notice">{notice}</p> : null}
+        {error ? (
+          <div role="alert" className="auth-simple-banner auth-simple-banner--error">
+            {error}
+          </div>
+        ) : null}
+        {notice ? (
+          <div role="status" className="auth-simple-banner auth-simple-banner--info">
+            {notice}
+          </div>
+        ) : null}
         <form className="panel auth-simple-panel" onSubmit={onSubmit}>
           <input
             placeholder={isEn ? "Company or ISP name" : "Nom de l'entreprise ou du FAI"}

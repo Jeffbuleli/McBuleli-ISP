@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "./api.js";
 import LangSwitch from "./LangSwitch.jsx";
 import PublicSocialLinks from "./PublicSocialLinks.jsx";
+import PublicMobileNavMenu from "./PublicMobileNavMenu.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
 import PublicMarketingSlot from "./PublicMarketingSlot.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
@@ -14,7 +15,8 @@ import {
   IconPresentation,
   IconReceipt,
   IconUserCheck,
-  IconWhatsApp
+  IconWhatsApp,
+  IconMenuHamburger
 } from "./icons.jsx";
 
 function getStoredUiLang() {
@@ -22,6 +24,17 @@ function getStoredUiLang() {
   const saved = window.localStorage.getItem("ui_lang");
   return saved === "en" ? "en" : "fr";
 }
+
+const PUBLIC_NAV_LINKS = [
+  { href: "#services", fr: "Services", en: "Services" },
+  { href: "#promos", fr: "Offres", en: "Offers" },
+  { href: "#interfaces", fr: "Interfaces", en: "Workspaces" },
+  { href: "#pricing", fr: "Tarifs", en: "Pricing" },
+  { href: "#testimonials", fr: "Témoignages", en: "Testimonials" },
+  { href: "#faq", fr: "FAQ", en: "FAQ" },
+  { href: "/buy/packages", fr: "Wi‑Fi invité", en: "Guest Wi‑Fi" },
+  { href: "#contact", fr: "Contact", en: "Contact" }
+];
 
 const PUBLIC_PLANS = [
   {
@@ -350,6 +363,7 @@ function PublicLogo() {
 }
 
 export default function PublicSite() {
+  const [publicMenuOpen, setPublicMenuOpen] = useState(false);
   const [uiLang, setUiLang] = useState(getStoredUiLang);
   const [homeMarketing, setHomeMarketing] = useState({
     homePromos: [],
@@ -359,6 +373,10 @@ export default function PublicSite() {
   });
   const isEn = uiLang === "en";
   const t = (fr, en) => (isEn ? en : fr);
+  const publicNavLabeled = useMemo(
+    () => PUBLIC_NAV_LINKS.map((item) => ({ href: item.href, label: t(item.fr, item.en) })),
+    [isEn]
+  );
   const statRows = useMemo(
     () => [
       {
@@ -409,6 +427,24 @@ export default function PublicSite() {
   }, [uiLang]);
 
   useEffect(() => {
+    if (!publicMenuOpen) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [publicMenuOpen]);
+
+  useEffect(() => {
+    if (!publicMenuOpen) return undefined;
+    function onKey(e) {
+      if (e.key === "Escape") setPublicMenuOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [publicMenuOpen]);
+
+  useEffect(() => {
     let cancelled = false;
     api
       .getPublicHomeMarketing()
@@ -446,20 +482,33 @@ export default function PublicSite() {
             <span>McBuleli</span>
           </a>
           <nav className="public-nav" aria-label={t("Navigation principale", "Main navigation")}>
-            <a href="#services">{t("Services", "Services")}</a>
-            <a href="#promos">{t("Offres", "Offers")}</a>
-            <a href="#interfaces">{t("Interfaces", "Workspaces")}</a>
-            <a href="#pricing">{t("Tarifs", "Pricing")}</a>
-            <a href="#testimonials">{t("Témoignages", "Testimonials")}</a>
-            <a href="#faq">{t("FAQ", "FAQ")}</a>
-            <a href="/buy/packages">{t("Wi‑Fi invité", "Guest Wi‑Fi")}</a>
-            <a href="#contact">{t("Contact", "Contact")}</a>
+            {PUBLIC_NAV_LINKS.map((item) => (
+              <a key={item.href} href={item.href}>
+                {t(item.fr, item.en)}
+              </a>
+            ))}
           </nav>
-          <div className="public-hero-toolbar">
-            <PublicSocialLinks idPrefix="public" isEn={isEn} />
-            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="public" />
+          <div className="public-hero-toolbar public-hero-toolbar-row">
+            <button
+              type="button"
+              className="public-hero-menu-btn btn-icon-toolbar"
+              aria-expanded={publicMenuOpen}
+              onClick={() => setPublicMenuOpen(true)}
+              aria-label={t("Ouvrir le menu", "Open menu")}
+            >
+              <IconMenuHamburger width={18} height={18} />
+            </button>
+            <PublicSocialLinks idPrefix="public" isEn={isEn} compact />
+            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="public" compact />
           </div>
         </div>
+        <PublicMobileNavMenu
+          open={publicMenuOpen}
+          onClose={() => setPublicMenuOpen(false)}
+          title={t("Navigation", "Navigation")}
+          closeLabel={t("Fermer", "Close")}
+          items={publicNavLabeled}
+        />
         <div className="public-hero-grid">
           <section>
             <p className="eyebrow public-hero-eyebrow">

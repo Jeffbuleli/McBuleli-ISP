@@ -1,14 +1,17 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
 import LangSwitch from "./LangSwitch.jsx";
 import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
-import DashboardHeaderAnnouncements from "./DashboardHeaderAnnouncements.jsx";
+import DashboardAnnouncementsBell from "./DashboardAnnouncementsBell.jsx";
 import DashboardSideNav from "./DashboardSideNav.jsx";
 import DashboardBottomNav from "./DashboardBottomNav.jsx";
 import DashboardMobileFab from "./DashboardMobileFab.jsx";
+import DashboardMobileSheetMenu from "./DashboardMobileSheetMenu.jsx";
 import DashboardScreenGate from "./DashboardScreenGate.jsx";
+import DashboardStaffProfileAvatar from "./DashboardStaffProfileAvatar.jsx";
 import { useDashboardMobilePath } from "./useDashboardMobilePath.js";
+import { buildDashboardNavCategories } from "./dashboardNavCategories.js";
 import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
 import PlatformHomeMarketingPanel from "./PlatformHomeMarketingPanel.jsx";
 import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
@@ -17,9 +20,9 @@ import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
 import {
   IconArrowLeft,
-  IconBell,
   IconHome,
   IconMail,
+  IconMenuHamburger,
   IconPhone,
   IconSignOut
 } from "./icons.jsx";
@@ -662,6 +665,8 @@ function App() {
   const [invoices, setInvoices] = useState([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [mobilePwaMenuOpen, setMobilePwaMenuOpen] = useState(false);
+  const [announcementsPopoverOpen, setAnnouncementsPopoverOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uiLang, setUiLang] = useState(getStoredUiLang);
   const isEn = uiLang === "en";
@@ -853,6 +858,25 @@ function App() {
   const isMobileShell = useMediaQuery("(max-width: 899px)");
   const { mobileScreen, navigateMobileScreen } = useDashboardMobilePath(isMobileShell);
   const dashboardNavCompactEffective = Boolean(dashboardNavCompact && !dashboardLayoutStacked && !isMobileShell);
+
+  const openAnnouncementsManage = useCallback(() => {
+    setAnnouncementsPopoverOpen(false);
+    if (isMobileShell) {
+      navigateMobileScreen("users");
+      window.requestAnimationFrame(() => {
+        window.location.hash = "isp-announcements";
+        window.setTimeout(() => {
+          try {
+            document.getElementById("isp-announcements")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          } catch (_e) {
+            /* ignore */
+          }
+        }, 220);
+      });
+    } else {
+      window.location.hash = "isp-announcements";
+    }
+  }, [isMobileShell, navigateMobileScreen]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2671,10 +2695,20 @@ function App() {
           {tenantSurfaceLogoAlt !== "McBuleli" ? (
             <p className="auth-simple-platform-hint">{isEn ? "Powered by McBuleli" : "Propulsé par McBuleli"}</p>
           ) : null}
-          {notice ? <p className="auth-simple-notice">{notice}</p> : null}
-          {error ? <p className="error">{error}</p> : null}
+          {notice ? (
+            <div role="status" className="auth-simple-banner auth-simple-banner--info">
+              {isEn ? translateToEnglish(notice) : notice}
+            </div>
+          ) : null}
+          {error ? (
+            <div role="alert" className="auth-simple-banner auth-simple-banner--error">
+              {isEn ? translateToEnglish(error) : error}
+            </div>
+          ) : null}
           {forgotNotice && loginAuthStep === "forgot" ? (
-            <p className="auth-simple-notice">{forgotNotice}</p>
+            <div role="status" className="auth-simple-banner auth-simple-banner--info">
+              {forgotNotice}
+            </div>
           ) : null}
           {loginWorkspaces && !mfaLogin ? (
             <div className="panel auth-simple-panel" role="dialog" aria-label={isEn ? "Choose workspace" : "Choisir l'entreprise"}>
@@ -2868,7 +2902,11 @@ function App() {
                 "You must update your password before continuing."
               )}
             </p>
-          {error ? <p className="error">{error}</p> : null}
+          {error ? (
+            <div role="alert" className="auth-simple-banner auth-simple-banner--error">
+              {isEn ? translateToEnglish(error) : error}
+            </div>
+          ) : null}
           <form className="panel auth-simple-panel" onSubmit={onChangePassword}>
             <h2 className="auth-simple-panel-title">{t("Nouveau mot de passe", "Change password")}</h2>
           <input
@@ -2902,10 +2940,7 @@ function App() {
     branding?.logoUrl != null && String(branding.logoUrl).trim()
       ? publicAssetUrl(branding.logoUrl)
       : null;
-  const showDashboardHeaderPromos =
-    !user?.dashboardBanners?.length &&
-    !user?.dashboardBannerHtml &&
-    !ispAnnouncements.length;
+  const showDashboardHeaderPromos = !user?.dashboardBanners?.length && !user?.dashboardBannerHtml;
 
   const canSeeAnnouncements =
     !isFieldAgent &&
@@ -2915,6 +2950,11 @@ function App() {
       user.role === "isp_admin");
 
   const gateMobile = isMobileShell;
+
+  const pwaNavCategories = useMemo(
+    () => buildDashboardNavCategories(t, user, isFieldAgent),
+    [t, user, isFieldAgent]
+  );
 
   return (
     <>
@@ -2979,6 +3019,15 @@ function App() {
                   >
                     <IconHome width={22} height={22} />
                   </a>
+                  <DashboardAnnouncementsBell
+                    items={ispAnnouncements}
+                    t={t}
+                    open={announcementsPopoverOpen}
+                    onOpenChange={setAnnouncementsPopoverOpen}
+                    canManage={canSeeAnnouncements}
+                    onManageAnnouncements={openAnnouncementsManage}
+                    variant="desktop"
+                  />
                   <button
                     type="button"
                     className="btn-icon-toolbar"
@@ -2990,12 +3039,6 @@ function App() {
                   </button>
                 </div>
               </div>
-              <DashboardHeaderAnnouncements
-                items={ispAnnouncements}
-                t={t}
-                isFieldAgent={isFieldAgent}
-                onOpenAnnouncements={isMobileShell ? () => navigateMobileScreen("users") : undefined}
-              />
             </>
           ) : (
             <>
@@ -3029,50 +3072,49 @@ function App() {
                     </p>
                   </div>
                 </div>
-                <div className="dashboard-mobile-quick-actions" role="toolbar" aria-label={t("Raccourcis", "Shortcuts")}>
+                <div className="dashboard-mobile-toolbar-row" role="toolbar" aria-label={t("Raccourcis", "Shortcuts")}>
+                  <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash-mob" compact />
+                  <a
+                    className="dashboard-mobile-icon-btn dashboard-mobile-icon-btn--toolbar"
+                    href="/?site=public"
+                    title={t("Site public (accueil)", "Public site (home)")}
+                    aria-label={t("Site public", "Public site")}
+                  >
+                    <IconHome width={18} height={18} />
+                  </a>
+                  <DashboardAnnouncementsBell
+                    items={ispAnnouncements}
+                    t={t}
+                    open={announcementsPopoverOpen}
+                    onOpenChange={setAnnouncementsPopoverOpen}
+                    canManage={canSeeAnnouncements}
+                    onManageAnnouncements={openAnnouncementsManage}
+                    variant="mobile"
+                  />
                   <button
                     type="button"
-                    className="dashboard-mobile-icon-btn"
-                    onClick={() =>
-                      navigateMobileScreen(canSeeAnnouncements ? "users" : "settings")
-                    }
-                    aria-label={t("Annonces et alertes", "Announcements & alerts")}
+                    className="dashboard-mobile-icon-btn dashboard-mobile-icon-btn--toolbar"
+                    onClick={onLogout}
+                    title={t("Sortie — déconnexion", "Sign out")}
+                    aria-label={t("Déconnexion", "Logout")}
                   >
-                    <IconBell width={22} height={22} />
-                    {ispAnnouncements.length > 0 ? (
-                      <span className="dashboard-mobile-badge">
-                        {ispAnnouncements.length > 9 ? "9+" : ispAnnouncements.length}
-                      </span>
-                    ) : null}
+                    <IconSignOut width={18} height={18} />
                   </button>
-                  <div className="dashboard-mobile-avatar" title={user.fullName}>
-                    {userInitials(user.fullName)}
-                  </div>
+                  <button
+                    type="button"
+                    className="dashboard-mobile-icon-btn dashboard-mobile-icon-btn--toolbar"
+                    onClick={() => setMobilePwaMenuOpen(true)}
+                    title={t("Toutes les sections", "All sections")}
+                    aria-label={t("Toutes les sections", "All sections")}
+                  >
+                    <IconMenuHamburger width={18} height={18} />
+                  </button>
+                  <DashboardStaffProfileAvatar
+                    userId={user.id || user.email}
+                    fullName={user.fullName}
+                    t={t}
+                  />
                 </div>
-              </div>
-              <div
-                className="dashboard-mobile-subtoolbar"
-                role="toolbar"
-                aria-label={t("Langue et navigation", "Language and navigation")}
-              >
-                <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="dash-mob" />
-                <a
-                  className="btn-icon-toolbar dashboard-mobile-subtoolbar__btn"
-                  href="/?site=public"
-                  title={t("Site public (accueil)", "Public site (home)")}
-                  aria-label={t("Site public", "Public site")}
-                >
-                  <IconHome width={22} height={22} />
-                </a>
-                <button
-                  type="button"
-                  className="btn-icon-toolbar dashboard-mobile-subtoolbar__btn"
-                  onClick={onLogout}
-                  title={t("Sortie — déconnexion", "Sign out")}
-                  aria-label={t("Déconnexion", "Logout")}
-                >
-                  <IconSignOut width={22} height={22} />
-                </button>
               </div>
               <div className="dashboard-header-ad dashboard-header-ad--mobile-pwa">
                 {user?.dashboardBanners?.length ? (
@@ -3086,12 +3128,6 @@ function App() {
                   <PublicHomePromos t={t} isEn={isEn} variant="dashboard" />
                 ) : null}
               </div>
-              <DashboardHeaderAnnouncements
-                items={ispAnnouncements}
-                t={t}
-                isFieldAgent={isFieldAgent}
-                onOpenAnnouncements={isMobileShell ? () => navigateMobileScreen("users") : undefined}
-              />
             </>
           )}
         </header>
@@ -3116,8 +3152,16 @@ function App() {
         ) : null}
         <div className="dashboard-main-column">
       {loading && <p>{t("Chargement…", "Loading...")}</p>}
-      {error && <p className="error">{isEn ? translateToEnglish(error) : error}</p>}
-      {notice && <p>{isEn ? translateToEnglish(notice) : notice}</p>}
+      {error ? (
+        <div role="alert" className="auth-simple-banner auth-simple-banner--error app-dash-alert">
+          {isEn ? translateToEnglish(error) : error}
+        </div>
+      ) : null}
+      {notice ? (
+        <div role="status" className="auth-simple-banner auth-simple-banner--info app-dash-alert">
+          {isEn ? translateToEnglish(notice) : notice}
+        </div>
+      ) : null}
 
       {(() => {
         const billing = isPlatformSuperRole(user.role) ? platformBillingStatus : user.platformBilling;
@@ -5978,6 +6022,13 @@ function App() {
     </main>
     {isMobileShell ? (
       <>
+        <DashboardMobileSheetMenu
+          open={mobilePwaMenuOpen}
+          onClose={() => setMobilePwaMenuOpen(false)}
+          categories={pwaNavCategories}
+          navigateMobileScreen={navigateMobileScreen}
+          t={t}
+        />
         <DashboardMobileFab
           t={t}
           userRole={user.role}
