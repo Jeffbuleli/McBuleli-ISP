@@ -5,8 +5,6 @@ import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
 import DashboardAnnouncementsBell from "./DashboardAnnouncementsBell.jsx";
 import DashboardSideNav from "./DashboardSideNav.jsx";
-import DashboardBottomNav from "./DashboardBottomNav.jsx";
-import DashboardMobileFab from "./DashboardMobileFab.jsx";
 import DashboardMobileSheetMenu from "./DashboardMobileSheetMenu.jsx";
 import DashboardScreenGate from "./DashboardScreenGate.jsx";
 import DashboardStaffProfileAvatar from "./DashboardStaffProfileAvatar.jsx";
@@ -4942,7 +4940,7 @@ function App() {
               "Withdrawals are limited to Mobile Money payments confirmed via Pawapay. Cash and manual TID collections still appear in statistics but cannot be withdrawn from the Pawapay account."
             )}
           </p>
-          <section className="panel" style={{ background: "#f8f9fb" }}>
+          <section className="panel dashboard-totp-setup-card">
             <h3>{t("Google Authenticator", "Google Authenticator")}</h3>
             <p>
               {t("Statut :", "Status:")}{" "}
@@ -6054,21 +6052,13 @@ function App() {
       </footer>
     </main>
     {isMobileShell ? (
-      <>
-        <DashboardMobileSheetMenu
-          open={mobilePwaMenuOpen}
-          onClose={() => setMobilePwaMenuOpen(false)}
-          categories={pwaNavCategories}
-          navigateMobileScreen={navigateMobileScreen}
-          t={t}
-        />
-        <DashboardMobileFab
-          t={t}
-          userRole={user.role}
-          navigateMobileScreen={navigateMobileScreen}
-        />
-        <DashboardBottomNav t={t} isFieldAgent={isFieldAgent} navigateMobileScreen={navigateMobileScreen} />
-      </>
+      <DashboardMobileSheetMenu
+        open={mobilePwaMenuOpen}
+        onClose={() => setMobilePwaMenuOpen(false)}
+        categories={pwaNavCategories}
+        navigateMobileScreen={navigateMobileScreen}
+        t={t}
+      />
     ) : null}
     <PwaInstallPrompt enabled={pwaPromptGateOk} workspaceLabel={workspaceTitleForPwa} isEn={isEn} />
     </>
