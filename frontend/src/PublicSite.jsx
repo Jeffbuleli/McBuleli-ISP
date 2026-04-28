@@ -362,15 +362,15 @@ export default function PublicSite() {
     () => [
       {
         value: "24/7",
-        label: t("Portail & paiements toujours accessibles", "Portal & payments always on")
+        label: t("Portail & paiements en continu", "Nonstop portal & pay")
       },
       {
         value: "10+",
-        label: t("Modules métiers dans un seul produit", "Business modules in one product")
+        label: t("10+ fonctions, une seule app", "10+ features, one app")
       },
       {
         value: "1",
-        label: t("Une vision pour direction & terrain", "One view for leadership & field teams")
+        label: t("Siège & terrain, même vue", "HQ & field, one view")
       }
     ],
     [isEn]

@@ -2494,12 +2494,15 @@ body:has(.auth-simple--dark) {
 
 .public-stats strong {
   display: block;
+  min-width: 0;
   padding: 16px;
   border: 1px solid rgba(93, 64, 55, 0.12);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.68);
   font-size: 1.4rem;
   color: var(--mb-primary);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .public-stats span {
@@ -2510,6 +2513,27 @@ body:has(.auth-simple--dark) {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+@media (max-width: 520px) {
+  .public-stats {
+    gap: 8px;
+    max-width: none;
+  }
+
+  .public-stats strong {
+    padding: 12px 10px;
+    font-size: 1.2rem;
+  }
+
+  .public-stats span {
+    font-size: 0.68rem;
+    letter-spacing: 0.03em;
+  }
 }
 
 .eyebrow {
