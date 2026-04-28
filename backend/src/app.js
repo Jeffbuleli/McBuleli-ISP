@@ -69,6 +69,7 @@ import {
   putBrandingLogoInS3
 } from "./brandingLogoStorage.js";
 import { validateAnnouncementContent, validatePublicPageSlot } from "./announcementHtml.js";
+import { registerTeamChatRoutes } from "./teamChat.js";
 import { streamInvoiceProformaPdf } from "./proformaPdf.js";
 
 function authenticate(req, res, next) {
@@ -686,6 +687,8 @@ function publicUserPayload(user, extra = {}) {
     mustChangePassword: user.must_change_password,
     mfaRequired: MFA_REQUIRED_ROLES.has(user.role),
     mfaTotpEnabled: Boolean(user.mfa_totp_enabled),
+    chatUsername: user.chat_username ?? null,
+    chatAvatarUrl: user.chat_avatar_url ?? null,
     ...extra
   };
 }
@@ -2567,6 +2570,8 @@ app.delete(
     res.status(204).end();
   }
 );
+
+registerTeamChatRoutes(app);
 
 app.get("/api/platform/packages", authenticate, async (_req, res) => {
   const result = await query(

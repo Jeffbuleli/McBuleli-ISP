@@ -141,6 +141,42 @@ export async function initDb() {
     ON CONFLICT (user_id, isp_id) DO NOTHING
   `);
 
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_username TEXT;");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_avatar_url TEXT;");
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_chat_username_normalized
+    ON users (lower(btrim(chat_username)))
+    WHERE chat_username IS NOT NULL AND length(btrim(chat_username)) >= 3
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS team_chat_messages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      content TEXT NOT NULL CHECK (char_length(content) >= 1 AND char_length(content) <= 500),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_team_chat_isp_created ON team_chat_messages (isp_id, created_at DESC);
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS team_chat_member_state (
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      last_read_at TIMESTAMPTZ NOT NULL DEFAULT TIMEZONE('utc'::text, 'epoch'::timestamp),
+      PRIMARY KEY (user_id, isp_id)
+    );
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_team_chat_member_state_isp ON team_chat_member_state (isp_id);`);
+
+  await query(`
+    UPDATE users SET chat_username = 'u' || REPLACE(id::text, '-', '')
+    WHERE chat_username IS NULL OR btrim(chat_username) = ''
+  `);
+
   await query(`
     CREATE TABLE IF NOT EXISTS user_mfa_challenges (
       id UUID PRIMARY KEY,

@@ -114,6 +114,20 @@ export function IconBell(props) {
   );
 }
 
+/** Internal team chat (toolbar) */
+export function IconChatBubble(props) {
+  return (
+    <svg {...base} {...props}>
+      <path
+        d="M21 12a7.5 7.5 0 0 1-7.5 7.5H9.5L6 22v-2.7A7.5 7.5 0 1 1 21 12Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /** Home / public site */
 export function IconHome(props) {
   return (

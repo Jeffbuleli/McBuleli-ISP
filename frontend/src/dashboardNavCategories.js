@@ -17,6 +17,7 @@ export const NAV_HASH_TO_MOBILE_SCREEN = {
   "#platform-home-marketing": "dashboard",
   "#system-tenants": "dashboard",
   "#isp-announcements": "users",
+  "#team-chat": "dashboard",
   "#workspace-settings": "settings",
   "#network-ops": "network",
   "#mcbuleli-billing": "billing",
@@ -86,7 +87,10 @@ export function buildDashboardNavCategories(t, user, isFieldAgent) {
       id: "communication",
       label: t("Communication", "Communication"),
       Icon: IconMail,
-      items: [{ href: "#isp-announcements", label: t("Annonces", "Announcements") }]
+      items: [
+        { href: "#isp-announcements", label: t("Annonces", "Announcements") },
+        { href: "#team-chat", label: t("Chat équipe", "Team chat") }
+      ]
     });
   }
 

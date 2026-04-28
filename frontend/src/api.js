@@ -535,6 +535,27 @@ export const api = {
     request(withIsp(`/announcements/${encodeURIComponent(id)}`, ispId), {
       method: "DELETE"
     }),
+  getTeamChatUnread: (ispId) => request(withIsp("/team-chat/unread", ispId)),
+  getTeamChatMessages: (ispId, { limit = 50, before } = {}) => {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (before) q.set("before", String(before));
+    return request(withIsp(`/team-chat/messages?${q}`, ispId));
+  },
+  postTeamChatMessage: (ispId, payload) =>
+    request(withIsp("/team-chat/messages", ispId), {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  postTeamChatRead: (ispId) =>
+    request(withIsp("/team-chat/read", ispId), {
+      method: "POST",
+      body: JSON.stringify({})
+    }),
+  patchChatProfile: (payload) =>
+    request("/auth/chat-profile", {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
   updateBranding: (ispId, payload) =>
     request(withIsp("/branding", ispId), {
       method: "POST",

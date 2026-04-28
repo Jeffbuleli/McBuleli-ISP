@@ -2,7 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
 import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
-import DashboardAnnouncementsBell from "./DashboardAnnouncementsBell.jsx";
+import DashboardTeamChatButton from "./DashboardTeamChatButton.jsx";
+import TeamChatPanel from "./TeamChatPanel.jsx";
 import DashboardSideNav from "./DashboardSideNav.jsx";
 import DashboardMobileSheetMenu from "./DashboardMobileSheetMenu.jsx";
 import DashboardScreenGate from "./DashboardScreenGate.jsx";
@@ -633,11 +634,48 @@ function App() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [mobilePwaMenuOpen, setMobilePwaMenuOpen] = useState(false);
-  const [announcementsPopoverOpen, setAnnouncementsPopoverOpen] = useState(false);
+  const [teamChatOpen, setTeamChatOpen] = useState(false);
+  const [teamChatUnread, setTeamChatUnread] = useState(0);
   const [loading, setLoading] = useState(false);
   const [uiLang, setUiLang] = useState(getStoredUiLang);
   const isEn = uiLang === "en";
   const t = (fr, en) => (isEn ? en : fr);
+
+  const dashboardChatIspId = useMemo(
+    () => tenantContext?.ispId || selectedIspId || user?.ispId || isps[0]?.id || "",
+    [tenantContext?.ispId, selectedIspId, user?.ispId, isps]
+  );
+
+  const fetchTeamChatUnread = useCallback(async () => {
+    if (!user) return;
+    const cid = tenantContext?.ispId || selectedIspId || user.ispId || isps[0]?.id;
+    if (!cid) return;
+    try {
+      const r = await api.getTeamChatUnread(cid);
+      setTeamChatUnread(typeof r.count === "number" ? r.count : 0);
+    } catch (_e) {
+      /* low priority */
+    }
+  }, [user, tenantContext?.ispId, selectedIspId, isps]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    void fetchTeamChatUnread();
+    const iv = typeof window !== "undefined" ? window.setInterval(() => void fetchTeamChatUnread(), 14000) : null;
+    return () => {
+      if (iv) window.clearInterval(iv);
+    };
+  }, [user, fetchTeamChatUnread]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    function syncChatHash() {
+      if (window.location.hash === "#team-chat") setTeamChatOpen(true);
+    }
+    syncChatHash();
+    window.addEventListener("hashchange", syncChatHash);
+    return () => window.removeEventListener("hashchange", syncChatHash);
+  }, []);
 
   const [customerForm, setCustomerForm] = useState({
     fullName: "",
@@ -827,7 +865,6 @@ function App() {
   const dashboardNavCompactEffective = Boolean(dashboardNavCompact && !dashboardLayoutStacked && !isMobileShell);
 
   const openAnnouncementsManage = useCallback(() => {
-    setAnnouncementsPopoverOpen(false);
     if (isMobileShell) {
       navigateMobileScreen("users");
       window.requestAnimationFrame(() => {
@@ -1090,6 +1127,17 @@ function App() {
         }
       }
       setIspAnnouncementsManage(annM);
+
+      if (activeIspId) {
+        try {
+          const ur = await api.getTeamChatUnread(activeIspId);
+          setTeamChatUnread(typeof ur.count === "number" ? ur.count : 0);
+        } catch (_e) {
+          /* optional */
+        }
+      } else {
+        setTeamChatUnread(0);
+      }
 
       setIsps(allIsps);
       setSelectedIspId(activeIspId);
@@ -3031,15 +3079,14 @@ function App() {
                   role="toolbar"
                   aria-label={t("Navigation", "Navigation")}
                 >
-                  <DashboardAnnouncementsBell
-                    items={ispAnnouncements}
-                    t={t}
-                    open={announcementsPopoverOpen}
-                    onOpenChange={setAnnouncementsPopoverOpen}
-                    canManage={canSeeAnnouncements}
-                    onManageAnnouncements={openAnnouncementsManage}
-                    variant="desktop"
-                  />
+                  {dashboardChatIspId ? (
+                    <DashboardTeamChatButton
+                      unreadCount={teamChatUnread}
+                      t={t}
+                      variant="desktop"
+                      onClick={() => setTeamChatOpen((o) => !o)}
+                    />
+                  ) : null}
                   <button
                     type="button"
                     className="btn-icon-toolbar"
@@ -3093,15 +3140,14 @@ function App() {
                   </div>
                 </div>
                 <div className="dashboard-mobile-toolbar-row" role="toolbar" aria-label={t("Raccourcis", "Shortcuts")}>
-                  <DashboardAnnouncementsBell
-                    items={ispAnnouncements}
-                    t={t}
-                    open={announcementsPopoverOpen}
-                    onOpenChange={setAnnouncementsPopoverOpen}
-                    canManage={canSeeAnnouncements}
-                    onManageAnnouncements={openAnnouncementsManage}
-                    variant="mobile"
-                  />
+                  {dashboardChatIspId ? (
+                    <DashboardTeamChatButton
+                      unreadCount={teamChatUnread}
+                      t={t}
+                      variant="mobile"
+                      onClick={() => setTeamChatOpen((o) => !o)}
+                    />
+                  ) : null}
                   <button
                     type="button"
                     className="dashboard-mobile-icon-btn dashboard-mobile-icon-btn--toolbar"
@@ -3150,6 +3196,19 @@ function App() {
             </>
           )}
         </header>
+        {dashboardChatIspId ? (
+          <TeamChatPanel
+            open={teamChatOpen}
+            onClose={() => setTeamChatOpen(false)}
+            ispId={dashboardChatIspId}
+            user={user}
+            t={t}
+            isEn={isEn}
+            isMobileShell={isMobileShell}
+            onMarkReadComplete={() => setTeamChatUnread(0)}
+            onChatProfileSaved={(p) => setUser((u) => (u ? { ...u, ...p } : u))}
+          />
+        ) : null}
       </div>
       <div
         className={`dashboard-layout${
