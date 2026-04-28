@@ -3181,7 +3181,6 @@ a.public-footer-card:hover {
 }
 
 .public-footer-card--address {
-  grid-column: 1 / -1;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
