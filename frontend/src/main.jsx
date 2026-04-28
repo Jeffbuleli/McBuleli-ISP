@@ -5,6 +5,7 @@ import Portal from "./Portal.jsx";
 import Signup from "./Signup.jsx";
 import WifiPortal from "./WifiPortal.jsx";
 import PublicSite from "./PublicSite.jsx";
+import PrivacyPolicy from "./PrivacyPolicy.jsx";
 import { registerServiceWorker } from "./pwaRegister.js";
 import "./styles.css";
 
@@ -30,6 +31,9 @@ function Root() {
   }
   if (path === "/" || path === "") {
     return hasToken && !forcePublic ? <App /> : <PublicSite />;
+  }
+  if (path === "/privacy") {
+    return <PrivacyPolicy />;
   }
   if (path === "/login" || path.startsWith("/login/")) {
     return <App />;

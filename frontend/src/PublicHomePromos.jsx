@@ -93,12 +93,12 @@ export default function PublicHomePromos({ t, isEn, variant = "marketing", apiPr
         {!dash ? (
           <>
             <p className="eyebrow">
-              {t("Fournisseurs & matériel réseau", "Network hardware partners")}
+              {t("Offres sélectionnées", "Curated offers")}
             </p>
             <h2 id="public-promos-title">
               {t(
-                "Le meilleur du matériel pro — antennes, routeurs, accès internet",
-                "Pro-grade gear that delivers — antennas, routers, connectivity"
+                "Un partenaire matériel, une promesse utilisateur sobre",
+                "Hardware partners showcased with a calm retail story"
               )}
             </h2>
           </>

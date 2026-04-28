@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "./api.js";
+import { api, publicAssetUrl } from "./api.js";
 import LangSwitch from "./LangSwitch.jsx";
 import { UI_LANG_SYNC_EVENT, getStoredUiLang } from "./uiLangSync.js";
 import PublicSocialLinks from "./PublicSocialLinks.jsx";
 import PublicMobileNavMenu from "./PublicMobileNavMenu.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
 import PublicMarketingSlot from "./PublicMarketingSlot.jsx";
+import PublicCeoSection from "./PublicCeoSection.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import { COMPANY_CONTACT } from "./companyContact.js";
 import {
@@ -141,6 +142,13 @@ const SERVICES = [
     }
   }
 ];
+
+const CEO_BIO_FALLBACK = {
+  bioFr:
+    "Entrepreneur et ingénieur, Jeff Buleli porte une vision produit où facturation ISP, équipes terrain et abonnés s’alignent sur une information fiable au service de l’innovation durable des opérateurs en Afrique.",
+  bioEn:
+    "An entrepreneur-engineer, Jeff aligns product ambition with operational reality — connecting billing, field teams and subscribers with dependable insight through sustainable ISP innovation across Africa."
+};
 
 function ServiceIcon({ type }) {
   const common = { width: "24", height: "24", viewBox: "0 0 24 24", fill: "none", "aria-hidden": "true" };
@@ -348,11 +356,12 @@ function PublicLogo() {
     <img
       className="public-logo-img"
       src={mcbuleliLogoUrl}
-      alt="McBuleli"
+      alt=""
       width={48}
       height={48}
       loading="eager"
       decoding="async"
+      aria-hidden="true"
     />
   );
 }
@@ -376,15 +385,15 @@ export default function PublicSite() {
     () => [
       {
         value: "24/7",
-        label: t("Portail & paiements en continu", "Nonstop portal & pay")
+        label: t("Portail abonné disponible jour et nuit", "Subscriber portal available anytime")
       },
       {
         value: "10+",
-        label: t("10+ fonctions, une seule app", "10+ features, one app")
+        label: t("Modules métier dans une même application", "Business modules inside one suite")
       },
       {
-        value: "1",
-        label: t("Siège & terrain, même vue", "HQ & field, one view")
+        value: "AI",
+        label: t("Assistants augmentés prévus dans la roadmap", "Augmented assistants on the roadmap")
       }
     ],
     [isEn]
@@ -411,9 +420,11 @@ export default function PublicSite() {
   );
 
   const founderShowcase = homeMarketing.founderShowcase || { caption: "", imageUrl: null };
-  const showFounderBlock = Boolean(
-    String(founderShowcase.caption || "").trim() || founderShowcase.imageUrl
-  );
+  const ceoHeadshotSrc = useMemo(() => {
+    const raw = founderShowcase.imageUrl != null ? String(founderShowcase.imageUrl).trim() : "";
+    if (!raw) return null;
+    return publicAssetUrl(raw);
+  }, [founderShowcase.imageUrl]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -475,7 +486,7 @@ export default function PublicSite() {
         <div className="public-hero-top">
           <a className="public-brand" href="/">
             <PublicLogo />
-            <span>McBuleli</span>
+            <span>McBuleli ISP</span>
           </a>
           <nav className="public-nav" aria-label={t("Navigation principale", "Main navigation")}>
             {PUBLIC_NAV_LINKS.map((item) => (
@@ -511,28 +522,28 @@ export default function PublicSite() {
           <section>
             <p className="eyebrow public-hero-eyebrow">
               {t(
-                "Facturation · Réseau · Encaissements — conçu pour les FAI",
-                "Billing · Network · Collections — built for ISPs"
+                "Plateforme FAI · facturation · réseau · assisté par l’IA",
+                "ISP platform · billing · network · AI-assisted operations"
               )}
             </p>
             <h1 className="public-hero-title">
               {t(
-                "Alignez abonnés, trésorerie et infrastructure réseau sur une seule plateforme.",
-                "Keep subscribers, cash flow and network infrastructure aligned on one platform."
+                "Pilotez votre FAI avec la rigueur d’un SaaS international.",
+                "Run your ISP with the rigor of a world-class SaaS."
               )}
             </h1>
             <p className="public-hero-lead">
               {t(
-                "McBuleli centralise relances, paiements mobiles, portail abonné, Wi‑Fi invité, équipes terrain, validation des dépenses, clôtures de période après inventaire et synchronisation MikroTik — avec la traçabilité attendue des opérateurs exigeants.",
-                "McBuleli unifies dunning, mobile payments, the subscriber portal, guest Wi‑Fi, field teams, expense workflows with maker-checker approval, fiscal period locks after inventory, and MikroTik sync—with the traceability serious operators expect."
+                "McBuleli ISP aligne abonnés, trésorerie et infrastructure : facturation & encaissements Mobile Money, portail client, Wi‑Fi invité, équipes terrain, workflows de dépenses et synchronisation MikroTik — avec traçabilité complète pour les opérations critiques.",
+                "McBuleli ISP aligns subscribers, cash and infrastructure: billing & mobile collections, customer portal, guest Wi‑Fi, field teams, expense workflows and MikroTik sync—with full traceability for critical operations."
               )}
             </p>
             <div className="public-cta">
               <a className="btn-primary" href="/signup">
-                {t("Démarrer l'essai gratuit", "Start free trial")}
+                {t("Commencer", "Get started")}
               </a>
               <a className="btn-secondary" href="/login">
-                {t("Se connecter", "Login")}
+                {t("Se connecter", "Sign in")}
               </a>
               <a className="btn-secondary" href="/buy/packages">
                 {t("Achat pass Wi‑Fi", "Buy Wi‑Fi pass")}
@@ -583,8 +594,8 @@ export default function PublicSite() {
         </div>
         <p>
           {t(
-            "Les plateformes FAI les plus exigeantes unissent simplicité, automatisation et image professionnelle : McBuleli suit cette ligne, côté client comme côté équipes internes.",
-            "The most demanding ISP platforms combine simplicity, automation and a polished brand—McBuleli follows that standard for customers and internal teams."
+            "Une expérience unique pour les équipes financières, le terrain et vos abonnés : simplicité, automatisation durable et présentation de marque nette comme sur les standards internationaux.",
+            "One experience across finance teams, crews and subscribers—purposeful automation and brand polish that rivals international benchmarks."
           )}
         </p>
       </section>
@@ -659,25 +670,38 @@ export default function PublicSite() {
       </section>
 
       <section className="public-section public-section--highlight">
-        <h2>{t("Pourquoi choisir McBuleli pour votre ISP ?", "Why choose McBuleli for your ISP?")}</h2>
+        <h2>{t("Pourquoi McBuleli ISP ?", "Why McBuleli ISP?")}</h2>
         <ul>
-          <li>{t("Moins de pertes de revenus grâce au suivi des paiements, TID et suspensions.", "Reduce revenue leakage with payment, TID and suspension tracking.")}</li>
-          <li>{t("Équipe plus productive grâce à un tableau de bord unique pour dirigeants, agents et support.", "Make teams more productive with one dashboard for leaders, agents and support.")}</li>
+          <li>{t("Moins de pertes grâce au suivi des paiements, références et suspensions orchestrées.", "Less revenue leakage thanks to routed payments, reference queues and coordinated suspensions.")}</li>
+          <li>{t("Une seule vérité financière pour la direction, le terrain et le support.", "One financial truth shared by executives, field teams and support.")}</li>
           <li>
             {t(
-              "Image professionnelle dès la première visite sur votre domaine ou sous-domaine.",
-              "A professional first impression on your own domain or subdomain."
+              "Image premium dès la première interaction sur votre domaine ou votre sous-domaine.",
+              "A premium-first interaction on every browser session under your owned domain."
             )}
           </li>
         </ul>
       </section>
+
+      <PublicCeoSection
+        t={t}
+        isEn={isEn}
+        imageUrl={ceoHeadshotSrc}
+        remoteCaption={founderShowcase.caption}
+        ceoNameFr="Jeff Buleli"
+        ceoNameEn="Jeff Buleli"
+        roleFr="CEO / Fondateur"
+        roleEn="CEO / Founder"
+        bioFr={CEO_BIO_FALLBACK.bioFr}
+        bioEn={CEO_BIO_FALLBACK.bioEn}
+      />
 
       {(afterWhyMarketingBlocks || []).map((block) => (
         <PublicMarketingSlot key={block.id} slot={{ ...block, isActive: true }} variant="footer" t={t} />
       ))}
 
       <section className="public-section" id="testimonials">
-        <p className="eyebrow">{t("Ils utilisent McBuleli", "Teams using McBuleli")}</p>
+        <p className="eyebrow">{t("Ils nous font confiance", "Teams that trust McBuleli ISP")}</p>
         <h2>{t("Ce que disent les opérateurs", "What operators say")}</h2>
         <p className="public-section-lead">
           {t(
@@ -768,34 +792,19 @@ export default function PublicSite() {
           <div className="public-footer-intro">
             <a className="public-brand public-brand--footer" href="/">
               <PublicLogo />
-              <span>McBuleli</span>
+              <span>McBuleli ISP</span>
             </a>
             <p className="public-footer-tagline">
               {t(
-                "Suite d’exploitation pour FAI : facturation, trésorerie, portail abonnés, réseau et conformité des opérations.",
-                "Operations suite for ISPs: billing, treasury, subscriber portal, network and operational compliance."
+                "Suite d’exploitation pour fournisseurs d’internet : facturation intelligente, trésorerie, portail clients, télécoms et workflows auditables.",
+                "Operations suite built for broadband providers: intelligent billing, treasury, portals, telemetry and audited workflows."
               )}
             </p>
-            {showFounderBlock ? (
-              <div className="public-footer-founder">
-                {founderShowcase.imageUrl ? (
-                  <div className="public-footer-founder-photoWrap">
-                    <img
-                      className="public-footer-founder-photo"
-                      src={founderShowcase.imageUrl}
-                      alt={String(founderShowcase.caption || "").trim() || ""}
-                      width={80}
-                      height={80}
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </div>
-                ) : null}
-                {String(founderShowcase.caption || "").trim() ? (
-                  <p className="public-footer-founder-caption">{String(founderShowcase.caption).trim()}</p>
-                ) : null}
-              </div>
-            ) : null}
+            <nav className="public-footer-links" aria-label={t("Liens utiles", "Helpful links")}>
+              <a href="#contact">{t("Coordonnées", "Contact details")}</a>
+              <a href={`mailto:${COMPANY_CONTACT.email}`}>{t("Support technique", "Technical support")}</a>
+              <a href="/privacy">{t("Politique de confidentialité", "Privacy policy")}</a>
+            </nav>
           </div>
           <div className="public-footer-cards" role="group" aria-label={t("Coordonnées", "Contact details")}>
             <a
@@ -842,11 +851,22 @@ export default function PublicSite() {
           </div>
         </div>
         <div className="public-footer-legal">
-          <p className="public-footer-copy">
-            © {year} McBuleli — {t("Tous droits réservés.", "All rights reserved.")}
-          </p>
-          <p className="public-footer-rccm">
-            RCCM : <span className="public-footer-rccm-id">{COMPANY_CONTACT.rccm}</span>
+          <p className="public-footer-legal-inner">
+            <span className="public-footer-meta">
+              © {year} McBuleli ISP
+            </span>
+            <span className="public-footer-sep" aria-hidden="true">
+              |
+            </span>
+            <a className="public-footer-meta public-footer-meta--link" href="/privacy">
+              {t("Politique de confidentialité", "Privacy policy")}
+            </a>
+            <span className="public-footer-sep" aria-hidden="true">
+              |
+            </span>
+            <span className="public-footer-meta public-footer-meta--muted">
+              RCCM&nbsp;: <span className="public-footer-rccm-id">{COMPANY_CONTACT.rccm}</span>
+            </span>
           </p>
         </div>
       </footer>
