@@ -495,6 +495,36 @@ function mapFounderShowcaseRow(row) {
   };
 }
 
+function mapFaqAdRow(row) {
+  if (!row) return null;
+  const mime = row.image_mime ?? row.imageMime;
+  const bytes = row.image_bytes ?? row.imageBytes;
+  return {
+    id: row.id,
+    sortOrder: Number(row.sort_order ?? row.sortOrder ?? 0),
+    internalLabel: row.internal_label != null ? String(row.internal_label).slice(0, 160) : "",
+    linkUrl: row.link_url ?? row.linkUrl ?? null,
+    altTextFr: normalizePromoAlt(row.alt_text_fr ?? row.altTextFr),
+    altTextEn: normalizePromoAlt(row.alt_text_en ?? row.altTextEn),
+    imageUrl: bufferToDataUrl(mime, bytes),
+    isActive: row.is_active ?? row.isActive !== false,
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt
+  };
+}
+
+function mapFaqAdRowPublic(row) {
+  const m = mapFaqAdRow(row);
+  if (!m?.imageUrl) return null;
+  return {
+    id: m.id,
+    linkUrl: m.linkUrl,
+    altTextFr: m.altTextFr,
+    altTextEn: m.altTextEn,
+    imageUrl: m.imageUrl
+  };
+}
+
 function normalizePromoAlt(raw) {
   const s = raw != null ? String(raw).trim() : "";
   return s ? s.slice(0, 400) : null;
@@ -584,7 +614,7 @@ app.get("/api/public/platform-banner/:slot", rlPublicRead, async (req, res) => {
 
 app.get("/api/public/home-marketing", rlPublicRead, async (_req, res) => {
   try {
-    const [promosR, blocksR, founderR] = await Promise.all([
+    const [promosR, blocksR, founderR, faqAdsR] = await Promise.all([
       query(
         `SELECT slot_index, link_url, alt_text_fr, alt_text_en, orientation, image_bytes, image_mime, is_active, updated_at
          FROM platform_home_promos
@@ -600,6 +630,13 @@ app.get("/api/public/home-marketing", rlPublicRead, async (_req, res) => {
       ),
       query(
         `SELECT caption, image_bytes, image_mime, updated_at FROM platform_public_founder_showcase WHERE id = 1`
+      ),
+      query(
+        `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, image_bytes, image_mime, is_active, updated_at
+         FROM platform_public_faq_ads
+         WHERE is_active = TRUE AND image_bytes IS NOT NULL AND octet_length(image_bytes) > 0
+         ORDER BY sort_order ASC, updated_at DESC
+         LIMIT 12`
       )
     ]);
     const homePromos = promosR.rows.map(mapHomePromoRow);
@@ -611,7 +648,8 @@ app.get("/api/public/home-marketing", rlPublicRead, async (_req, res) => {
         return Boolean(plain.length || b.imageUrl || String(b.title || "").trim());
       });
     const founderShowcase = mapFounderShowcaseRow(founderR.rows[0]);
-    res.json({ homePromos, footerBlocks, founderShowcase });
+    const faqAds = faqAdsR.rows.map(mapFaqAdRowPublic).filter(Boolean);
+    res.json({ homePromos, footerBlocks, founderShowcase, faqAds });
   } catch (_err) {
     res.status(500).json({ message: "Could not load public marketing content." });
   }
@@ -5920,6 +5958,183 @@ app.delete("/api/system-owner/footer-blocks/:id/image", authenticate, requireRol
   );
   if (!row.rows[0]) return res.status(404).json({ message: "Not found." });
   res.json(mapFooterBlockRow(row.rows[0]));
+});
+
+function normalizeFaqAdInternalLabel(raw) {
+  return String(raw ?? "").trim().slice(0, 160);
+}
+
+app.get("/api/system-owner/faq-ads", authenticate, requireRoles("system_owner"), async (_req, res) => {
+  const r = await query(
+    `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, image_bytes, image_mime, is_active, created_at, updated_at
+     FROM platform_public_faq_ads
+     ORDER BY sort_order ASC, updated_at DESC
+     LIMIT 100`
+  );
+  res.json({ items: r.rows.map(mapFaqAdRow) });
+});
+
+app.post("/api/system-owner/faq-ads", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const b = req.body || {};
+  const internalLabel = normalizeFaqAdInternalLabel(b.internalLabel);
+  const sortOrder = Number(b.sortOrder) || 0;
+  const normLink = normalizeBannerLinkUrl(b.linkUrl);
+  if (normLink === undefined) {
+    return res.status(400).json({ message: "linkUrl must be a valid http(s) URL or empty." });
+  }
+  const inserted = await query(
+    `INSERT INTO platform_public_faq_ads (id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, is_active)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
+     RETURNING id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, image_bytes, image_mime, is_active, created_at, updated_at`,
+    [
+      sortOrder,
+      internalLabel,
+      normLink,
+      normalizePromoAlt(b.altTextFr),
+      normalizePromoAlt(b.altTextEn),
+      b.isActive !== false
+    ]
+  );
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_faq_ad.created",
+    entityType: "platform_public_faq_ad",
+    entityId: inserted.rows[0].id,
+    details: {}
+  });
+  res.status(201).json(mapFaqAdRow(inserted.rows[0]));
+});
+
+app.patch("/api/system-owner/faq-ads/:id", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const { id } = req.params;
+  if (!isUuidString(id)) return res.status(400).json({ message: "Invalid id." });
+  const b = req.body || {};
+  const pieces = [];
+  const vals = [];
+  let i = 1;
+  if (Object.prototype.hasOwnProperty.call(b, "internalLabel")) {
+    pieces.push(`internal_label = $${i++}`);
+    vals.push(normalizeFaqAdInternalLabel(b.internalLabel));
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "sortOrder")) {
+    pieces.push(`sort_order = $${i++}`);
+    vals.push(Number(b.sortOrder) || 0);
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "linkUrl")) {
+    const norm = normalizeBannerLinkUrl(b.linkUrl);
+    if (norm === undefined) {
+      return res.status(400).json({ message: "linkUrl must be a valid http(s) URL or empty." });
+    }
+    pieces.push(`link_url = $${i++}`);
+    vals.push(norm);
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "altTextFr")) {
+    pieces.push(`alt_text_fr = $${i++}`);
+    vals.push(normalizePromoAlt(b.altTextFr));
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "altTextEn")) {
+    pieces.push(`alt_text_en = $${i++}`);
+    vals.push(normalizePromoAlt(b.altTextEn));
+  }
+  if (Object.prototype.hasOwnProperty.call(b, "isActive")) {
+    pieces.push(`is_active = $${i++}`);
+    vals.push(Boolean(b.isActive));
+  }
+  if (pieces.length === 0) {
+    return res.status(400).json({ message: "Nothing to update." });
+  }
+  pieces.push("updated_at = NOW()");
+  vals.push(id);
+  await query(`UPDATE platform_public_faq_ads SET ${pieces.join(", ")} WHERE id = $${i}`, vals);
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_faq_ad.updated",
+    entityType: "platform_public_faq_ad",
+    entityId: id,
+    details: { fields: Object.keys(b) }
+  });
+  const row = await query(
+    `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, image_bytes, image_mime, is_active, created_at, updated_at
+     FROM platform_public_faq_ads WHERE id = $1`,
+    [id]
+  );
+  if (!row.rows[0]) return res.status(404).json({ message: "Not found." });
+  res.json(mapFaqAdRow(row.rows[0]));
+});
+
+app.delete("/api/system-owner/faq-ads/:id", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const { id } = req.params;
+  if (!isUuidString(id)) return res.status(400).json({ message: "Invalid id." });
+  const del = await query(`DELETE FROM platform_public_faq_ads WHERE id = $1 RETURNING id`, [id]);
+  if (!del.rows[0]) return res.status(404).json({ message: "Not found." });
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_faq_ad.deleted",
+    entityType: "platform_public_faq_ad",
+    entityId: id,
+    details: {}
+  });
+  res.status(204).end();
+});
+
+app.post(
+  "/api/system-owner/faq-ads/:id/image",
+  authenticate,
+  requireRoles("system_owner"),
+  uploadLogoMemory.single("banner"),
+  async (req, res) => {
+    const { id } = req.params;
+    if (!isUuidString(id)) return res.status(400).json({ message: "Invalid id." });
+    if (!req.file?.buffer) {
+      return res.status(400).json({ message: "Choose an image file (form field name: banner)." });
+    }
+    const allowed = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
+    if (!allowed.has(req.file.mimetype)) {
+      return res.status(400).json({ message: "Image must be PNG, JPEG, WebP or GIF." });
+    }
+    const ex = await query(`SELECT id FROM platform_public_faq_ads WHERE id = $1`, [id]);
+    if (!ex.rows[0]) return res.status(404).json({ message: "Not found." });
+    await query(
+      `UPDATE platform_public_faq_ads SET image_bytes = $1, image_mime = $2, updated_at = NOW() WHERE id = $3`,
+      [req.file.buffer, req.file.mimetype, id]
+    );
+    await logAudit({
+      actorUserId: req.user.sub,
+      action: "platform_faq_ad.image_uploaded",
+      entityType: "platform_public_faq_ad",
+      entityId: id,
+      details: { mime: req.file.mimetype }
+    });
+    const row = await query(
+      `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, image_bytes, image_mime, is_active, created_at, updated_at
+       FROM platform_public_faq_ads WHERE id = $1`,
+      [id]
+    );
+    res.json(mapFaqAdRow(row.rows[0]));
+  }
+);
+
+app.delete("/api/system-owner/faq-ads/:id/image", authenticate, requireRoles("system_owner"), async (req, res) => {
+  const { id } = req.params;
+  if (!isUuidString(id)) return res.status(400).json({ message: "Invalid id." });
+  await query(
+    `UPDATE platform_public_faq_ads SET image_bytes = NULL, image_mime = NULL, updated_at = NOW() WHERE id = $1`,
+    [id]
+  );
+  await logAudit({
+    actorUserId: req.user.sub,
+    action: "platform_faq_ad.image_cleared",
+    entityType: "platform_public_faq_ad",
+    entityId: id,
+    details: {}
+  });
+  const row = await query(
+    `SELECT id, sort_order, internal_label, link_url, alt_text_fr, alt_text_en, image_bytes, image_mime, is_active, created_at, updated_at
+     FROM platform_public_faq_ads WHERE id = $1`,
+    [id]
+  );
+  if (!row.rows[0]) return res.status(404).json({ message: "Not found." });
+  res.json(mapFaqAdRow(row.rows[0]));
 });
 
 const EXPENSE_CATEGORIES = [

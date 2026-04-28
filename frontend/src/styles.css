@@ -2737,6 +2737,55 @@ body:has(.auth-simple--dark) {
   margin-bottom: 12px;
 }
 
+.public-faq-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .public-faq-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+    gap: 28px;
+  }
+}
+
+.public-faq-main {
+  min-width: 0;
+}
+
+.public-faq-ad-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.public-faq-ad-card {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(93, 64, 55, 0.14);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.public-faq-ad-card__link {
+  display: block;
+  line-height: 0;
+}
+
+.public-faq-ad-column__img {
+  width: 100%;
+  height: auto;
+  display: block;
+  vertical-align: top;
+}
+
+.public-site--dark .public-faq-ad-card {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
 .public-faq {
   display: grid;
   gap: 10px;

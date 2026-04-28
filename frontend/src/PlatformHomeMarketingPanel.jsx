@@ -16,6 +16,16 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
   const [promoSlots, setPromoSlots] = useState([]);
   const [promoEdits, setPromoEdits] = useState({});
   const [footerItems, setFooterItems] = useState([]);
+  const [faqAdItems, setFaqAdItems] = useState([]);
+  const [faqAdEditById, setFaqAdEditById] = useState({});
+  const [faqNew, setFaqNew] = useState({
+    internalLabel: "",
+    sortOrder: 0,
+    linkUrl: "",
+    altTextFr: "",
+    altTextEn: "",
+    isActive: true
+  });
   const [footerForm, setFooterForm] = useState({
     title: "",
     bodyHtml: "<p></p>",
@@ -59,6 +69,11 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     setFooterItems(data.items || []);
   }, []);
 
+  const loadFaqAds = useCallback(async () => {
+    const data = await api.getSystemOwnerFaqAds();
+    setFaqAdItems(data.items || []);
+  }, []);
+
   const loadFounder = useCallback(async () => {
     const data = await api.getSystemOwnerFounderShowcase();
     setFounder({
@@ -75,11 +90,34 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     setAuthCopyUpdatedAt(data.updatedAt ?? null);
   }, []);
 
+  useEffect(() => {
+    setFaqAdEditById((prev) => {
+      const next = { ...prev };
+      for (const it of faqAdItems) {
+        if (next[it.id] == null) {
+          next[it.id] = {
+            internalLabel: it.internalLabel || "",
+            sortOrder: Number(it.sortOrder) || 0,
+            linkUrl: it.linkUrl || "",
+            altTextFr: it.altTextFr || "",
+            altTextEn: it.altTextEn || "",
+            isActive: it.isActive !== false
+          };
+        }
+      }
+      const ids = new Set(faqAdItems.map((x) => x.id));
+      for (const k of Object.keys(next)) {
+        if (!ids.has(k)) delete next[k];
+      }
+      return next;
+    });
+  }, [faqAdItems]);
+
   const loadAll = useCallback(async () => {
     setError("");
     setFounderLoadError("");
     try {
-      await Promise.all([loadPromos(), loadFooter()]);
+      await Promise.all([loadPromos(), loadFooter(), loadFaqAds()]);
     } catch (err) {
       setError(err.message || "Error");
     }
@@ -93,7 +131,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     } catch (err) {
       setFounderLoadError(err.message || "Error");
     }
-  }, [loadPromos, loadFooter, loadFounder, loadAuthCopy]);
+  }, [loadPromos, loadFooter, loadFaqAds, loadFounder, loadAuthCopy]);
 
   useEffect(() => {
     loadAll();
@@ -336,6 +374,72 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     }
   }
 
+  async function onSaveFaqAd(id) {
+    const ed = faqAdEditById[id];
+    if (!ed) return;
+    setSaving(true);
+    setError("");
+    try {
+      await api.patchSystemOwnerFaqAd(id, {
+        internalLabel: ed.internalLabel,
+        sortOrder: Number(ed.sortOrder) || 0,
+        linkUrl: ed.linkUrl.trim() || null,
+        altTextFr: ed.altTextFr.trim() || null,
+        altTextEn: ed.altTextEn.trim() || null,
+        isActive: ed.isActive
+      });
+      await loadFaqAds();
+    } catch (err) {
+      setError(err.message || "Error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onDeleteFaqAd(id) {
+    if (!window.confirm(t("Supprimer cette publicité ?", "Delete this ad?"))) return;
+    setSaving(true);
+    setError("");
+    try {
+      await api.deleteSystemOwnerFaqAd(id);
+      await loadFaqAds();
+    } catch (err) {
+      setError(err.message || "Error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onFaqAdUpload(id, e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setSaving(true);
+    setError("");
+    try {
+      await api.uploadSystemOwnerFaqAdImage(id, f);
+      e.target.value = "";
+      await loadFaqAds();
+    } catch (err) {
+      setError(err.message || "Error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onFaqAdClearImage(id) {
+    if (!window.confirm(t("Supprimer l'image ?", "Remove image?"))) return;
+    setSaving(true);
+    setError("");
+    try {
+      await api.deleteSystemOwnerFaqAdImage(id);
+      await loadFaqAds();
+    } catch (err) {
+      setError(err.message || "Error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <section className="panel" id="platform-home-marketing">
       <h2>{t("Page d'accueil publique (marketing)", "Public home page (marketing)")}</h2>
@@ -559,6 +663,235 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
           );
         })}
       </div>
+
+      <h3 style={{ marginTop: 28 }}>
+        {t("Publicité à côté de la FAQ (page publique)", "FAQ sidebar ads (public home)")}
+      </h3>
+      <p className="app-meta" style={{ marginTop: 4, maxWidth: "52rem" }}>
+        {t(
+          "À droite de la FAQ sur grand écran ; sous la FAQ sur mobile. Seules les entrées actives avec une image s’affichent côté public.",
+          "To the right of the FAQ on desktop; below the FAQ on mobile. Only active rows with an uploaded image are shown on the public site."
+        )}
+      </p>
+      <form
+        className="panel"
+        style={{ marginBottom: 16 }}
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setSaving(true);
+          setError("");
+          try {
+            await api.createSystemOwnerFaqAd({
+              internalLabel: faqNew.internalLabel,
+              sortOrder: Number(faqNew.sortOrder) || 0,
+              linkUrl: faqNew.linkUrl.trim() || null,
+              altTextFr: faqNew.altTextFr.trim() || null,
+              altTextEn: faqNew.altTextEn.trim() || null,
+              isActive: faqNew.isActive
+            });
+            setFaqNew({
+              internalLabel: "",
+              sortOrder: 0,
+              linkUrl: "",
+              altTextFr: "",
+              altTextEn: "",
+              isActive: true
+            });
+            await loadFaqAds();
+          } catch (err) {
+            setError(err.message || "Error");
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        <h4 style={{ marginTop: 0 }}>{t("Nouvelle entrée", "New entry")}</h4>
+        <input
+          placeholder={t("Libellé interne (pour vous retrouver)", "Internal label (for your reference)")}
+          value={faqNew.internalLabel}
+          disabled={saving}
+          maxLength={160}
+          onChange={(e) => setFaqNew((f) => ({ ...f, internalLabel: e.target.value }))}
+          style={{ display: "block", marginBottom: 8, width: "100%", maxWidth: 480 }}
+        />
+        <input
+          type="number"
+          placeholder={t("Ordre d’affichage", "Sort order")}
+          value={faqNew.sortOrder}
+          disabled={saving}
+          onChange={(e) => setFaqNew((f) => ({ ...f, sortOrder: e.target.value }))}
+          style={{ display: "block", marginBottom: 8, maxWidth: 120 }}
+        />
+        <input
+          placeholder="https://…"
+          value={faqNew.linkUrl}
+          disabled={saving}
+          onChange={(e) => setFaqNew((f) => ({ ...f, linkUrl: e.target.value }))}
+          style={{ display: "block", marginBottom: 8, width: "100%", maxWidth: 480 }}
+        />
+        <input
+          placeholder={t("Texte alt FR (accessibilité)", "Alt text FR")}
+          value={faqNew.altTextFr}
+          disabled={saving}
+          onChange={(e) => setFaqNew((f) => ({ ...f, altTextFr: e.target.value }))}
+          style={{ display: "block", marginBottom: 8, width: "100%", maxWidth: 480 }}
+        />
+        <input
+          placeholder={t("Texte alt EN", "Alt text EN")}
+          value={faqNew.altTextEn}
+          disabled={saving}
+          onChange={(e) => setFaqNew((f) => ({ ...f, altTextEn: e.target.value }))}
+          style={{ display: "block", marginBottom: 8, width: "100%", maxWidth: 480 }}
+        />
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <input
+            type="checkbox"
+            checked={faqNew.isActive}
+            disabled={saving}
+            onChange={(e) => setFaqNew((f) => ({ ...f, isActive: e.target.checked }))}
+          />
+          {t("Actif", "Active")}
+        </label>
+        <button type="submit" disabled={saving}>
+          {t("Ajouter", "Add")}
+        </button>
+      </form>
+
+      {faqAdItems.map((item) => {
+        const ed = faqAdEditById[item.id];
+        if (!ed) return null;
+        return (
+          <div key={item.id} className="panel" style={{ marginBottom: 12 }}>
+            <p style={{ marginTop: 0 }} className="app-meta">
+              <strong>{item.internalLabel || item.id.slice(0, 8)}</strong>
+              {item.imageUrl ? null : (
+                <span> — {t("Image requise pour l’affichage public", "Image required for public display")}</span>
+              )}
+            </p>
+            {item.imageUrl ? (
+              <p style={{ margin: "8px 0" }}>
+                <img src={item.imageUrl} alt="" style={{ maxWidth: "100%", maxHeight: 140, objectFit: "contain" }} />
+              </p>
+            ) : null}
+            <label style={{ display: "block", marginBottom: 6 }}>
+              {t("Libellé interne", "Internal label")}
+              <input
+                value={ed.internalLabel}
+                disabled={saving}
+                maxLength={160}
+                onChange={(e) =>
+                  setFaqAdEditById((prev) => ({
+                    ...prev,
+                    [item.id]: { ...ed, internalLabel: e.target.value }
+                  }))
+                }
+                style={{ display: "block", marginTop: 4, width: "100%", maxWidth: 480 }}
+              />
+            </label>
+            <label style={{ display: "block", marginBottom: 6 }}>
+              {t("Ordre", "Order")}
+              <input
+                type="number"
+                value={ed.sortOrder}
+                disabled={saving}
+                onChange={(e) =>
+                  setFaqAdEditById((prev) => ({
+                    ...prev,
+                    [item.id]: { ...ed, sortOrder: e.target.value }
+                  }))
+                }
+                style={{ display: "block", marginTop: 4, maxWidth: 120 }}
+              />
+            </label>
+            <label style={{ display: "block", marginBottom: 6 }}>
+              URL
+              <input
+                value={ed.linkUrl}
+                disabled={saving}
+                onChange={(e) =>
+                  setFaqAdEditById((prev) => ({
+                    ...prev,
+                    [item.id]: { ...ed, linkUrl: e.target.value }
+                  }))
+                }
+                style={{ display: "block", marginTop: 4, width: "100%", maxWidth: 480 }}
+              />
+            </label>
+            <label style={{ display: "block", marginBottom: 6 }}>
+              {t("Alt FR", "Alt FR")}
+              <input
+                value={ed.altTextFr}
+                disabled={saving}
+                onChange={(e) =>
+                  setFaqAdEditById((prev) => ({
+                    ...prev,
+                    [item.id]: { ...ed, altTextFr: e.target.value }
+                  }))
+                }
+                style={{ display: "block", marginTop: 4, width: "100%", maxWidth: 480 }}
+              />
+            </label>
+            <label style={{ display: "block", marginBottom: 6 }}>
+              {t("Alt EN", "Alt EN")}
+              <input
+                value={ed.altTextEn}
+                disabled={saving}
+                onChange={(e) =>
+                  setFaqAdEditById((prev) => ({
+                    ...prev,
+                    [item.id]: { ...ed, altTextEn: e.target.value }
+                  }))
+                }
+                style={{ display: "block", marginTop: 4, width: "100%", maxWidth: 480 }}
+              />
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <input
+                type="checkbox"
+                checked={ed.isActive}
+                disabled={saving}
+                onChange={(e) =>
+                  setFaqAdEditById((prev) => ({
+                    ...prev,
+                    [item.id]: { ...ed, isActive: e.target.checked }
+                  }))
+                }
+              />
+              {t("Actif", "Active")}
+            </label>
+            <label style={{ display: "block", marginBottom: 8 }}>
+              {t("Fichier image", "Image file")}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                disabled={saving}
+                onChange={(e) => onFaqAdUpload(item.id, e)}
+                style={{ display: "block", marginTop: 6 }}
+              />
+            </label>
+            {item.imageUrl ? (
+              <p>
+                <button
+                  type="button"
+                  className="btn-secondary-outline"
+                  disabled={saving}
+                  onClick={() => onFaqAdClearImage(item.id)}
+                >
+                  {t("Supprimer l’image", "Remove image")}
+                </button>
+              </p>
+            ) : null}
+            <p>
+              <button type="button" disabled={saving} onClick={() => onSaveFaqAd(item.id)}>
+                {t("Enregistrer les champs", "Save fields")}
+              </button>{" "}
+              <button type="button" className="btn-secondary-outline" disabled={saving} onClick={() => onDeleteFaqAd(item.id)}>
+                {t("Supprimer l’entrée", "Delete entry")}
+              </button>
+            </p>
+          </div>
+        );
+      })}
 
       <h3 style={{ marginTop: 28 }}>{t("Blocs d’annonce (page publique)", "Public page announcement blocks")}</h3>
       <form className="panel" style={{ marginBottom: 16 }} onSubmit={onCreateFooter}>

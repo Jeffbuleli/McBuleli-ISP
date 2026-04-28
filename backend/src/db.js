@@ -931,6 +931,25 @@ export async function initDb() {
   );
 
   await query(`
+    CREATE TABLE IF NOT EXISTS platform_public_faq_ads (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      sort_order INT NOT NULL DEFAULT 0,
+      internal_label VARCHAR(160) NOT NULL DEFAULT '',
+      link_url TEXT NULL,
+      alt_text_fr VARCHAR(400) NULL,
+      alt_text_en VARCHAR(400) NULL,
+      image_bytes BYTEA NULL,
+      image_mime TEXT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_platform_faq_ads_active ON platform_public_faq_ads (is_active, sort_order);"
+  );
+
+  await query(`
     CREATE TABLE IF NOT EXISTS platform_dashboard_banners (
       slot_index SMALLINT PRIMARY KEY CHECK (slot_index >= 0 AND slot_index <= 2),
       image_url TEXT NULL,

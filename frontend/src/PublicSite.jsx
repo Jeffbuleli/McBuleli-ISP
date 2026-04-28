@@ -354,7 +354,8 @@ export default function PublicSite() {
   const [homeMarketing, setHomeMarketing] = useState({
     homePromos: [],
     footerBlocks: [],
-    founderShowcase: { caption: "", imageUrl: null }
+    founderShowcase: { caption: "", imageUrl: null },
+    faqAds: []
   });
   const isEn = uiLang === "en";
   const t = (fr, en) => (isEn ? en : fr);
@@ -383,6 +384,8 @@ export default function PublicSite() {
     list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
     return list;
   }, [homeMarketing.footerBlocks]);
+
+  const faqAds = homeMarketing.faqAds || [];
 
   const afterWhyMarketingBlocks = useMemo(
     () => sortedMarketingBlocks.filter((b) => b.placement === "after_why"),
@@ -414,7 +417,8 @@ export default function PublicSite() {
           setHomeMarketing({
             homePromos: data.homePromos || [],
             footerBlocks: data.footerBlocks || [],
-            founderShowcase: data.founderShowcase || { caption: "", imageUrl: null }
+            founderShowcase: data.founderShowcase || { caption: "", imageUrl: null },
+            faqAds: data.faqAds || []
           });
         }
       })
@@ -423,7 +427,8 @@ export default function PublicSite() {
           setHomeMarketing({
             homePromos: [],
             footerBlocks: [],
-            founderShowcase: { caption: "", imageUrl: null }
+            founderShowcase: { caption: "", imageUrl: null },
+            faqAds: []
           });
         }
       });
@@ -647,15 +652,40 @@ export default function PublicSite() {
       </section>
 
       <section className="public-section public-section--faq" id="faq">
-        <p className="eyebrow">{t("Questions fréquentes", "Frequently asked questions")}</p>
-        <h2>{t("Réponses courtes, sans jargon inutile", "Straight answers, minimal jargon")}</h2>
-        <div className="public-faq">
-          {FAQ_ITEMS.map((item, i) => (
-            <details className="public-faq-item" key={i}>
-              <summary>{isEn ? item.en.q : item.fr.q}</summary>
-              <p>{isEn ? item.en.a : item.fr.a}</p>
-            </details>
-          ))}
+        <div className="public-faq-layout">
+          <div className="public-faq-main">
+            <p className="eyebrow">{t("Questions fréquentes", "Frequently asked questions")}</p>
+            <h2>{t("Réponses courtes, sans jargon inutile", "Straight answers, minimal jargon")}</h2>
+            <div className="public-faq">
+              {FAQ_ITEMS.map((item, i) => (
+                <details className="public-faq-item" key={i}>
+                  <summary>{isEn ? item.en.q : item.fr.q}</summary>
+                  <p>{isEn ? item.en.a : item.fr.a}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+          {faqAds.length > 0 ? (
+            <aside className="public-faq-ad-column" aria-label={t("Espace publicitaire", "Advertisement")}>
+              {faqAds.map((ad) => {
+                const alt = (isEn ? ad.altTextEn : ad.altTextFr) || t("Publicité", "Advertisement");
+                const img = (
+                  <img src={ad.imageUrl} alt={alt} className="public-faq-ad-column__img" loading="lazy" decoding="async" />
+                );
+                return (
+                  <div key={ad.id} className="public-faq-ad-card">
+                    {ad.linkUrl ? (
+                      <a href={ad.linkUrl} target="_blank" rel="noopener noreferrer" className="public-faq-ad-card__link">
+                        {img}
+                      </a>
+                    ) : (
+                      img
+                    )}
+                  </div>
+                );
+              })}
+            </aside>
+          ) : null}
         </div>
       </section>
 
