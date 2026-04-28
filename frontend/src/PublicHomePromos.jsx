@@ -93,12 +93,12 @@ export default function PublicHomePromos({ t, isEn, variant = "marketing", apiPr
         {!dash ? (
           <>
             <p className="eyebrow">
-              {t("Offres sélectionnées", "Curated offers")}
+              {t("À la une", "Highlights")}
             </p>
             <h2 id="public-promos-title">
               {t(
-                "Un partenaire matériel, une promesse utilisateur sobre",
-                "Hardware partners showcased with a calm retail story"
+                "Nos partenaires matériel & offres liées",
+                "Hardware partners & related offers"
               )}
             </h2>
           </>
@@ -107,8 +107,8 @@ export default function PublicHomePromos({ t, isEn, variant = "marketing", apiPr
             <p className="eyebrow">{t("McBuleli", "McBuleli")}</p>
             <h2 className="public-home-promos-dashboard-title">
               {t(
-                "Partenaires matériel réseau — pub & WhatsApp",
-                "Network hardware partners — ads & WhatsApp"
+                "Liens partenaires & accès rapides",
+                "Partner shortcuts & quick links"
               )}
             </h2>
           </>

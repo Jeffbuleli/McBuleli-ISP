@@ -1,4 +1,6 @@
 /** In dev, Vite proxies `/api` to the backend so any hostname works. Production same-origin or set VITE_API_URL. */
+import { defaultHttpStatusMessage, friendlyTransientError } from "./httpErrorCopy.js";
+import { getStoredUiLang } from "./uiLangSync.js";
 function defaultBrowserApiUrl() {
   if (typeof window === "undefined") return "/api";
   if (import.meta.env.DEV) return "/api";
@@ -141,11 +143,14 @@ async function request(path, options) {
   } catch (err) {
     const reason = String(err?.message || "").toLowerCase();
     if (reason.includes("failed to fetch") || reason.includes("networkerror")) {
+      const isEn = getStoredUiLang() === "en";
       throw new Error(
-        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est joignable ; en production, utilisez de préférence l’URL same-origin « /api » (proxy Vercel) plutôt qu’un appel direct à Render depuis le navigateur.`
+        isEn
+          ? "Can't reach the server. Check your connection, then try again."
+          : "Impossible de joindre le serveur. Vérifiez votre connexion puis réessayez."
       );
     }
-    throw new Error(err?.message || "Erreur réseau lors de l'appel API.");
+    throw new Error(err?.message || (getStoredUiLang() === "en" ? "Network error." : "Erreur réseau."));
   }
 
   if (!response.ok) {
@@ -171,11 +176,14 @@ export async function publicRequest(path, options = {}) {
   } catch (err) {
     const reason = String(err?.message || "").toLowerCase();
     if (reason.includes("failed to fetch") || reason.includes("networkerror")) {
+      const isEn = getStoredUiLang() === "en";
       throw new Error(
-        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est joignable ; en production, utilisez de préférence l’URL same-origin « /api » (proxy Vercel) plutôt qu’un appel direct à Render depuis le navigateur.`
+        isEn
+          ? "Can't reach the server. Check your connection, then try again."
+          : "Impossible de joindre le serveur. Vérifiez votre connexion puis réessayez."
       );
     }
-    throw new Error(err?.message || "Erreur réseau lors de l'appel API.");
+    throw new Error(err?.message || (getStoredUiLang() === "en" ? "Network error." : "Erreur réseau."));
   }
   if (!response.ok) {
     const error = await extractErrorPayload(response);
@@ -185,21 +193,10 @@ export async function publicRequest(path, options = {}) {
 }
 
 function buildApiErrorMessage(status, errorPayload) {
-  const msg = String(errorPayload?.message || "").trim();
-  if (msg) return msg;
-  if (status === 500) {
-    return "Erreur serveur (500). Vérifiez la configuration backend (DATABASE_URL, JWT_SECRET, NETWORK_NODE_SECRET_KEY) et les logs Render.";
-  }
-  if (status === 503) {
-    return "Service indisponible (503). L’API est souvent en redémarrage (Render) ou surchargée — réessayez dans une minute. Vérifiez aussi les logs du backend et la connexion à la base.";
-  }
-  if (status === 502) {
-    return "Passerelle invalide (502). Le proxy (ex. Vercel) n’a pas pu joindre l’API — vérifiez que le service backend répond.";
-  }
-  if (status === 504) {
-    return "Délai dépassé (504). L’API n’a pas répondu à temps (cold start ou base lente). Réessayez.";
-  }
-  return `Échec de la requête (${status})`;
+  const isEn = getStoredUiLang() === "en";
+  const raw = String(errorPayload?.message || "").trim();
+  if (!raw) return defaultHttpStatusMessage(status, isEn);
+  return friendlyTransientError(raw, isEn);
 }
 
 async function readJsonOrApiMisroute(response) {
@@ -210,8 +207,11 @@ async function readJsonOrApiMisroute(response) {
     const body = await responseCopy.text().catch(() => "");
     const sample = String(body || "").trim().split("\n")[0].slice(0, 120);
     if (/^\s*<!doctype html>/i.test(String(body || ""))) {
+      const isEn = getStoredUiLang() === "en";
       throw new Error(
-        "Réponse HTML reçue au lieu d'une API JSON. Vérifiez que le backend est lancé et que l'URL API pointe vers /api."
+        isEn
+          ? "We received a web page instead of data — check /api routing or refresh."
+          : "La réponse attendue était du JSON, pas une page HTML. Vérifiez le proxy /api."
       );
     }
     throw new Error(sample || "Réponse invalide de l'API.");
@@ -229,9 +229,11 @@ async function extractErrorPayload(response) {
   const clean = String(text || "").trim();
   if (!clean) return {};
   if (/^\s*<!doctype html>/i.test(clean)) {
+    const isEn = getStoredUiLang() === "en";
     return {
-      message:
-        "Réponse HTML au lieu de JSON : la route API est introuvable ou le proxy renvoie la page du site (déploiement backend à jour ? URL /api correcte ?). Les autres sections peuvent fonctionner si elles utilisent une autre route."
+      message: isEn
+        ? "That endpoint returned a web page, not JSON. Try again shortly."
+        : "Cette adresse renvoie une page web au lieu des données prévues. Réessayez."
     };
   }
   const firstLine = clean.split("\n")[0].trim();
@@ -254,8 +256,11 @@ async function authFetchBlob(path) {
   try {
     response = await fetch(`${API_URL}${path}`, { headers });
   } catch (err) {
+    const isEn = getStoredUiLang() === "en";
     throw new Error(
-      `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      isEn
+        ? "Can't reach the server. Check your connection, then try again."
+        : "Impossible de joindre le serveur. Vérifiez votre connexion puis réessayez."
     );
   }
   if (!response.ok) {

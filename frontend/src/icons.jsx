@@ -128,6 +128,21 @@ export function IconChatBubble(props) {
   );
 }
 
+/** Send message (team chat composer) */
+export function IconSend(props) {
+  return (
+    <svg {...base} {...props}>
+      <path
+        d="M22 2 11 13M22 2l-7 20-4-10L1 13l21-11Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /** Home / public site */
 export function IconHome(props) {
   return (

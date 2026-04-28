@@ -123,11 +123,11 @@ const SERVICES = [
     icon: "team",
     fr: {
       title: "Équipes, agents & rôles",
-      text: "Accréditations, agents terrain, import CSV, validation à deux niveaux des dépenses, clôtures comptables après inventaire et audit des opérations."
+      text: "Accréditations, agents terrain, import CSV, validation des dépenses à deux niveaux, clôtures comptables et journal d’audit. Depuis peu : discussion d’équipe par entreprise, directement dans McBuleli."
     },
     en: {
       title: "Teams, agents & roles",
-      text: "Accreditations, field agents, CSV imports, two-step expense approval, post-inventory period locks, and audited operations."
+      text: "Accreditations, field agents, CSV imports, two-step expense approval, period locks and an audit trail. New: per-company team chat right in McBuleli."
     }
   },
   {
@@ -522,20 +522,20 @@ export default function PublicSite() {
           <section>
             <p className="eyebrow public-hero-eyebrow">
               {t(
-                "Plateforme FAI · facturation · réseau · assisté par l’IA",
-                "ISP platform · billing · network · AI-assisted operations"
+                "Facturation, réseau et équipes — sur une seule plateforme",
+                "Billing, network and teams — in one place"
               )}
             </p>
             <h1 className="public-hero-title">
               {t(
-                "Pilotez votre FAI avec la rigueur d’un SaaS international.",
-                "Run your ISP with the rigor of a world-class SaaS."
+                "Tout ce dont votre FAI a besoin pour avancer sereinement.",
+                "Everything your ISP needs to move forward with confidence."
               )}
             </h1>
             <p className="public-hero-lead">
               {t(
-                "McBuleli aligne abonnés, trésorerie et infrastructure : facturation & encaissements Mobile Money, portail client, Wi‑Fi invité, équipes terrain, workflows de dépenses et synchronisation MikroTik — avec traçabilité complète pour les opérations critiques.",
-                "McBuleli aligns subscribers, cash and infrastructure: billing & mobile collections, customer portal, guest Wi‑Fi, field teams, expense workflows and MikroTik sync—with full traceability for critical operations."
+                "Encaissements mobiles, portail abonnés, Wi‑Fi invité, terrain et synchronisation MikroTik : vos équipes voient l’essentiel au même endroit, sans se noyer dans les fichiers.",
+                "Mobile collections, subscriber portal, guest Wi‑Fi, field work and MikroTik sync — your people see what matters in one place, without drowning in files."
               )}
             </p>
             <div className="public-cta">
@@ -585,17 +585,28 @@ export default function PublicSite() {
         </div>
       </header>
 
+      <section className="public-whats-new" aria-label={t("Nouveautés produit", "Product updates")}>
+        <p>
+          <strong>{t("Nouveau", "New")}</strong>
+          {" — "}
+          {t(
+            "Discussion d’équipe réservée à votre entreprise, dans le tableau de bord : vous échangez vite, voyez qui a lu — sans passer par un autre outil.",
+            "Team-only chat inside the dashboard — quick messages and read receipts, no extra app."
+          )}
+        </p>
+      </section>
+
       <PublicHomePromos t={t} isEn={isEn} apiPromos={homeMarketing.homePromos} />
 
       <section className="public-section public-section--split" id="services">
         <div>
           <p className="eyebrow">{t("Nos services", "Our services")}</p>
-          <h2>{t("Tout ce qu'un FAI moderne doit maîtriser.", "Everything a modern ISP must control.")}</h2>
+          <h2>{t("L’essentiel pour faire tourner un FAI aujourd’hui.", "What a modern ISP actually needs day to day.")}</h2>
         </div>
         <p>
           {t(
-            "Une expérience unique pour les équipes financières, le terrain et vos abonnés : simplicité, automatisation durable et présentation de marque nette comme sur les standards internationaux.",
-            "One experience across finance teams, crews and subscribers—purposeful automation and brand polish that rivals international benchmarks."
+            "Les finances, le terrain et vos abonnés lisent la même vérité : moins de frictions, une marque propre et moins d’échanges inutiles.",
+            "Finance, field teams and subscribers see the same story—less friction, a clean brand, fewer needless back‑and‑forths."
           )}
         </p>
       </section>

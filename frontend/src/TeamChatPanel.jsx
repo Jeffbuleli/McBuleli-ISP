@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, publicAssetUrl } from "./api";
-import { IconX } from "./icons.jsx";
+import { IconSend, IconX } from "./icons.jsx";
 import { formatStaffRole } from "./staffRoleLabels.js";
+import { friendlyTransientError } from "./httpErrorCopy.js";
 
 const URL_RE = /(https?:\/\/[^\s]+)/gi;
 
@@ -62,19 +63,26 @@ export default function TeamChatPanel({
   const [handleBusy, setHandleBusy] = useState(false);
   const showHandleBanner = user && isDefaultChatUsername(user.chatUsername);
 
+  /** After first successful load, failed polls no longer plaster a red banner */
+  const loadOkRef = useRef(false);
+
   const reload = useCallback(async () => {
     if (!open || !ispId) return;
     setLoading(true);
-    setErr("");
     try {
       const data = await api.getTeamChatMessages(ispId, { limit: 60 });
+      setErr("");
       setItems(Array.isArray(data.items) ? data.items : []);
+      loadOkRef.current = true;
     } catch (e) {
-      setErr(String(e.message || ""));
+      const raw = String(e?.message || "");
+      if (!loadOkRef.current) {
+        setErr(friendlyTransientError(raw, isEn));
+      }
     } finally {
       setLoading(false);
     }
-  }, [ispId, open]);
+  }, [ispId, open, isEn]);
 
   /** Mark workspace messages read when opening chat */
   const markRead = useCallback(async () => {
@@ -86,6 +94,15 @@ export default function TeamChatPanel({
       /* non-fatal */
     }
   }, [ispId, onMarkReadComplete]);
+
+  useEffect(() => {
+    loadOkRef.current = false;
+    setErr("");
+  }, [ispId]);
+
+  useEffect(() => {
+    if (!open) loadOkRef.current = false;
+  }, [open]);
 
   useEffect(() => {
     if (open && showHandleBanner) setHandleDraft("");
@@ -142,7 +159,7 @@ export default function TeamChatPanel({
       setItems((prev) => [...prev, msg]);
       void markRead();
     } catch (e) {
-      setErr(String(e.message || ""));
+      setErr(friendlyTransientError(String(e?.message || ""), isEn));
     } finally {
       setSending(false);
     }
@@ -177,7 +194,11 @@ export default function TeamChatPanel({
         chatAvatarUrl: out.chatAvatarUrl
       });
     } catch (_e) {
-      setErr(isEn ? "Could not update chat username." : "Impossible de mettre à jour le pseudonyme.");
+      setErr(
+        isEn
+          ? "We couldn’t save that name. Letters, numbers and _ only (3–30)."
+          : "Impossible d’enregistrer ce nom. Lettres minuscules, chiffres et _ (3 à 30 car.)."
+      );
     } finally {
       setHandleBusy(false);
     }
@@ -190,13 +211,23 @@ export default function TeamChatPanel({
       ref={rootRef}
       className={`dashboard-team-chat-popover${isMobileShell ? " dashboard-team-chat-popover--mobile" : ""}`}
       role="dialog"
-      aria-label={t("Chat équipe", "Team chat")}
+      aria-labelledby="team-chat-heading"
     >
       <div className="dashboard-team-chat-popover__head">
-        <h2 className="dashboard-team-chat-popover__title">{t("Chat équipe", "Team chat")}</h2>
+        <div className="dashboard-team-chat-popover__head-text">
+          <h2 id="team-chat-heading" className="dashboard-team-chat-popover__title">
+            {t("Discussion équipe", "Team chat")}
+          </h2>
+          <p className="dashboard-team-chat-popover__subtitle">
+            {t(
+              "Réservé à votre équipe sur cet espace — rien ne sort vers l’extérieur.",
+              "Staff-only on this workspace — nothing leaves your team."
+            )}
+          </p>
+        </div>
         <button
           type="button"
-          className="btn-icon-toolbar"
+          className="btn-icon-toolbar dashboard-team-chat-popover__close"
           onClick={() => onClose?.()}
           aria-label={t("Fermer", "Close")}
         >
@@ -208,8 +239,8 @@ export default function TeamChatPanel({
         <form className="dashboard-team-chat-handle" onSubmit={saveHandle}>
           <p className="dashboard-team-chat-handle__hint">
             {t(
-              "Choisissez un pseudonyme visible par l’équipe (lettres minuscules, chiffres, _ ).",
-              "Choose a visible chat handle (lowercase letters, digits, underscore)."
+              "Comment doit-on vous appeler ici ? (lettres sans accent, chiffres ou _ , entre 3 et 30 car.)",
+              "How should teammates see you here? Use letters, digits or _ (3–30 characters)."
             )}
           </p>
           <div className="dashboard-team-chat-handle__row">
@@ -230,7 +261,15 @@ export default function TeamChatPanel({
 
       {err ? (
         <div role="alert" className="dashboard-team-chat-error">
-          {err}
+          <span className="dashboard-team-chat-error__text">{err}</span>
+          <button
+            type="button"
+            className="dashboard-team-chat-error__dismiss"
+            onClick={() => setErr("")}
+            aria-label={t("Masquer", "Dismiss")}
+          >
+            ×
+          </button>
         </div>
       ) : null}
 
@@ -240,10 +279,13 @@ export default function TeamChatPanel({
         ) : (
           <ul className="dashboard-team-chat-list">
             <li className="dashboard-team-chat-loadmore">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void loadOlder()} disabled={loadingMore}>
-                {loadingMore
-                  ? t("Chargement…", "Loading…")
-                  : t("Messages précédents", "Earlier messages")}
+              <button
+                type="button"
+                className="dashboard-team-chat-loadmore-btn"
+                onClick={() => void loadOlder()}
+                disabled={loadingMore}
+              >
+                {loadingMore ? t("Chargement…", "Loading…") : t("Voir plus haut", "Load older")}
               </button>
             </li>
             {items.map((m, idx) => {
@@ -301,10 +343,9 @@ export default function TeamChatPanel({
                       <span className="dashboard-team-chat-msg__time">{ts}</span>
                       {isMe && typeof m.seenByCount === "number" && m.seenByCount > 0 ? (
                         <span className="dashboard-team-chat-msg__seen">
-                          {t(
-                            `Lu par ${m.seenByCount} personne(s)`,
-                            `Seen by ${m.seenByCount} user(s)`
-                          )}
+                          {m.seenByCount === 1
+                            ? t("Vu par 1 collègue", "Seen by 1 teammate")
+                            : t(`Vu par ${m.seenByCount} collègues`, `Seen by ${m.seenByCount} teammates`)}
                         </span>
                       ) : isMe ? (
                         <span className="dashboard-team-chat-msg__seen" aria-hidden>
@@ -324,11 +365,12 @@ export default function TeamChatPanel({
       <div className="dashboard-team-chat-popover__composer">
         <textarea
           className="dashboard-team-chat-input"
-          rows={isMobileShell ? 2 : 2}
+          rows={isMobileShell ? 3 : 2}
           maxLength={500}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={t("Écrire un message…", "Write a message…")}
+          placeholder={t("Votre message…", "Your message…")}
+          aria-label={t("Message", "Message")}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -338,11 +380,13 @@ export default function TeamChatPanel({
         />
         <button
           type="button"
-          className="btn btn-primary dashboard-team-chat-send"
+          className="dashboard-team-chat-sendBtn"
           disabled={sending || !String(draft).trim()}
           onClick={() => void onSend()}
+          title={t("Envoyer", "Send")}
+          aria-label={t("Envoyer le message", "Send message")}
         >
-          {t("Envoyer", "Send")}
+          <IconSend width={22} height={22} />
         </button>
       </div>
     </div>
