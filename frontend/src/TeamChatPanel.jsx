@@ -61,6 +61,8 @@ export default function TeamChatPanel({
   /** Compact chat handle editor when still on default backend username */
   const [handleDraft, setHandleDraft] = useState("");
   const [handleBusy, setHandleBusy] = useState(false);
+  /** Desktop: position panel under measured sticky header (see updateDesktopDock). */
+  const [desktopDock, setDesktopDock] = useState(null);
   const showHandleBanner = user && isDefaultChatUsername(user.chatUsername);
 
   /** After first successful load, failed polls no longer plaster a red banner */
@@ -68,7 +70,8 @@ export default function TeamChatPanel({
 
   const reload = useCallback(async () => {
     if (!open || !ispId) return;
-    setLoading(true);
+    const silent = loadOkRef.current;
+    if (!silent) setLoading(true);
     try {
       const data = await api.getTeamChatMessages(ispId, { limit: 60 });
       setErr("");
@@ -80,7 +83,7 @@ export default function TeamChatPanel({
         setErr(sanitizeApiErrorForAudience(raw, user, isEn));
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [ispId, open, isEn, user]);
 
@@ -124,11 +127,55 @@ export default function TeamChatPanel({
     };
   }, [open, ispId, markRead, reload]);
 
-  useLayoutEffect(() => {
-    if (open && listEndRef.current) {
-      listEndRef.current.scrollIntoView({ block: "end" });
+  const updateDesktopDock = useCallback(() => {
+    if (typeof window === "undefined" || isMobileShell) return;
+    const stack = document.querySelector(".dashboard-sticky-stack");
+    if (!stack) {
+      const top = 120;
+      setDesktopDock({
+        top,
+        maxHeight: Math.min(560, Math.max(260, window.innerHeight - top - 18))
+      });
+      return;
     }
-  }, [open, items.length]);
+    const r = stack.getBoundingClientRect();
+    const top = Math.max(8, Math.round(r.bottom) + 8);
+    const maxHeight = Math.min(560, Math.max(260, window.innerHeight - top - 16));
+    setDesktopDock({ top, maxHeight });
+  }, [isMobileShell]);
+
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      listEndRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open || isMobileShell) {
+      setDesktopDock(null);
+      return undefined;
+    }
+    updateDesktopDock();
+    const stack = document.querySelector(".dashboard-sticky-stack");
+    const ro =
+      typeof ResizeObserver !== "undefined" && stack ? new ResizeObserver(() => updateDesktopDock()) : null;
+    if (stack && ro) ro.observe(stack);
+    window.addEventListener("resize", updateDesktopDock);
+    window.addEventListener("scroll", updateDesktopDock, true);
+    const tick = window.setInterval(updateDesktopDock, 600);
+    return () => {
+      if (stack && ro) ro.disconnect();
+      window.removeEventListener("resize", updateDesktopDock);
+      window.removeEventListener("scroll", updateDesktopDock, true);
+      window.clearInterval(tick);
+    };
+  }, [open, isMobileShell, updateDesktopDock]);
+
+  /** Scroll once messages first appear — silent polls no longer toggle `loading`. */
+  useLayoutEffect(() => {
+    if (!open || loading) return;
+    scrollToBottom();
+  }, [open, loading, scrollToBottom]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -157,6 +204,7 @@ export default function TeamChatPanel({
       const msg = await api.postTeamChatMessage(ispId, { content: text });
       setDraft("");
       setItems((prev) => [...prev, msg]);
+      queueMicrotask(() => scrollToBottom());
       void markRead();
     } catch (e) {
       setErr(sanitizeApiErrorForAudience(String(e?.message || ""), user, isEn));
@@ -206,12 +254,27 @@ export default function TeamChatPanel({
 
   if (!open) return null;
 
+  const desktopPopoverStyle =
+    !isMobileShell && desktopDock
+      ? { top: desktopDock.top, maxHeight: desktopDock.maxHeight }
+      : undefined;
+
   return (
+    <>
+      {isMobileShell ? (
+        // Opaque dimmer so dashboard text does not bleed through the full-screen chat overlay.
+        <div
+          className="dashboard-team-chat-backdrop"
+          aria-hidden
+          onClick={() => onClose?.()}
+        />
+      ) : null}
     <div
       ref={rootRef}
       className={`dashboard-team-chat-popover${isMobileShell ? " dashboard-team-chat-popover--mobile" : ""}`}
       role="dialog"
       aria-labelledby="team-chat-heading"
+      style={desktopPopoverStyle}
     >
       <div className="dashboard-team-chat-popover__head">
         <div className="dashboard-team-chat-popover__head-text">
@@ -390,5 +453,6 @@ export default function TeamChatPanel({
         </button>
       </div>
     </div>
+    </>
   );
 }

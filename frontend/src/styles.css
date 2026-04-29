@@ -584,14 +584,23 @@ a:hover {
   display: flex;
   flex-direction: column;
   width: min(400px, calc(100vw - 16px));
-  max-height: min(560px, 85vh);
+  max-height: min(560px, calc(100vh - 118px));
   right: 12px;
-  top: 88px;
+  /* Fallback until JS measures `.dashboard-sticky-stack` bottom (TeamChatPanel). */
+  top: clamp(108px, 14vh, 220px);
   border-radius: 16px;
-  background: rgba(22, 26, 30, 0.98);
+  background: #161616;
   border: 1px solid var(--mb-border);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
   overflow: hidden;
+  contain: layout style;
+}
+
+.dashboard-team-chat-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  background: rgba(6, 8, 10, 0.82);
 }
 
 .dashboard-team-chat-popover--mobile {
@@ -602,6 +611,9 @@ a:hover {
   border-radius: 0;
   right: auto;
   top: auto;
+  z-index: 200;
+  background: #141414;
+  box-shadow: none;
 }
 
 .dashboard-team-chat-popover__head {
@@ -641,8 +653,10 @@ a:hover {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px 10px 12px;
   -webkit-overflow-scrolling: touch;
+  overflow-anchor: auto;
 }
 
 .dashboard-team-chat-popover__composer {
@@ -650,6 +664,7 @@ a:hover {
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: flex-end;
+  flex-shrink: 0;
   gap: 10px;
   padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0));
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -727,11 +742,18 @@ a:hover {
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+  width: calc(100% - 24px);
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .dashboard-team-chat-error__text {
   flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: normal;
+  white-space: normal;
 }
 
 .dashboard-team-chat-error__dismiss {
@@ -5484,6 +5506,33 @@ body:has(.public-site--dark) {
 
 .public-site--dark .public-price {
   color: #63b38f !important;
+}
+
+/* Hero stat chips + “what’s new” strip — match dark shell (no washed-out translucent cards). */
+.public-site--dark .public-stats strong {
+  border: 1px solid rgba(99, 179, 143, 0.28);
+  background: rgba(22, 24, 28, 0.96);
+  color: #d8f5e6;
+  text-shadow: none;
+  overflow-wrap: break-word;
+}
+
+.public-site--dark .public-stats span {
+  color: #9ea8b8;
+}
+
+.public-site--dark .public-whats-new {
+  border: 1px solid rgba(99, 179, 143, 0.22);
+  background: rgba(18, 20, 24, 0.96);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.public-site--dark .public-whats-new p {
+  color: #c8d3de;
+}
+
+.public-site--dark .public-whats-new strong {
+  color: #7fd4a9;
 }
 
 .public-site--dark .public-footer {
