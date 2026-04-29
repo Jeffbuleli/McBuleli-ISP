@@ -693,6 +693,78 @@ a:hover {
   gap: 10px;
 }
 
+.dashboard-team-chat-composer-wrap {
+  position: relative;
+}
+
+.dashboard-team-chat-mention-pop {
+  position: absolute;
+  left: 0;
+  right: 52px;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  max-height: min(40vh, 220px);
+  overflow-y: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(99, 179, 143, 0.35);
+  background: rgba(24, 26, 28, 0.98);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  padding: 4px;
+}
+
+.dashboard-team-chat-mention-empty {
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.dashboard-team-chat-mention-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 2px;
+  background: transparent;
+  color: #e8eaed;
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dashboard-team-chat-mention-row:last-child {
+  margin-bottom: 0;
+}
+
+.dashboard-team-chat-mention-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dashboard-team-chat-mention-row--active {
+  background: rgba(99, 179, 143, 0.2);
+}
+
+.dashboard-team-chat-mention-handle {
+  font-weight: 700;
+  color: #63b38f;
+}
+
+.dashboard-team-chat-mention-name {
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.dashboard-team-chat-msg__text .dashboard-team-chat-mention {
+  font-weight: 650;
+  color: #7fd4a9;
+  text-decoration: none;
+}
+
 .dashboard-team-chat-input {
   flex: 1 1 0;
   min-width: 0;
@@ -2222,7 +2294,9 @@ button:disabled {
 }
 
 .public-whats-new strong {
-  font-weight: 800;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: 700;
   color: #1b5e20;
 }
 
@@ -4136,6 +4210,7 @@ a.public-footer-card:hover {
   padding: 18px clamp(18px, 4vw, 32px) 22px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.22);
+  text-align: center;
 }
 
 .public-footer-legal-inner {
@@ -4185,6 +4260,7 @@ a.public-footer-card:hover {
 @media (max-width: 520px) {
   .public-footer-legal-inner {
     flex-direction: column;
+    align-items: center;
     gap: 6px;
   }
 
@@ -5554,6 +5630,8 @@ body:has(.public-site--dark) {
 }
 
 .public-site--dark .public-whats-new strong {
+  font-size: inherit;
+  line-height: inherit;
   color: #7fd4a9;
 }
 
@@ -6294,6 +6372,26 @@ html:has(.app-shell--mobile-pwa) {
   margin: 0 0 12px;
 }
 
+/* PWA mobile: évite colonne à 1 caractère (flex/grid + overflow-wrap trop agressif) sur les bandeaux erreur/info */
+.app-shell--mobile-pwa .dashboard-main-column > .auth-simple-banner.app-dash-alert {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-inline: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.app-shell--mobile-pwa .dash-hist-lead {
+  text-align: center;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 100%;
+}
+
 .app-shell--mobile-pwa .dashboard-mobile-quick-actions {
   display: flex;
   align-items: center;
@@ -6383,6 +6481,8 @@ html:has(.app-shell--mobile-pwa) {
 
 .app-shell--mobile-pwa .dashboard-main-column {
   padding-bottom: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .app-shell--mobile-pwa .dashboard-main-column > .panel,

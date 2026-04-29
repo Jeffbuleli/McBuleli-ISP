@@ -541,6 +541,7 @@ export const api = {
       method: "DELETE"
     }),
   getTeamChatUnread: (ispId) => request(withIsp("/team-chat/unread", ispId)),
+  getTeamChatMembers: (ispId) => request(withIsp("/team-chat/members", ispId)),
   getTeamChatMessages: (ispId, { limit = 50, before } = {}) => {
     const q = new URLSearchParams({ limit: String(limit) });
     if (before) q.set("before", String(before));

@@ -83,7 +83,7 @@ function mapMessageRow(row) {
   };
 }
 
-async function fetchSeenCounts(ispId, messageIds, senderIds) {
+async function fetchSeenCounts(ispId, messageIds, senderIds, viewerId) {
   const ownIds = [];
   for (let i = 0; i < messageIds.length; i += 1) {
     if (senderIds[i] === viewerId) ownIds.push(messageIds[i]);
@@ -198,6 +198,31 @@ export function registerTeamChatRoutes(app) {
   );
 
   app.get(
+    "/api/team-chat/members",
+    authenticate,
+    requireRoles(...TEAM_CHAT_ROLES),
+    async (req, res) => {
+      const ispId = await resolveChatIsp(req, res);
+      if (!ispId) return;
+      const r = await query(
+        `SELECT u.id AS "userId",
+                u.chat_username AS "chatUsername",
+                u.full_name AS "fullName",
+                m.role AS "role"
+           FROM user_isp_memberships m
+           JOIN users u ON u.id = m.user_id
+          WHERE m.isp_id = $1::uuid
+            AND m.is_active IS TRUE
+            AND u.is_active IS TRUE
+            AND COALESCE(trim(u.chat_username), '') <> ''
+          ORDER BY lower(u.chat_username) ASC`,
+        [ispId]
+      );
+      return res.json({ members: r.rows });
+    }
+  );
+
+  app.get(
     "/api/team-chat/messages",
     authenticate,
     requireRoles(...TEAM_CHAT_ROLES),
@@ -249,7 +274,7 @@ export function registerTeamChatRoutes(app) {
       const rows = r.rows;
       const ids = rows.map((row) => row.id);
       const senders = rows.map((row) => row.sender_id);
-      const seenMap = await fetchSeenCounts(ispId, ids, senders);
+      const seenMap = await fetchSeenCounts(ispId, ids, senders, uid);
       const items = rows.map((row) => {
         const m = mapMessageRow(row);
         if (row.sender_id === uid) {

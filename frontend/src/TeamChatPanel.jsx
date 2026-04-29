@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, publicAssetUrl } from "./api";
 import { IconSend, IconX } from "./icons.jsx";
 import { formatStaffRole } from "./staffRoleLabels.js";
@@ -7,25 +7,68 @@ import { isTeamChatPingSoundEnabled, setTeamChatPingSoundEnabled } from "./teamC
 
 const URL_RE = /(https?:\/\/[^\s]+)/gi;
 
-function linkifyLine(text) {
-  const s = String(text || "");
-  const parts = s.split(URL_RE);
-  return parts.map((part, i) => {
-    if (i % 2 === 1) {
+/** @ mention en cours de saisie : uniquement si @ est en début ou après un espace / retour (évite user@domaine). */
+function getActiveMentionToken(text, caret) {
+  if (caret == null || caret < 1) return null;
+  const before = String(text || "").slice(0, caret);
+  const m = before.match(/@([a-z0-9_]*)$/i);
+  if (!m) return null;
+  const tokenLen = m[0].length;
+  const atIdx = caret - tokenLen;
+  if (atIdx > 0) {
+    const ch = text.charCodeAt(atIdx - 1);
+    if (!(ch === 32 || ch === 9 || ch === 10 || ch === 13)) return null;
+  }
+  return { query: (m[1] || "").toLowerCase(), atIdx, tokenLen };
+}
+
+/** Met en évidence URLs + `@pseudo` dans le corps du message */
+function chatMessageRichText(full) {
+  const str = String(full || "");
+  const urlParts = str.split(URL_RE);
+  let keySeed = 0;
+  function nextKey() {
+    keySeed += 1;
+    return keySeed;
+  }
+  function pushMentionsInPlain(seg, bucket) {
+    const re = /(^|[\s])@([a-z0-9_]+)/gim;
+    let last = 0;
+    let m;
+    while ((m = re.exec(seg)) !== null) {
+      if (m.index > last) bucket.push(seg.slice(last, m.index));
+      const lead = m[1];
+      const handle = m[2];
+      if (lead) bucket.push(lead);
+      bucket.push(
+        <span key={`mention-${nextKey()}`} className="dashboard-team-chat-mention">
+          @{handle}
+        </span>
+      );
+      last = m.index + m[0].length;
+    }
+    if (last < seg.length) bucket.push(seg.slice(last));
+  }
+  const out = [];
+  for (let pi = 0; pi < urlParts.length; pi++) {
+    const part = urlParts[pi];
+    if (pi % 2 === 1) {
       let href = part;
       try {
         href = decodeURIComponent(part);
       } catch {
         /* keep */
       }
-      return (
-        <a key={`u${i}`} href={href} target="_blank" rel="noopener noreferrer" className="dashboard-team-chat-link">
+      out.push(
+        <a key={`url-${nextKey()}`} href={href} target="_blank" rel="noopener noreferrer" className="dashboard-team-chat-link">
           {part}
         </a>
       );
+    } else {
+      pushMentionsInPlain(part, out);
     }
-    return part;
-  });
+  }
+  return out.length ? out : "";
 }
 
 function initialsFromUsername(name) {
@@ -58,6 +101,11 @@ export default function TeamChatPanel({
   const [err, setErr] = useState("");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  /** Caret dans le champ message (liste @) */
+  const [caretPos, setCaretPos] = useState(0);
+  const [mentionMembers, setMentionMembers] = useState([]);
+  const [mentionHl, setMentionHl] = useState(0);
+  const textareaRef = useRef(null);
 
   /** Compact chat handle editor when still on default backend username */
   const [handleDraft, setHandleDraft] = useState("");
@@ -149,6 +197,69 @@ export default function TeamChatPanel({
     };
   }, [open, ispId, markRead, reload]);
 
+  useEffect(() => {
+    if (!open || !ispId) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api.getTeamChatMembers(ispId);
+        if (!cancelled) setMentionMembers(Array.isArray(data?.members) ? data.members : []);
+      } catch {
+        if (!cancelled) setMentionMembers([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, ispId]);
+
+  const mentionToken = useMemo(() => getActiveMentionToken(draft, caretPos), [draft, caretPos]);
+
+  const mentionFiltered = useMemo(() => {
+    const base = mentionMembers.filter((row) =>
+      Boolean(String(row.chatUsername || "").trim())
+    );
+    const q = mentionToken?.query ?? "";
+    if (!q) return base.slice(0, 40);
+    return base
+      .filter((row) =>
+        String(row.chatUsername || "")
+          .toLowerCase()
+          .startsWith(q)
+      )
+      .slice(0, 40);
+  }, [mentionMembers, mentionToken]);
+
+  useEffect(() => {
+    const n = mentionFiltered.length;
+    if (!n) {
+      setMentionHl(0);
+      return;
+    }
+    setMentionHl((h) => Math.min(h, n - 1));
+  }, [mentionFiltered]);
+
+  function applyMentionUsername(username) {
+    const ta = textareaRef.current;
+    const cur = draft;
+    const caret = ta?.selectionStart ?? caretPos;
+    const tok =
+      caret != null ? getActiveMentionToken(cur, caret) : null;
+    if (!tok || !username) return;
+    const after = cur.slice(caret ?? 0);
+    const insertion = `@${username} `;
+    const next = `${cur.slice(0, tok.atIdx)}${insertion}${after}`;
+    setDraft(next);
+    const jump = tok.atIdx + insertion.length;
+    queueMicrotask(() => {
+      if (ta) {
+        ta.focus();
+        ta.setSelectionRange(jump, jump);
+      }
+      setCaretPos(jump);
+    });
+  }
+
   const updateDesktopDock = useCallback(() => {
     if (typeof window === "undefined" || isMobileShell) return;
     const stack = document.querySelector(".dashboard-sticky-stack");
@@ -225,6 +336,7 @@ export default function TeamChatPanel({
     try {
       const msg = await api.postTeamChatMessage(ispId, { content: text });
       setDraft("");
+      setCaretPos(0);
       setItems((prev) => [...prev, msg]);
       queueMicrotask(() => scrollToBottom());
       void markRead();
@@ -419,7 +531,7 @@ export default function TeamChatPanel({
                         ) : null}
                       </div>
                     ) : null}
-                    <div className="dashboard-team-chat-msg__text">{linkifyLine(m.content)}</div>
+                    <div className="dashboard-team-chat-msg__text">{chatMessageRichText(m.content)}</div>
                     <div className="dashboard-team-chat-msg__foot">
                       <span className="dashboard-team-chat-msg__time">{ts}</span>
                       {isMe && typeof m.seenByCount === "number" && m.seenByCount > 0 ? (
@@ -461,16 +573,122 @@ export default function TeamChatPanel({
             )}
           </span>
         </label>
+        <div className="dashboard-team-chat-composer-wrap">
+          {mentionToken ? (
+            <div className="dashboard-team-chat-mention-pop" role="listbox" aria-label={t("Mentionner…", "Mention…")}>
+              {!mentionFiltered.length ? (
+                <div className="dashboard-team-chat-mention-empty">{t("Aucun collègue", "No teammate")}</div>
+              ) : (
+                mentionFiltered.map((row, ii) => {
+                  const hl = ii === mentionHl;
+                  const un =
+                    typeof row.chatUsername === "string" ? row.chatUsername : "";
+                  const label = row.fullName && String(row.fullName).trim() ? row.fullName : un;
+                  return (
+                    <button
+                      key={row.userId || un || ii}
+                      type="button"
+                      role="option"
+                      aria-selected={hl}
+                      className={`dashboard-team-chat-mention-row${hl ? " dashboard-team-chat-mention-row--active" : ""}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        applyMentionUsername(un);
+                      }}
+                    >
+                      <span className="dashboard-team-chat-mention-handle">@{un}</span>
+                      {label && label !== un ? (
+                        <span className="dashboard-team-chat-mention-name">{label}</span>
+                      ) : null}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          ) : null}
         <div className="dashboard-team-chat-composer-row">
         <textarea
+          ref={textareaRef}
           className="dashboard-team-chat-input"
           rows={isMobileShell ? 3 : 2}
           maxLength={500}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={t("Votre message…", "Your message…")}
+          onChange={(e) => {
+            const v = e.target.value;
+            const p = e.target.selectionStart;
+            setDraft(v);
+            setCaretPos(Number.isFinite(p) ? p : v.length);
+          }}
+          onSelect={(e) => {
+            const p = e.target.selectionStart;
+            if (Number.isFinite(p)) setCaretPos(p);
+          }}
+          onClick={(e) => {
+            const p = e.target.selectionStart;
+            if (Number.isFinite(p)) setCaretPos(p);
+          }}
+          onKeyUp={(e) => {
+            const p = e.target.selectionStart;
+            if (Number.isFinite(p)) setCaretPos(p);
+          }}
+          placeholder={t("Votre message… (@ pour mentionner)", "Your message… (@ to mention)")}
           aria-label={t("Message", "Message")}
           onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              const caret = textareaRef.current?.selectionStart ?? caretPos;
+              const tok = getActiveMentionToken(draft, caret);
+              if (tok) {
+                e.preventDefault();
+                e.stopPropagation();
+                const afterTok = caret;
+                const next = draft.slice(0, tok.atIdx) + draft.slice(afterTok);
+                setDraft(next);
+                queueMicrotask(() => {
+                  const ta = textareaRef.current;
+                  if (ta) {
+                    ta.focus();
+                    ta.setSelectionRange(tok.atIdx, tok.atIdx);
+                  }
+                  setCaretPos(tok.atIdx);
+                });
+                return;
+              }
+            }
+            if (mentionFiltered.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+              const tokNow = getActiveMentionToken(
+                draft,
+                textareaRef.current?.selectionStart ?? caretPos
+              );
+              if (!tokNow) return;
+              e.preventDefault();
+              if (e.key === "ArrowDown") {
+                setMentionHl((h) =>
+                  Math.min(mentionFiltered.length - 1, h + 1)
+                );
+              } else {
+                setMentionHl((h) => Math.max(0, h - 1));
+              }
+              return;
+            }
+            if (e.key === "Tab" || e.key === "Enter") {
+              const tokNow = getActiveMentionToken(
+                draft,
+                textareaRef.current?.selectionStart ?? caretPos
+              );
+              const pick =
+                mentionFiltered[tokNow && mentionFiltered.length ? mentionHl : -1]?.chatUsername;
+              if (
+                tokNow &&
+                mentionFiltered.length &&
+                typeof pick === "string" &&
+                pick.length &&
+                (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey))
+              ) {
+                e.preventDefault();
+                applyMentionUsername(pick);
+                return;
+              }
+            }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               void onSend();
@@ -487,6 +705,7 @@ export default function TeamChatPanel({
         >
           <IconSend width={22} height={22} />
         </button>
+        </div>
         </div>
       </div>
     </div>
