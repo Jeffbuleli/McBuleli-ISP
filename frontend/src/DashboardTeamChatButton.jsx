@@ -1,13 +1,13 @@
 import { IconChatBubble } from "./icons.jsx";
 
 /**
- * Header toolbar: opens team chat overlay. Unread badge caps at "10+".
+ * Header toolbar: opens team chat overlay. Unread badge shows count, then "99+" if very high.
  */
 export default function DashboardTeamChatButton({ unreadCount, t, variant, onClick }) {
   const n = typeof unreadCount === "number" ? unreadCount : 0;
   const label = t("Chat équipe interne", "Internal team chat");
 
-  const badgeText = n >= 10 ? "10+" : n > 0 ? String(n) : null;
+  const badgeText = n > 99 ? "99+" : n > 0 ? String(n) : null;
 
   const buttonClass =
     variant === "mobile"

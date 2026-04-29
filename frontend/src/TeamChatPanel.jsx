@@ -3,6 +3,7 @@ import { api, publicAssetUrl } from "./api";
 import { IconSend, IconX } from "./icons.jsx";
 import { formatStaffRole } from "./staffRoleLabels.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
+import { isTeamChatPingSoundEnabled, setTeamChatPingSoundEnabled } from "./teamChatAlerts.js";
 
 const URL_RE = /(https?:\/\/[^\s]+)/gi;
 
@@ -86,6 +87,27 @@ export default function TeamChatPanel({
       if (!silent) setLoading(false);
     }
   }, [ispId, open, isEn, user]);
+
+  const [soundAlerts, setSoundAlerts] = useState(() =>
+    typeof window !== "undefined" ? isTeamChatPingSoundEnabled() : true
+  );
+
+  /** Une fois ouvert en session : demander la permission système pour les alertes (geste utilisateur). */
+  const notifSessionRef = useRef(false);
+  useEffect(() => {
+    if (!open || notifSessionRef.current) return;
+    if (typeof Notification === "undefined") return;
+    const k = "mcb_team_chat_notif_prompt_done";
+    if (window.sessionStorage.getItem(k) === "1") {
+      notifSessionRef.current = true;
+      return;
+    }
+    notifSessionRef.current = true;
+    window.sessionStorage.setItem(k, "1");
+    if (Notification.permission === "default") {
+      void Notification.requestPermission();
+    }
+  }, [open]);
 
   /** Mark workspace messages read when opening chat */
   const markRead = useCallback(async () => {
@@ -422,6 +444,24 @@ export default function TeamChatPanel({
       </div>
 
       <div className="dashboard-team-chat-popover__composer">
+        <label className="dashboard-team-chat-sound-toggle">
+          <input
+            type="checkbox"
+            checked={soundAlerts}
+            onChange={(e) => {
+              const on = e.target.checked;
+              setTeamChatPingSoundEnabled(on);
+              setSoundAlerts(on);
+            }}
+          />
+          <span>
+            {t(
+              "Son + vibration quand un message arrive (app en arrière-plan ou chat fermé)",
+              "Sound + vibration for new messages when the app is in the background or chat is closed"
+            )}
+          </span>
+        </label>
+        <div className="dashboard-team-chat-composer-row">
         <textarea
           className="dashboard-team-chat-input"
           rows={isMobileShell ? 3 : 2}
@@ -447,6 +487,7 @@ export default function TeamChatPanel({
         >
           <IconSend width={22} height={22} />
         </button>
+        </div>
       </div>
     </div>
     </>

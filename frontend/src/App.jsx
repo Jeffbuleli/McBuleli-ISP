@@ -18,6 +18,7 @@ import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
 import { formatStaffRole } from "./staffRoleLabels.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
+import { clearPwaTeamChatBadge, onTeamChatUnreadTick } from "./teamChatAlerts.js";
 import { UI_LANG_SYNC_EVENT, getStoredUiLang } from "./uiLangSync.js";
 import {
   IconArrowLeft,
@@ -637,6 +638,7 @@ function App() {
   const [mobilePwaMenuOpen, setMobilePwaMenuOpen] = useState(false);
   const [teamChatOpen, setTeamChatOpen] = useState(false);
   const [teamChatUnread, setTeamChatUnread] = useState(0);
+  const teamChatUnreadPrevRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [uiLang, setUiLang] = useState(getStoredUiLang);
   const isEn = uiLang === "en";
@@ -664,9 +666,40 @@ function App() {
   }, [user, tenantContext?.ispId, selectedIspId, isps]);
 
   useEffect(() => {
+    teamChatUnreadPrevRef.current = null;
+  }, [dashboardChatIspId]);
+
+  useEffect(() => {
+    if (!user) {
+      clearPwaTeamChatBadge();
+      teamChatUnreadPrevRef.current = null;
+      return;
+    }
+    if (!dashboardChatIspId) return;
+    const n =
+      typeof teamChatUnread === "number" && Number.isFinite(teamChatUnread) ? Math.max(0, teamChatUnread) : 0;
+    onTeamChatUnreadTick({
+      nextCount: n,
+      prevUnreadRef: teamChatUnreadPrevRef,
+      teamChatPanelOpen: teamChatOpen,
+      notificationStrings: {
+        title: isEn ? "Team chat" : "Discussion équipe",
+        body:
+          n <= 1
+            ? isEn
+              ? "New team message."
+              : "Nouveau message équipe."
+            : isEn
+              ? `${n} unread team messages.`
+              : `${n} nouveaux messages équipe.`
+      }
+    });
+  }, [user, dashboardChatIspId, teamChatUnread, teamChatOpen, isEn]);
+
+  useEffect(() => {
     if (!user) return undefined;
     void fetchTeamChatUnread();
-    const iv = typeof window !== "undefined" ? window.setInterval(() => void fetchTeamChatUnread(), 14000) : null;
+    const iv = typeof window !== "undefined" ? window.setInterval(() => void fetchTeamChatUnread(), 10000) : null;
     return () => {
       if (iv) window.clearInterval(iv);
     };
