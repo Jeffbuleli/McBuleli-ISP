@@ -262,12 +262,8 @@ export default function TeamChatPanel({
   return (
     <>
       {isMobileShell ? (
-        // Opaque dimmer so dashboard text does not bleed through the full-screen chat overlay.
-        <div
-          className="dashboard-team-chat-backdrop"
-          aria-hidden
-          onClick={() => onClose?.()}
-        />
+        // Voile sous le plein écran — la fermeture au tap « dehors » est gérée par l’écouteur document (même logique partout).
+        <div className="dashboard-team-chat-backdrop" aria-hidden />
       ) : null}
     <div
       ref={rootRef}

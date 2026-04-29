@@ -600,20 +600,18 @@ a:hover {
   position: fixed;
   inset: 0;
   z-index: 190;
-  background: rgba(6, 8, 10, 0.82);
+  /* Voile léger : le tap hors du panneau ferme déjà via l’écouteur document sur « outside ». */
+  background: rgba(8, 10, 14, 0.48);
 }
 
 .dashboard-team-chat-popover--mobile {
-  inset: 0;
-  width: 100%;
-  max-height: none;
-  height: 100dvh;
-  border-radius: 0;
-  right: auto;
-  top: auto;
+  /* Marge autour : le voile reste cliquable pour fermer au tap (écouteur « outside »). */
+  inset: 10px;
+  width: auto;
+  border-radius: 18px;
   z-index: 200;
   background: #141414;
-  box-shadow: none;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
 }
 
 .dashboard-team-chat-popover__head {
