@@ -2276,28 +2276,33 @@ button:disabled {
 }
 
 .public-whats-new {
-  margin: 0 auto 22px;
-  margin-inline: clamp(14px, 4vw, 28px);
-  max-width: 1120px;
-  padding: 14px 20px;
-  border-radius: 16px;
+  margin: 0 0 clamp(22px, 3vw, 28px);
+  width: 100%;
+  box-sizing: border-box;
+  padding: clamp(18px, 3vw, 26px);
+  border-radius: 26px;
   border: 1px solid rgba(67, 160, 71, 0.22);
   background: rgba(232, 245, 233, 0.82);
-  box-shadow: 0 10px 32px rgba(45, 36, 32, 0.05);
+  box-shadow: 0 14px 40px rgba(45, 36, 32, 0.06);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.public-whats-new p,
+.public-whats-new strong {
+  font-size: clamp(0.94rem, 1.55vw, 1.03rem);
+  line-height: 1.55;
 }
 
 .public-whats-new p {
   margin: 0;
-  font-size: clamp(0.94rem, 1.6vw, 1.02rem);
-  line-height: 1.55;
   color: #2e4a32;
 }
 
 .public-whats-new strong {
-  font-size: inherit;
-  line-height: inherit;
-  font-weight: 700;
+  font-weight: 600;
   color: #1b5e20;
+  vertical-align: baseline;
 }
 
 .public-hero {
@@ -5622,7 +5627,7 @@ body:has(.public-site--dark) {
 .public-site--dark .public-whats-new {
   border: 1px solid rgba(99, 179, 143, 0.22);
   background: rgba(18, 20, 24, 0.96);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.32);
 }
 
 .public-site--dark .public-whats-new p {
@@ -5630,8 +5635,7 @@ body:has(.public-site--dark) {
 }
 
 .public-site--dark .public-whats-new strong {
-  font-size: inherit;
-  line-height: inherit;
+  font-weight: 600;
   color: #7fd4a9;
 }
 
