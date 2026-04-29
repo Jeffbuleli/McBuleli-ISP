@@ -45,6 +45,25 @@ export function friendlyTransientError(raw, isEn) {
   return t;
 }
 
+/**
+ * Roles that may see full API / infrastructure error text on dashboard surfaces.
+ * Staff (billing, NOC, field…) and subscriber portal users get humane copy instead.
+ */
+export const TECH_ERROR_VISIBILITY_ROLES = new Set(["system_owner", "super_admin", "company_manager", "isp_admin"]);
+
+/**
+ * Shows raw backend messages only to TECH_ERROR_VISIBILITY_ROLES. Everyone else sees
+ * `friendlyTransientError` (same as login / public flows when user is absent).
+ */
+export function sanitizeApiErrorForAudience(rawMessage, user, isEn) {
+  const raw = String(rawMessage ?? "").trim();
+  const role = user?.role;
+  if (role && TECH_ERROR_VISIBILITY_ROLES.has(role) && raw) {
+    return raw.length > 2000 ? `${raw.slice(0, 1997)}…` : raw;
+  }
+  return friendlyTransientError(raw, isEn);
+}
+
 /** Fallback when API returns JSON without `message`. */
 export function defaultHttpStatusMessage(status, isEn) {
   if (status === 503 || status === 502) {

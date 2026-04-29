@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { api, publicAssetUrl } from "./api";
 import { IconSend, IconX } from "./icons.jsx";
 import { formatStaffRole } from "./staffRoleLabels.js";
-import { friendlyTransientError } from "./httpErrorCopy.js";
+import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 
 const URL_RE = /(https?:\/\/[^\s]+)/gi;
 
@@ -77,12 +77,12 @@ export default function TeamChatPanel({
     } catch (e) {
       const raw = String(e?.message || "");
       if (!loadOkRef.current) {
-        setErr(friendlyTransientError(raw, isEn));
+        setErr(sanitizeApiErrorForAudience(raw, user, isEn));
       }
     } finally {
       setLoading(false);
     }
-  }, [ispId, open, isEn]);
+  }, [ispId, open, isEn, user]);
 
   /** Mark workspace messages read when opening chat */
   const markRead = useCallback(async () => {
@@ -159,7 +159,7 @@ export default function TeamChatPanel({
       setItems((prev) => [...prev, msg]);
       void markRead();
     } catch (e) {
-      setErr(friendlyTransientError(String(e?.message || ""), isEn));
+      setErr(sanitizeApiErrorForAudience(String(e?.message || ""), user, isEn));
     } finally {
       setSending(false);
     }

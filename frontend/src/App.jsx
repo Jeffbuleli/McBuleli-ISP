@@ -17,6 +17,7 @@ import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
 import { formatStaffRole } from "./staffRoleLabels.js";
+import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 import { UI_LANG_SYNC_EVENT, getStoredUiLang } from "./uiLangSync.js";
 import {
   IconArrowLeft,
@@ -640,6 +641,10 @@ function App() {
   const [uiLang, setUiLang] = useState(getStoredUiLang);
   const isEn = uiLang === "en";
   const t = (fr, en) => (isEn ? en : fr);
+  const audienceErr = useCallback(
+    (msg) => sanitizeApiErrorForAudience(String(msg ?? ""), user, isEn),
+    [user, isEn]
+  );
 
   const dashboardChatIspId = useMemo(
     () => tenantContext?.ispId || selectedIspId || user?.ispId || isps[0]?.id || "",
@@ -1198,7 +1203,7 @@ function App() {
         setUser(null);
         if (typeof window !== "undefined") localStorage.removeItem("token");
       } else {
-      setError(err.message);
+      setError(audienceErr(err.message));
       }
     } finally {
       setLoading(false);
@@ -1435,7 +1440,7 @@ function App() {
       setUser(payload.user);
       refresh(payload.user.ispId || "");
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1452,7 +1457,7 @@ function App() {
           : "Si cette adresse est enregistrée, vous recevrez un lien sous peu (vérifiez les courriers indésirables). Il expire dans une heure."
       );
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     } finally {
       setForgotBusy(false);
     }
@@ -1483,7 +1488,7 @@ function App() {
         window.history.replaceState({}, "", "/login");
       }
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1507,7 +1512,7 @@ function App() {
       setUser(payload.user);
       refresh(payload.user.ispId || "");
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1526,7 +1531,7 @@ function App() {
       setNotice("");
       refresh(payload.user.ispId || "");
     } catch (err) {
-      setError(err.message || "Code MFA invalide.");
+      setError(audienceErr(err.message || "Code MFA invalide."));
     }
   }
 
@@ -1605,7 +1610,7 @@ function App() {
       await refresh();
       setNotice(t("Bannière enregistrée.", "Banner saved."));
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1624,7 +1629,7 @@ function App() {
       await refresh();
       setNotice(t("Paramètres de bannière enregistrés.", "Banner settings saved."));
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1638,7 +1643,7 @@ function App() {
       await refresh();
       setNotice(t("Image supprimée.", "Image removed."));
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1684,7 +1689,7 @@ function App() {
       setNotice("Client enregistré.");
       refresh();
     } catch (err) {
-      setError(err.message || "Impossible d'enregistrer le client.");
+      setError(audienceErr(err.message || "Impossible d'enregistrer le client."));
     }
   }
 
@@ -1746,7 +1751,7 @@ function App() {
       setNotice("Dépense soumise — elle apparaît en « En attente » jusqu'à approbation par un autre administrateur (ou par vous-même si vous êtes seul validateur sur cet espace).");
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible d'enregistrer la dépense.");
+      setError(audienceErr(err.message || "Impossible d'enregistrer la dépense."));
     }
   }
 
@@ -1760,7 +1765,7 @@ function App() {
       setNotice("Dépense supprimée.");
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible de supprimer la dépense.");
+      setError(audienceErr(err.message || "Impossible de supprimer la dépense."));
     }
   }
 
@@ -1773,7 +1778,7 @@ function App() {
       setNotice("Dépense approuvée — elle est prise en compte dans les totaux validés.");
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible d'approuver cette dépense.");
+      setError(audienceErr(err.message || "Impossible d'approuver cette dépense."));
     }
   }
 
@@ -1788,7 +1793,7 @@ function App() {
       setNotice("Dépense rejetée — vous pouvez la supprimer ou la soumettre à nouveau après correction.");
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible de rejeter cette dépense.");
+      setError(audienceErr(err.message || "Impossible de rejeter cette dépense."));
     }
   }
 
@@ -1808,7 +1813,7 @@ function App() {
       );
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible d'enregistrer la clôture comptable.");
+      setError(audienceErr(err.message || "Impossible d'enregistrer la clôture comptable."));
     }
   }
 
@@ -1828,7 +1833,7 @@ function App() {
       setNotice("Clôture levée.");
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible de lever la clôture.");
+      setError(audienceErr(err.message || "Impossible de lever la clôture."));
     }
   }
 
@@ -1848,7 +1853,7 @@ function App() {
       setLastPortalIssue(data);
       setNotice("Lien portail généré — copiez-le et envoyez-le au client.");
     } catch (err) {
-      setError(err.message || "Impossible de créer le lien portail.");
+      setError(audienceErr(err.message || "Impossible de créer le lien portail."));
     }
   }
 
@@ -1870,7 +1875,7 @@ function App() {
       setSaasDepositResult(data);
       setNotice(data.message || "Dépôt initié.");
     } catch (err) {
-      setError(err.message || "Échec du démarrage du dépôt.");
+      setError(audienceErr(err.message || "Échec du démarrage du dépôt."));
     }
   }
 
@@ -1883,7 +1888,7 @@ function App() {
       setNotice("Paiement vérifié. Actualisation de l'espace…");
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible de lire le statut du dépôt.");
+      setError(audienceErr(err.message || "Impossible de lire le statut du dépôt."));
     }
   }
 
@@ -1911,7 +1916,7 @@ function App() {
       setWithdrawalForm({ ...withdrawalForm, amountUsd: "", mfaCode: "" });
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible de créer le retrait.");
+      setError(audienceErr(err.message || "Impossible de créer le retrait."));
     }
   }
 
@@ -1925,7 +1930,7 @@ function App() {
       setTotpSetupCode("");
       setNotice("Secret Google Authenticator généré.");
     } catch (err) {
-      setError(err.message || "Impossible de démarrer la configuration MFA.");
+      setError(audienceErr(err.message || "Impossible de démarrer la configuration MFA."));
     } finally {
       setTotpSetupLoading(false);
     }
@@ -1942,7 +1947,7 @@ function App() {
       setNotice("Google Authenticator activé pour les retraits.");
       await refresh();
     } catch (err) {
-      setError(err.message || "Code Google Authenticator invalide.");
+      setError(audienceErr(err.message || "Code Google Authenticator invalide."));
     }
   }
 
@@ -1996,7 +2001,7 @@ function App() {
       setNotice("Formule mise à jour.");
       refresh();
     } catch (err) {
-      setError(err.message || "Impossible de mettre à jour la formule.");
+      setError(audienceErr(err.message || "Impossible de mettre à jour la formule."));
     }
   }
 
@@ -2041,7 +2046,7 @@ function App() {
       setNotice(t("Image de marque enregistrée.", "Branding saved."));
     refresh();
     } catch (err) {
-      setError(err.message || t("Échec de l'enregistrement.", "Save failed."));
+      setError(audienceErr(err.message || t("Échec de l'enregistrement.", "Save failed.")));
     }
   }
 
@@ -2070,7 +2075,7 @@ function App() {
       });
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -2091,7 +2096,7 @@ function App() {
       input.value = "";
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -2112,7 +2117,7 @@ function App() {
       setNotice(t("Bannière Wi‑Fi retirée.", "Wi‑Fi banner removed."));
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -2124,7 +2129,7 @@ function App() {
       await api.downloadCustomersCsv(selectedIspId);
       setNotice("Téléchargement du CSV clients démarré.");
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -2152,7 +2157,7 @@ function App() {
       customerCsvInputRef.current.value = "";
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -2164,7 +2169,7 @@ function App() {
       await api.downloadTeamUsersCsv(selectedIspId);
       setNotice("Téléchargement du CSV équipe démarré.");
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -2197,7 +2202,7 @@ function App() {
       teamCsvInputRef.current.value = "";
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -2217,7 +2222,7 @@ function App() {
     try {
       await api.downloadInvoiceProformaPdf(selectedIspId, invoiceId);
     } catch (err) {
-      setError(err.message || "Impossible de télécharger la facture proforma (PDF).");
+      setError(audienceErr(err.message || "Impossible de télécharger la facture proforma (PDF)."));
     }
   }
 
@@ -2257,7 +2262,7 @@ function App() {
       setNotice(t("Membre d'équipe enregistré.", "Team member saved."));
       refresh();
     } catch (err) {
-      setError(err.message || t("Échec de la mise à jour.", "Update failed."));
+      setError(audienceErr(err.message || t("Échec de la mise à jour.", "Update failed.")));
     }
   }
 
@@ -2275,7 +2280,7 @@ function App() {
       setNotice("Mot de passe réinitialisé. L'utilisateur devra le changer à la prochaine connexion.");
       refresh();
     } catch (err) {
-      setError(err.message || "Échec de la réinitialisation du mot de passe.");
+      setError(audienceErr(err.message || "Échec de la réinitialisation du mot de passe."));
     }
   }
 
@@ -2303,7 +2308,7 @@ function App() {
       setNotice(t("Compte suspendu globalement.", "Account suspended globally."));
       refresh();
     } catch (err) {
-      setError(err.message || t("Échec.", "Failed."));
+      setError(audienceErr(err.message || t("Échec.", "Failed.")));
     }
   }
 
@@ -2319,7 +2324,7 @@ function App() {
       );
       refresh();
     } catch (err) {
-      setError(err.message || t("Échec.", "Failed."));
+      setError(audienceErr(err.message || t("Échec.", "Failed.")));
     }
   }
 
@@ -2426,7 +2431,7 @@ function App() {
       );
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -2449,7 +2454,7 @@ function App() {
       setCustomerEmailForm({ customerId: "", email: "", fieldAgentId: "" });
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -2557,7 +2562,7 @@ function App() {
       );
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -2570,7 +2575,7 @@ function App() {
       );
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -2583,7 +2588,7 @@ function App() {
       );
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -2597,7 +2602,7 @@ function App() {
       );
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -3891,6 +3896,7 @@ function App() {
           items={ispAnnouncementsManage}
           t={t}
           isEn={isEn}
+          staffUser={user}
           onRefresh={refresh}
         />
       ) : null}

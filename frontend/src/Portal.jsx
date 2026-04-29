@@ -6,6 +6,7 @@ import HomeShortcut from "./HomeShortcut.jsx";
 import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
 import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { portalBrandTitle, portalInvoiceStatusLabel, portalT } from "./portalCopy.js";
+import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 
 const SUBSCRIBER_JWT_KEY = "subscriberJwt";
 const DEFAULT_PAWAPAY_NETWORKS = [
@@ -100,6 +101,11 @@ export default function Portal() {
   const [mobilePaySession, setMobilePaySession] = useState(null);
   const uiLang = useReadOnlyUiLang();
   const t = useCallback((key) => portalT(uiLang, key), [uiLang]);
+  const isEnPortal = uiLang === "en";
+  const portalErr = useCallback(
+    (raw) => sanitizeApiErrorForAudience(String(raw ?? ""), null, isEnPortal),
+    [isEnPortal]
+  );
 
   const loadSession = useCallback(
     async (a) => {
@@ -142,7 +148,7 @@ export default function Portal() {
     if (auth.type === "subscriber" && !auth.jwt) return;
     loadSession(auth).catch((e) => {
       setPortalAnnouncements([]);
-      setError(e.message);
+      setError(portalErr(e.message));
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- bootstrap from URL or stored subscriber JWT
 
@@ -180,7 +186,7 @@ export default function Portal() {
       }
       await loadSession(next);
     } catch (err) {
-      setError(err.message);
+      setError(portalErr(err.message));
       setSession(null);
     }
   }
@@ -204,7 +210,7 @@ export default function Portal() {
         setNotice(t("noticeMustPwd"));
       }
     } catch (err) {
-      setError(err.message);
+      setError(portalErr(err.message));
       setSession(null);
     }
   }
@@ -226,7 +232,7 @@ export default function Portal() {
       setNotice(t("noticePwdSaved"));
       await loadSession(next);
     } catch (err) {
-      setError(err.message);
+      setError(portalErr(err.message));
     }
   }
 
@@ -252,7 +258,7 @@ export default function Portal() {
       setTidForm({ invoiceId: "", tid: "", submittedByPhone: "", amountUsd: "" });
       await loadSession(auth);
     } catch (err) {
-      setError(err.message);
+      setError(portalErr(err.message));
     }
   }
 
@@ -269,7 +275,7 @@ export default function Portal() {
       setMobilePaySession(res);
       setNotice(res.message || t("noticeMobileSent"));
     } catch (err) {
-      setError(err.message || t("errMobileStart"));
+      setError(portalErr(err.message || t("errMobileStart")));
     }
   }
 
@@ -286,7 +292,7 @@ export default function Portal() {
         await loadSession(auth);
       }
     } catch (err) {
-      setError(err.message || t("errMobileCheck"));
+      setError(portalErr(err.message || t("errMobileCheck")));
     }
   }
 

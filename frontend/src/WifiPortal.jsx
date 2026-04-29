@@ -12,6 +12,7 @@ import {
   IconZap
 } from "./icons.jsx";
 import { wifiT } from "./wifiCopy.js";
+import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 
 function wifiDisplayName(name, lang) {
   const s = name != null ? String(name).trim() : "";
@@ -68,6 +69,9 @@ export default function WifiPortal() {
   const [postPaySetup, setPostPaySetup] = useState(null);
   const uiLang = useReadOnlyUiLang();
   const t = (key) => wifiT(uiLang, key);
+  const isEn = uiLang === "en";
+
+  const wifiErr = (raw) => sanitizeApiErrorForAudience(String(raw ?? ""), null, isEn);
 
   const loadCatalog = useCallback(async (isp) => {
     setError("");
@@ -93,7 +97,7 @@ export default function WifiPortal() {
 
   useEffect(() => {
     if (!ispIdFromQuery) return;
-    loadCatalog(ispIdFromQuery).catch((e) => setError(e.message));
+    loadCatalog(ispIdFromQuery).catch((e) => setError(wifiErr(e.message)));
   }, [ispIdFromQuery, loadCatalog]);
 
   async function onOpenCatalog(e) {
@@ -101,7 +105,7 @@ export default function WifiPortal() {
     try {
       await loadCatalog(ispIdInput.trim());
     } catch (err) {
-      setError(err.message);
+      setError(wifiErr(err.message));
     }
   }
 
@@ -148,7 +152,7 @@ export default function WifiPortal() {
       setNotice(res.message || t("noticePhone"));
       setPolling(true);
     } catch (err) {
-      setError(err.message || t("errPayStart"));
+      setError(wifiErr(err.message || t("errPayStart")));
     }
   }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, publicAssetUrl, setAuthToken } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import { IconArrowLeft } from "./icons.jsx";
+import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 
 function resolveSignupTitle(displayName) {
   const s = displayName != null ? String(displayName).trim() : "";
@@ -53,7 +54,7 @@ export default function Signup() {
     api
       .getPublicPlatformPackages()
       .then(setPackages)
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(sanitizeApiErrorForAudience(e.message, null, isEn)));
   }, []);
 
   useEffect(() => {
@@ -71,8 +72,8 @@ export default function Signup() {
     if (!packages.length) {
       setError(
         isEn
-          ? "Plans are unavailable. Please check backend/API connection."
-          : "Aucune formule disponible. Vérifiez la connexion backend/API."
+          ? "We couldn’t load the plans. Wait a moment and try again."
+          : "Les formules ne se chargent pas pour l’instant. Réessayez dans une minute."
       );
       return;
     }
@@ -84,7 +85,9 @@ export default function Signup() {
       );
       window.location.href = "/";
     } catch (err) {
-      setError(err.message || (isEn ? "Could not create account" : "Inscription impossible"));
+      setError(
+        sanitizeApiErrorForAudience(err.message || (isEn ? "Could not create account" : "Inscription impossible"), null, isEn)
+      );
     }
   }
 

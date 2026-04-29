@@ -145,9 +145,9 @@ const SERVICES = [
 
 const CEO_BIO_FALLBACK = {
   bioFr:
-    "Entrepreneur et ingénieur, Jeff Buleli porte une vision produit où facturation ISP, équipes terrain et abonnés s’alignent sur une information fiable au service de l’innovation durable des opérateurs en Afrique.",
+    "Jeff Buleli mêle entrepreneurship et terrain : il façonne une suite qui aide les FAI africains à aligner trésorerie, terrain et fidélité abonnés.",
   bioEn:
-    "An entrepreneur-engineer, Jeff aligns product ambition with operational reality — connecting billing, field teams and subscribers with dependable insight through sustainable ISP innovation across Africa."
+    "Jeff blends product instincts with ISP operations—bringing billing clarity, crews and subscriber trust under one sane roof across Africa."
 };
 
 function ServiceIcon({ type }) {
@@ -247,27 +247,27 @@ const TESTIMONIALS = [
   {
     fr: {
       quote:
-        "La facturation et les suspensions automatiques nous ont fait gagner un temps précieux. L'équipe voit enfin la même vérité sur les impayés.",
+        "On a enfin repris la main sur les impayés : la facturation et les coupures automatiques nous font gagner des heures chaque semaine, et tout le monde lit la même carte.",
       name: "Claire M.",
       role: "Directrice opérations, FAI urbain"
     },
     en: {
       quote:
-        "Automated billing and suspensions saved us countless hours. Everyone finally sees the same picture on overdue accounts.",
+        "We finally stopped chasing invoices blindly—automations and coordinated suspensions buy us serious time, and the whole desk sees one story.",
       name: "Claire M.",
-      role: "COO, urban ISP"
+      role: "Operations lead, urban ISP"
     }
   },
   {
     fr: {
       quote:
-        "Le portail client et les paiements Mobile Money réduisent les appels « ma facture ». Les TID sont traitées sans doublon.",
+        "Les appels « où est ma facture ? » ont baissé : le portail et le Mobile Money règlent avant qu’il ne faille téléphoner trois fois.",
       name: "Josué K.",
       role: "Responsable support"
     },
     en: {
       quote:
-        "The customer portal and Mobile Money cut down 'where is my invoice?' calls. TIDs are handled without duplicates.",
+        "Fewer 'where’s my invoice?' calls—the portal plus mobile money clears things before folks need another phone chase.",
       name: "Josué K.",
       role: "Support lead"
     }
@@ -275,13 +275,13 @@ const TESTIMONIALS = [
   {
     fr: {
       quote:
-        "MikroTik et le suivi des événements de provisioning nous permettent de réactiver un abonné payé en quelques clics.",
+        "Les évènements provisioning et MikroTik parlent ensemble : quelqu’un paie → on peut rétablir l’accès sans bricoler le routeur depuis un SMS.",
       name: "Patrick N.",
       role: "Ingénieur réseau"
     },
     en: {
       quote:
-        "MikroTik plus provisioning events let us turn a paid subscription back on in just a few clicks.",
+        "Provisioning events tied to MikroTik logs mean paying a bill can flip service back without a router hunt over SMS chains.",
       name: "Patrick N.",
       role: "Network engineer"
     }
@@ -292,61 +292,61 @@ const FAQ_ITEMS = [
   {
     fr: {
       q: "Proposez-vous un essai ?",
-      a: "Oui : les nouveaux espaces entreprise bénéficient d'une période d'essai (selon la configuration de la plateforme). Vous pouvez créer un compte et explorer le tableau de bord avant de souscrire."
+      a: "Oui : les nouveaux espaces bénéficient d’une période de test (durée suivant ce que définit votre hébergement McBuleli). Ouvrir un compte suffit pour se promener dans les écrans."
     },
     en: {
       q: "Do you offer a trial?",
-      a: "Yes—new workspaces get a trial period (per platform settings). Create an account and explore the dashboard before subscribing."
+      a: "Yes—fresh workspaces inherit a guided trial whose length mirrors what your McBuleli administrator configured. Signing up unlocks exploration before you subscribe."
     }
   },
   {
     fr: {
-      q: "Quels moyens de paiement sont pris en charge ?",
-      a: "Mobile Money et autres canaux configurés sur votre espace, virement, espèces, passerelles avec rappel serveur (webhook), et file de vérification manuelle des références de paiement (TID)."
+      q: "Quels paiements fonctionnent avec McBuleli ?",
+      a: "Mobile Money où vous l’activez, virement, espèce, paiement en passerelle lorsque vos opérateurs le permettent, et une petite file qui fait relire vos références TID à un humain quand nécessaire."
     },
     en: {
-      q: "Which payment methods are supported?",
-      a: "Mobile Money and other channels configured in your workspace, bank transfer, cash, gateways with server callbacks, and a manual TID verification queue."
+      q: "Which payment rails can we use?",
+      a: "Mobile money where enabled, transfers, cash, gateway flows when carriers expose them, and a lightweight queue whenever someone must eyeball a TID before crediting revenue."
     }
   },
   {
     fr: {
-      q: "McBuleli fonctionne-t-il avec MikroTik ?",
-      a: "Oui : provisioning PPPoE et Hotspot via l'API REST, journal des événements, synchronisation optionnelle FreeRADIUS sur la même base PostgreSQL."
+      q: "McBuleli connaît-il MikroTik ?",
+      a: "Oui — PPPoE, Hotspot, profils réseau : on pousse vos réglages depuis l’API REST, conserve un journal lisible pour le support et, si vous déployez RADIUS là où vous décidez, la même base Postgres peut suivre vos sessions."
     },
     en: {
-      q: "Does McBuleli work with MikroTik?",
-      a: "Yes—PPPoE and Hotspot provisioning via REST API, event logs, and optional FreeRADIUS sync on the same PostgreSQL database."
+      q: "Does McBuleli integrate with MikroTik?",
+      a: "Yes—think PPPoE, hotspot tiers, scripted pushes through the RouterOS REST hooks, searchable events for your helpdesk, optional FreeRADIUS sync when you bolt it onto the same Postgres footprint."
     }
   },
   {
     fr: {
-      q: "Les abonnés ont-ils un portail dédié ?",
-      a: "Oui : factures, abonnements, paiement Mobile Money, envoi de TID et connexion par téléphone / jeton selon la configuration de votre FAI."
+      q: "Les abonnés ont-ils un portail leur parlant directement ?",
+      a: "Oui — factures, statut du service, paiement Mobile Money, envoi TID, téléphone comme identifiant : vous choisissez ce qui doit apparaître pour le FAI actif."
     },
     en: {
-      q: "Is there a subscriber portal?",
-      a: "Yes—invoices, subscriptions, Mobile Money checkout, TID submission, and phone or token-based login per your ISP setup."
+      q: "Is there a subscriber-facing portal?",
+      a: "They get invoices, service status, mobile payouts, TID flows, SMS-style phone logins—whatever you expose for each ISP persona."
     }
   },
   {
     fr: {
-      q: "Plusieurs utilisateurs et rôles sont-ils possibles ?",
-      a: "Oui : super-admin plateforme, gestionnaire, admin FAI, facturation, NOC, agents terrain, avec profils d'accréditation configurables."
+      q: "Plusieurs équipes peuvent-elles vivre ensemble sur la même instance ?",
+      a: "Oui — direction, équipe facturation, NOC ou agents terrain reçoivent des rôles dédiés, et vous pouvez raffiner leurs périmètres sans dupliquer l’infra."
     },
     en: {
-      q: "Can we have multiple users and roles?",
-      a: "Yes—platform super-admin, company manager, ISP admin, billing, NOC, field agents, with configurable accreditation profiles."
+      q: "Can departments share one deployment?",
+      a: "Yes—finance, provisioning, technicians and field reps each inherit tailored roles plus guardrails instead of spawning another standalone stack."
     }
   },
   {
     fr: {
-      q: "Où sont hébergées les données ?",
-      a: "Vous déployez le backend (par ex. Render, VPS) et la base PostgreSQL où vous le souhaitez. McBuleli est conçu pour rester sous votre contrôle opérationnel."
+      q: "Où restent tout simplement nos données ?",
+      a: "Chez vous : vous décidez du serveur, du Postgres et du périmètre réseau. McBuleli doit rester un outillage que vous supervisez jusqu’aux sauvegardes."
     },
     en: {
-      q: "Where is data hosted?",
-      a: "You run the backend (e.g. Render, VPS) and PostgreSQL where you choose. McBuleli is built to stay under your operational control."
+      q: "Where does our data physically live?",
+      a: "Wherever you provision the backend—you pick the Postgres host, VPC and backup cadence. McBuleli behaves like software you supervise end to end."
     }
   }
 ];
@@ -392,8 +392,11 @@ export default function PublicSite() {
         label: t("Modules métier dans une même application", "Business modules inside one suite")
       },
       {
-        value: "AI",
-        label: t("Assistants augmentés prévus dans la roadmap", "Augmented assistants on the roadmap")
+        value: "+",
+        label: t(
+          "Le produit bouge sans casser vos habitudes",
+          "Keeps evolving without breaking your onboarding"
+        )
       }
     ],
     [isEn]
@@ -807,8 +810,8 @@ export default function PublicSite() {
             </a>
             <p className="public-footer-tagline">
               {t(
-                "Suite d’exploitation pour fournisseurs d’internet : facturation intelligente, trésorerie, portail clients, télécoms et workflows auditables.",
-                "Operations suite built for broadband providers: intelligent billing, treasury, portals, telemetry and audited workflows."
+                "Tout pour encaisser, piloter vos sites et vos équipes depuis un tableau de bord unique—sans mille feuilles Excel ni messages perdus dans les groupes WhatsApp.",
+                "Billing, network operations and teammate coordination converge in one place—without scattered spreadsheets or lost WhatsApp threads."
               )}
             </p>
           </div>

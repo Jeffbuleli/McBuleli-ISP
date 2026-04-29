@@ -1,5 +1,7 @@
 /**
  * Lightweight histograms (no chart library). Flex bars + optional dailyUsage from /network/stats.
+ * Color tiers: temporal series compare recent points (today vs yesterday vs day-before);
+ * snapshot charts compare each bar against the strongest bar in that chart.
  */
 
 import { formatStaffRole } from "./staffRoleLabels.js";
@@ -13,6 +15,7 @@ function maxOf(arr, pick) {
   return m || 1;
 }
 
+/** Within a single histogram: strongest bar vs rest (roles, KPI snapshot). */
 function tierLevel(value, max) {
   if (max <= 0) return "mid";
   const r = value / max;
@@ -21,8 +24,32 @@ function tierLevel(value, max) {
   return "low";
 }
 
-function BarGroup({ title, subtitle, labels, values, format = (v) => String(v) }) {
-  const max = maxOf(values.map((v) => ({ v })), (x) => x.v);
+/**
+ * Time-ordered bars: mixes proximity to recent window peak with momentum vs yesterday
+ * (previous index) and the day before when available — so « aujourd’hui vs hier / avant-hier » reads visually.
+ */
+function temporalTier(values, index) {
+  const nums = (values || []).map((v) => Number(v ?? 0));
+  if (!nums.length) return "mid";
+  const vmax = Math.max(1e-9, ...nums);
+  const cur = nums[index];
+  const yEst = index > 0 ? nums[index - 1] : cur;
+  const y2 = index > 1 ? nums[index - 2] : yEst;
+
+  const shareOfPeak = cur / vmax;
+  const vsYesterday = yEst > 1e-9 ? cur / yEst : cur > 0 ? 12 : 0;
+  const vsOlder = y2 > 1e-9 ? cur / y2 : vsYesterday;
+
+  if (shareOfPeak >= 0.88 || vsYesterday >= 1.06 || (shareOfPeak >= 0.72 && vsYesterday >= 1.02))
+    return "high";
+  if (shareOfPeak <= 0.3 || vsYesterday <= 0.78 || (vsYesterday <= 0.92 && vsOlder <= 0.88 && shareOfPeak < 0.55))
+    return "low";
+  return "mid";
+}
+
+function BarGroup({ title, subtitle, labels, values, format = (v) => String(v), tierMode = "none" }) {
+  const nums = Array.isArray(values) ? values : [];
+  const max = maxOf(nums.map((v) => ({ v })), (x) => x.v);
   return (
     <div className="dash-hist-group">
       <div className="dash-hist-group-head">
@@ -30,12 +57,20 @@ function BarGroup({ title, subtitle, labels, values, format = (v) => String(v) }
         {subtitle ? <small>{subtitle}</small> : null}
       </div>
       <div className="dash-hist-bars" role="img" aria-label={title}>
-        {values.map((v, i) => {
+        {nums.map((v, i) => {
           const pct = Math.round((Number(v || 0) / max) * 100);
+          let tier = "mid";
+          if (tierMode === "share") tier = tierLevel(Number(v || 0), max);
+          else if (tierMode === "temporal") tier = temporalTier(nums, i);
+          const fillClass =
+            tierMode === "none"
+              ? "dash-hist-bar-fill dash-hist-bar-fill--default"
+              : `dash-hist-bar-fill dash-hist-bar-fill--tier dash-hist-bar-fill--tier-${tier}`;
+
           return (
             <div key={i} className="dash-hist-bar-wrap">
               <div className="dash-hist-bar-track">
-                <div className="dash-hist-bar-fill dash-hist-bar-fill--default" style={{ width: `${pct}%` }} />
+                <div className={fillClass} style={{ width: `${pct}%` }} />
               </div>
               <span className="dash-hist-bar-meta">
                 <abbr title={labels[i]}>{labels[i]}</abbr>
@@ -50,7 +85,8 @@ function BarGroup({ title, subtitle, labels, values, format = (v) => String(v) }
 }
 
 function TeamRolesBarGroup({ title, subtitle, roleKeys, values, isEn, t }) {
-  const max = maxOf(values.map((v) => ({ v })), (x) => x.v);
+  const nums = Array.isArray(values) ? values : [];
+  const max = maxOf(nums.map((v) => ({ v })), (x) => x.v);
   const labels = roleKeys.map((k) => formatStaffRole(k, isEn));
   return (
     <div className="dash-hist-group dash-hist-group--roles">
@@ -59,7 +95,7 @@ function TeamRolesBarGroup({ title, subtitle, roleKeys, values, isEn, t }) {
         {subtitle ? <small>{subtitle}</small> : null}
       </div>
       <div className="dash-hist-bars" role="img" aria-label={title}>
-        {values.map((v, i) => {
+        {nums.map((v, i) => {
           const pct = Math.round((Number(v || 0) / max) * 100);
           const tier = tierLevel(Number(v || 0), max);
           return (
@@ -78,12 +114,6 @@ function TeamRolesBarGroup({ title, subtitle, roleKeys, values, isEn, t }) {
           );
         })}
       </div>
-      <p className="dash-hist-tier-legend">
-        {t(
-          "Légende : vert = part élevée (proche du maximum), orange = moyenne, rouge = faible (à surveiller). Vue instantanée des comptes actifs.",
-          "Legend: green = high share (near max), orange = medium, red = low (watch). Snapshot of active accounts."
-        )}
-      </p>
     </div>
   );
 }
@@ -165,6 +195,7 @@ export default function DashboardHistograms({
           <BarGroup
             title={t("Plateforme (tous FAI)", "Platform (all ISPs)")}
             subtitle={t("Vue créateur système", "System owner view")}
+            tierMode="share"
             labels={[
               t("FAI", "ISPs"),
               t("Clients", "Customers"),
@@ -181,6 +212,7 @@ export default function DashboardHistograms({
             subtitle={networkStats?.period
               ? `${networkStats.period.from} → ${networkStats.period.to}`
               : ""}
+            tierMode="temporal"
             labels={dLabels}
             values={dDevices}
           />
@@ -188,6 +220,7 @@ export default function DashboardHistograms({
           <BarGroup
             title={t("Appareils connectés (télémétrie)", "Connected devices (telemetry)")}
             subtitle={t("Derniers prélèvements MikroTik", "Latest MikroTik snapshots")}
+            tierMode="temporal"
             labels={telLabels}
             values={telVals}
           />
@@ -198,6 +231,7 @@ export default function DashboardHistograms({
               "Collectez la télémétrie ou attendez l’agrégation quotidienne.",
               "Collect telemetry or wait for daily rollups."
             )}
+            tierMode="share"
             labels={[t("PPPoE", "PPPoE"), t("Hotspot", "Hotspot"), t("Sessions", "Sessions")]}
             values={[
               networkStats?.pppoeUsers ?? tenantDashboard?.networkSessions ?? 0,
@@ -209,6 +243,7 @@ export default function DashboardHistograms({
         {daily.length ? (
           <BarGroup
             title={t("Volume trafic agrégé (Go / jour)", "Aggregated traffic (GB / day)")}
+            tierMode="temporal"
             labels={dLabels}
             values={dBw}
             format={(v) => `${Number(v).toFixed(2)} Go`}
@@ -216,6 +251,7 @@ export default function DashboardHistograms({
         ) : null}
         <BarGroup
           title={t("Structure commerciale (espace courant)", "Commercial snapshot (current workspace)")}
+          tierMode="share"
           labels={[
             t("Clients", "Customers"),
             t("Abonnements actifs", "Active subs"),
@@ -231,6 +267,7 @@ export default function DashboardHistograms({
           <BarGroup
             title={t("Encaissements (factures payées)", "Collections (paid invoices)")}
             subtitle={t("Montants groupés par date", "Amounts grouped by date")}
+            tierMode="temporal"
             labels={invLabels}
             values={invVals}
             format={(v) => `${Number(v).toFixed(2)} $`}
@@ -250,6 +287,12 @@ export default function DashboardHistograms({
           />
         ) : null}
       </div>
+      <p className="dash-hist-tier-legend dash-hist-tier-legend--global">
+        {t(
+          "Légende des couleurs (tous ces histogrammes) : vert — niveau fort (proche du maximum de la période ou en hausse nette récente ; comparez aussi les derniers à la veille), orange — niveau moyen, rouge — niveau fragile ou à surveiller (loin du pic récent ou en baisse par rapport aux jours précédents). Sur une série jour par jour (flèche « récent »), le dernier point se lit contre les deux précédents.",
+          "Color legend for every chart above: green — strong performance (near the peak of what’s shown here, or sharply up lately; compare recent bars vs the day before); orange — in the middle; red — weaker or slipping vs recent days. Day-by-day series: read the rightmost bars against yesterday and the day before."
+        )}
+      </p>
     </section>
   );
 }

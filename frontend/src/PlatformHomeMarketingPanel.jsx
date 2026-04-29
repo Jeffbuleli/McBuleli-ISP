@@ -4,6 +4,9 @@ import RichAnnouncementEditor, {
   PUBLIC_PAGE_BODY_PLAIN_MAX,
   PUBLIC_PAGE_TITLE_MAX
 } from "./RichAnnouncementEditor.jsx";
+import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
+
+const PLATFORM_OWNER_STUB = Object.freeze({ role: "system_owner" });
 
 function plainTextLength(html) {
   if (typeof document === "undefined") return String(html || "").replace(/<[^>]*>/g, " ").trim().length;
@@ -126,7 +129,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     try {
       await Promise.all([loadPromos(), loadFooter(), loadFaqAds()]);
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     }
     try {
       await loadAuthCopy();
@@ -136,7 +139,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
     try {
       await loadFounder();
     } catch (err) {
-      setFounderLoadError(err.message || "Error");
+      setFounderLoadError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     }
   }, [loadPromos, loadFooter, loadFaqAds, loadFounder, loadAuthCopy]);
 
@@ -154,7 +157,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       e.target.value = "";
       await loadPromos();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -168,7 +171,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       await api.deleteSystemOwnerHomePromoImage(slot);
       await loadPromos();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -182,7 +185,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       setFounder({ caption: updated.caption ?? "", imageUrl: updated.imageUrl ?? founder.imageUrl });
       setFounderCaptionEdit(updated.caption ?? "");
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -199,7 +202,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       setFounder({ caption: updated.caption ?? founder.caption, imageUrl: updated.imageUrl ?? null });
       setFounderCaptionEdit(updated.caption ?? founderCaptionEdit);
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -213,7 +216,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       const updated = await api.deleteSystemOwnerFounderShowcaseImage();
       setFounder({ caption: updated.caption ?? founder.caption, imageUrl: null });
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -236,7 +239,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       });
       await loadPromos();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -281,7 +284,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       if (footerCreateImageInputRef.current) footerCreateImageInputRef.current.value = "";
       await loadFooter();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -299,7 +302,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       }
       await loadFooter();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -332,7 +335,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       setEditingFooter(null);
       await loadFooter();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -348,7 +351,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       e.target.value = "";
       await loadFooter();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -361,7 +364,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       await api.deleteSystemOwnerFooterBlockImage(id);
       await loadFooter();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -377,7 +380,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       });
       await loadAuthCopy();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -401,7 +404,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       });
       await loadFaqAds();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -415,7 +418,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       await api.deleteSystemOwnerFaqAd(id);
       await loadFaqAds();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -431,7 +434,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       e.target.value = "";
       await loadFaqAds();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -445,7 +448,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
       await api.deleteSystemOwnerFaqAdImage(id);
       await loadFaqAds();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
     } finally {
       setSaving(false);
     }
@@ -753,7 +756,7 @@ export default function PlatformHomeMarketingPanel({ t, isEn }) {
             });
             await loadFaqAds();
           } catch (err) {
-            setError(err.message || "Error");
+            setError(sanitizeApiErrorForAudience(err.message || "Error", PLATFORM_OWNER_STUB, isEn));
           } finally {
             setSaving(false);
           }

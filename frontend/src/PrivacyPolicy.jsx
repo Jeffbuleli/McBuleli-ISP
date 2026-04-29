@@ -37,81 +37,73 @@ export default function PrivacyPolicy() {
         {isEn ? (
           <>
             <p>
-              McBuleli processes limited personal information to operate its
-              platform—authentication, invoicing and support—and to improve reliability and security. This page summarizes
-              that processing in plain language.
+              McBuleli handles the essentials your ISP already tracks every day — logins,
+              invoicing notes, network touchpoints — so crews can troubleshoot without juggling half a dozen
+              spreadsheets. This page summarizes that flow in readable language rather than boilerplate jargon.
             </p>
             <h2>Data we process</h2>
             <p>
-              Typical categories include identifiers you provide during signup or support (such as email, telephone and
-              company name), payment-related metadata needed by your workspace configuration, operational logs strictly
-              required for auditing and troubleshooting, and content you knowingly upload within the product interface.
+              Contact details tied to workspaces, bookkeeping metadata surfaced on invoices or payment rails,
+              operational breadcrumbs your operators already expect (sessions, ticketing notes, uploads you place
+              into the dashboard) and telemetry headers your MikroTik stack sends when you configure it—nothing mystical.
             </p>
             <h2>Why we process it</h2>
             <p>
-              We use information to provision your workspace, deliver billing and network tooling, authenticate users,
-              answer support requests and meet applicable legal retention duties. We do not sell personal information.
+              We keep workspaces provisioned, money flowing, outages visible and support chats grounded in reality.
+              We do not resell identifiable rows to advertisers.
             </p>
-            <h2>Hosting & cross-border transfers</h2>
+            <h2>Hosting & transfers</h2>
             <p>
-              Your deployment geography depends on infrastructure you configure (for example VPS or Render). Please ensure
-              your contracts with infrastructure providers satisfy your locality requirements where applicable.
+              Geography follows your infra contract. If you bolt McBuleli onto a Tunis VPS, Tunis governs egress; plug it
+              into Nairobi, Nairobi does. Coordinate legals with whoever holds the bare metal—not with the UI alone.
             </p>
             <h2>Retention</h2>
             <p>
-              Retention aligns with bookkeeping, invoicing dispute windows and lawful regulatory minimums configured for
-              your deployment. Administrators can export or request deletion paths subject to overriding legal retention.
+              Mirrors your fiscal calendar, ticketing backlog and mandated telecom retention windows wherever you operate.
+              Admins retain exports—the platform won’t magically erase subpoena-grade ledgers sooner than statute allows.
             </p>
             <h2>Your rights</h2>
             <p>
-              Depending on applicable law you may exercise access, correction, portability, restriction or erasure via
-              the contact points listed on app.mcbuleli.live—we respond within commercially reasonable timelines.
+              Depending on locality you can request portability, corrections or suppression when law permits. Ping the
+              address below and specify the workspace—we answer as quickly as a small ops team realistically can.
             </p>
             <h2>Contact</h2>
             <p>
-              Data protection enquiries:{' '}
+              Privacy questions:{' '}
               <a href="mailto:mcbuleli@gmail.com">mcbuleli@gmail.com</a>
             </p>
           </>
         ) : (
           <>
             <p>
-              McBuleli (« nous ») traite uniquement les informations personnelles nécessaires au
-              fonctionnement de la plateforme — authentification, facturation, support — ainsi qu’à la sécurité et à la
-              fiabilité du service.
+              McBuleli concentre ce qu’un FAI gère déjà au quotidien — identités, dossiers financiers et incidents réseau — pour
+              qu’une petite équipe s’y retrouve sans tableurs éclatés partout.
             </p>
-            <h2>Données concernées</h2>
+            <h2>Données traitées</h2>
             <p>
-              Sont habituellement concernés les identifiants fournis lors de l’inscription ou du support (courriel,
-              téléphone, raison sociale), les métadonnées nécessaires à la configuration comptable et de paiement, les
-              journaux techniques indispensables à l&apos;audit ainsi que tout contenu importé volontairement dans
-              l&apos;interface.
+              Coordonnées liées aux espaces, métadonnées comptables apparaissant sur vos factures ou rails de paiement,
+              traces d’activité indispensables aux audits, pièces importées dans l’outil : rien qui ne soit pas nécessaire aux opérations.
             </p>
-            <h2>Fins du traitement</h2>
+            <h2>Pour quoi faire</h2>
             <p>
-              Ces données permettent d&apos;activer l’espace client, de livrer les modules facturation / réseau,
-              d’authentifier les profils, de répondre au support et de respecter nos obligations légales de conservation.
-              Aucune revente de données à des fins publicitaires.
+              Provisionner vos espaces clients, suivre paiements ou suspensions et donner aux équipes un fil conducteur
+              quand ils enquêtent ou relancent. Aucune revente d’informations nominatives hors ce cadre.
             </p>
             <h2>Hébergement et transferts</h2>
             <p>
-              La géographie effective dépend de l&apos;infrastructure que vous sélectionnez pour le backend ; assurez la
-              conformité contractuelle nécessaire côté hébergement lorsque vos activités ont un rattachement local strict.
+              La zone géographique suit votre contrat d’infra. Si vous montez tout sur Genève ou sur Accra,
+              vos engagements locaux prévalent : assurez vos clauses avec l’opérateur qui tient vos machines physiques.
             </p>
-            <h2>Durées</h2>
+            <h2>Conservation</h2>
             <p>
-              La conservation se prolonge tant que la relation contractuelle existe et au-delà pour les durées
-              comptables, réglementaires et contentieuses prescrites par la loi applicable à votre déploiement.
+              Tant que le contrat existe, puis tant que vos obligations légales imposent de garder preuves,
+              dossiers disputés ou historiques télécom réglementaires. Les admins peuvent exporter tant que la loi permet.
             </p>
             <h2>Vos droits</h2>
             <p>
-              Selon le droit applicable, vous pouvez exercer vos droits d’accès, de rectification, de portabilité, de
-              limitation ou de suppression lorsqu’aucune obligation légale contraire ne s’y oppose.
-            </p>
-            <h2>Contact</h2>
-            <p>
-              Questions données personnelles :{' '}
-              <a href="mailto:mcbuleli@gmail.com">mcbuleli@gmail.com</a>
+              Selon votre juridiction : accès, rectification, portabilité ou effacement lorsque rien ne l&apos;interdit.
+              Mentionnez l&apos;entreprise concernée depuis{' '}
+              <a href="mailto:mcbuleli@gmail.com">mcbuleli@gmail.com</a> ; nous suivons vos demandes aussi vite que la petite équipe le permet.
             </p>
           </>
         )}

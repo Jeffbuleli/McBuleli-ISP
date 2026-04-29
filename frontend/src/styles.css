@@ -1520,6 +1520,12 @@ button.btn-secondary-outline:hover:not(:disabled) {
   color: var(--mb-muted);
 }
 
+.dash-hist-tier-legend--global {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+}
+
 .dash-hist-bar-meta {
   display: flex;
   justify-content: space-between;

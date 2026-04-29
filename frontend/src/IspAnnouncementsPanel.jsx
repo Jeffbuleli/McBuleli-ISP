@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { api } from "./api.js";
+import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 import RichAnnouncementEditor, {
   ANNOUNCE_BODY_PLAIN_MAX,
   ANNOUNCE_TITLE_MAX
@@ -16,6 +17,7 @@ export default function IspAnnouncementsPanel({
   items,
   t,
   isEn,
+  staffUser,
   onRefresh
 }) {
   const [title, setTitle] = useState("");
@@ -88,7 +90,7 @@ export default function IspAnnouncementsPanel({
       resetForm();
       await onRefresh();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", staffUser, isEn));
     } finally {
       setSaving(false);
     }
@@ -102,7 +104,7 @@ export default function IspAnnouncementsPanel({
       if (editingId === id) resetForm();
       await onRefresh();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", staffUser, isEn));
     } finally {
       setSaving(false);
     }
@@ -114,7 +116,7 @@ export default function IspAnnouncementsPanel({
       await api.patchAnnouncement(ispId, row.id, { isActive: !row.isActive });
       await onRefresh();
     } catch (err) {
-      setError(err.message || "Error");
+      setError(sanitizeApiErrorForAudience(err.message || "Error", staffUser, isEn));
     } finally {
       setSaving(false);
     }
