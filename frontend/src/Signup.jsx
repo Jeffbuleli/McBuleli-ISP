@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, publicAssetUrl, setAuthToken } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
+import PoweredByMcBuleli from "./PoweredByMcBuleli.jsx";
 import { IconArrowLeft } from "./icons.jsx";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 
@@ -97,7 +98,10 @@ export default function Signup() {
         <img className="auth-simple-logo" src={surfaceLogoSrc} alt={surfaceLogoAlt} width={80} height={80} />
         <h1 className="auth-simple-title">{headlineTitle}</h1>
         {headlineTitle !== "McBuleli" ? (
-          <p className="auth-simple-platform-hint">{isEn ? "Powered by McBuleli" : "Propulsé par McBuleli"}</p>
+          <PoweredByMcBuleli
+            className="auth-simple-powered-by"
+            poweredByLabel={isEn ? "Powered by" : "Propulsé par"}
+          />
         ) : null}
         <p className="auth-simple-sub">
           {isEn ? "Create your workspace — 1-month trial." : "Créez votre espace — essai 1 mois."}

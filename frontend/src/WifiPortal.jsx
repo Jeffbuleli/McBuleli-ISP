@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_URL, publicAssetUrl, publicRequest } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
+import PoweredByMcBuleli from "./PoweredByMcBuleli.jsx";
 import { useReadOnlyUiLang } from "./uiLangSync.js";
 import HomeShortcut from "./HomeShortcut.jsx";
 import {
@@ -501,8 +502,7 @@ export default function WifiPortal() {
       ) : null}
 
       <footer className="mcbuleli-site-footer">
-        <img src={mcbuleliLogoUrl} alt="" width={28} height={28} className="mcbuleli-site-footer__logo" />
-        <p className="mcbuleli-site-powered">{t("mcbuleliFooter")}</p>
+        <PoweredByMcBuleli poweredByLabel={t("mcbuleliPoweredPrefix")} />
       </footer>
     </main>
   );

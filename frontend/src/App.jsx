@@ -13,6 +13,7 @@ import { buildDashboardNavCategories } from "./dashboardNavCategories.js";
 import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
 import PlatformHomeMarketingPanel from "./PlatformHomeMarketingPanel.jsx";
 import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
+import PoweredByMcBuleli from "./PoweredByMcBuleli.jsx";
 import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
@@ -2799,7 +2800,10 @@ function App() {
           />
           <h1 className="auth-simple-title">{tenantSurfaceLogoAlt}</h1>
           {tenantSurfaceLogoAlt !== "McBuleli" ? (
-            <p className="auth-simple-platform-hint">{isEn ? "Powered by McBuleli" : "Propulsé par McBuleli"}</p>
+            <PoweredByMcBuleli
+              className="auth-simple-powered-by"
+              poweredByLabel={isEn ? "Powered by" : "Propulsé par"}
+            />
           ) : null}
           {notice ? (
             <div role="status" className="auth-simple-banner auth-simple-banner--info">
@@ -3004,9 +3008,10 @@ function App() {
           />
           <h1 className="auth-simple-title">{tenantSurfaceLogoAlt}</h1>
           {tenantSurfaceLogoAlt !== "McBuleli" ? (
-            <p className="auth-simple-platform-hint">
-              {isEn ? "Powered by McBuleli" : "Propulsé par McBuleli"}
-            </p>
+            <PoweredByMcBuleli
+              className="auth-simple-powered-by"
+              poweredByLabel={isEn ? "Powered by" : "Propulsé par"}
+            />
           ) : null}
           <p className="auth-simple-sub">
               {t(
@@ -6136,7 +6141,10 @@ function App() {
               </>
             );
           })()}
-          <p className="app-footer-powered">Powered by McBuleli</p>
+          <PoweredByMcBuleli
+            className="app-footer-powered"
+            poweredByLabel={isEn ? "Powered by" : "Propulsé par"}
+          />
         </div>
       </footer>
     </main>

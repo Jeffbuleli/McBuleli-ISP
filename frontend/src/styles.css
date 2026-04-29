@@ -1986,15 +1986,22 @@ button.btn-secondary-outline:hover:not(:disabled) {
   border-color: rgba(21, 101, 216, 0.28);
 }
 
-.app-footer-powered {
-  margin: 12px 0 0;
+.app-footer-powered.mcbuleli-powered-line {
+  margin: 14px auto 0;
   width: 100%;
+  justify-content: center;
+}
+
+.app-footer-powered .mcbuleli-powered-line__text {
   font-size: 0.82rem;
   letter-spacing: normal;
   text-transform: none;
+  opacity: 0.92;
   color: var(--mb-muted);
-  opacity: 0.88;
-  text-align: center;
+}
+
+.app-footer-powered .mcbuleli-powered-line__brand {
+  color: var(--mb-text);
 }
 
 .app-footer-brand {
@@ -2997,14 +3004,25 @@ body:has(.auth-simple--dark) {
   color: #fafafa;
 }
 
-.auth-simple--dark .auth-simple-platform-hint {
-  text-align: center;
-  margin: -4px 0 14px;
-  font-size: 0.78rem;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #63b38f;
+.auth-simple--dark .auth-simple-powered-by.mcbuleli-powered-line {
+  justify-content: center;
+  margin: -2px auto 14px;
+}
+
+.auth-simple--dark .auth-simple-powered-by .mcbuleli-powered-line__text {
+  font-size: 0.8rem;
+  color: #aeb4bf;
+}
+
+.auth-simple--dark .auth-simple-powered-by .mcbuleli-powered-line__brand {
+  color: #e8eaef;
+}
+
+.auth-simple--dark .auth-simple-powered-by .mcbuleli-powered-line__logo {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px;
+  box-sizing: border-box;
 }
 
 .auth-simple--dark .auth-simple-sub,
@@ -4469,27 +4487,45 @@ a.public-footer-card:hover {
   object-position: center;
 }
 
+/* Ligne compacte McBuleli — logo petit + texte harmonisé (portails, auth, pied de page) */
+.mcbuleli-powered-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mcbuleli-powered-line__logo {
+  flex-shrink: 0;
+  display: block;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.mcbuleli-powered-line__text {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--mb-muted);
+}
+
+.mcbuleli-powered-line__prefix {
+  font-weight: 400;
+}
+
+.mcbuleli-powered-line__brand {
+  font-weight: 700;
+}
+
 .mcbuleli-site-footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-direction: column;
-  gap: 10px;
   margin-top: 28px;
-  padding: 20px 12px 12px;
+  padding: 18px 12px 14px;
   border-top: 1px solid rgba(93, 64, 55, 0.12);
   text-align: center;
-}
-
-.mcbuleli-site-footer__logo {
-  flex-shrink: 0;
-  border-radius: 12px;
-  width: clamp(44px, 14vw, 56px);
-  height: clamp(44px, 14vw, 56px);
-  object-fit: contain;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 4px;
-  box-sizing: border-box;
 }
 
 .mcbuleli-site-footer p,
@@ -4511,6 +4547,23 @@ a.public-footer-card:hover {
 .wifi-portal-page--dark .mcbuleli-site-footer p,
 .wifi-portal-page--dark .mcbuleli-site-powered {
   color: #aeb4bf;
+}
+
+.portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__text,
+.wifi-portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__text {
+  color: #aeb4bf;
+}
+
+.portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__brand,
+.wifi-portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__brand {
+  color: #e4e8ee;
+}
+
+.portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__logo,
+.wifi-portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__logo {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px;
+  box-sizing: border-box;
 }
 
 .portal-login-grid {

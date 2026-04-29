@@ -4,6 +4,7 @@ import { mcbuleliLogoUrl } from "./brandAssets.js";
 import { useReadOnlyUiLang } from "./uiLangSync.js";
 import HomeShortcut from "./HomeShortcut.jsx";
 import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
+import PoweredByMcBuleli from "./PoweredByMcBuleli.jsx";
 import { IconPhone } from "./icons.jsx";
 import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { portalBrandTitle, portalInvoiceStatusLabel, portalT } from "./portalCopy.js";
@@ -636,8 +637,7 @@ export default function Portal() {
         <footer className="portal-tenant-footer">{brand.portalFooterText}</footer>
       ) : null}
       <footer className="mcbuleli-site-footer">
-        <img src={mcbuleliLogoUrl} alt="" width={28} height={28} className="mcbuleli-site-footer__logo" />
-        <p className="mcbuleli-site-powered">{t("mcbuleliFooter")}</p>
+        <PoweredByMcBuleli poweredByLabel={t("mcbuleliPoweredPrefix")} />
       </footer>
     </main>
     <PwaInstallPrompt enabled={portalPwaSubscriberReady} workspaceLabel={portalWorkspaceLabel} isEn={uiLang === "en"} />
