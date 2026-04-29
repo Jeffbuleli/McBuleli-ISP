@@ -5,6 +5,7 @@ import { useReadOnlyUiLang } from "./uiLangSync.js";
 import HomeShortcut from "./HomeShortcut.jsx";
 import {
   IconAntenna,
+  IconPhone,
   IconSignalBars,
   IconSmartphone,
   IconWallet,
@@ -210,7 +211,7 @@ export default function WifiPortal() {
     <main className="container wifi-portal-page wifi-portal-page--dark">
       <section className="wifi-hero" aria-label={uiLang === "en" ? "Wi‑Fi guest overview" : "Présentation Wi‑Fi"}>
         <div className="wifi-hero-top">
-          <div>
+          <div className="wifi-hero-intro">
             <p className="eyebrow">{wifiEyebrowText(branding, uiLang, t)}</p>
             <h1>{t("heroTitle")}</h1>
             <p className="wifi-lead">{t("heroLead")}</p>
@@ -224,8 +225,14 @@ export default function WifiPortal() {
             <p className="wifi-isp-contact__title">{t("contactTitle")}</p>
             <ul className="wifi-isp-contact__list">
               {branding.contactPhone ? (
-                <li>
-                  <span className="wifi-isp-contact__label">{t("contactPhone")}</span>{" "}
+                <li className="wifi-isp-contact__line">
+                  <span
+                    className="wifi-isp-contact__label wifi-isp-contact__label--icon"
+                    title={t("contactPhone")}
+                  >
+                    <IconPhone width={18} height={18} aria-hidden />
+                    <span className="visually-hidden">{t("contactPhone")}</span>
+                  </span>
                   <a href={`tel:${String(branding.contactPhone).replace(/\s+/g, "")}`}>{branding.contactPhone}</a>
                 </li>
               ) : null}

@@ -4,6 +4,7 @@ import { mcbuleliLogoUrl } from "./brandAssets.js";
 import { useReadOnlyUiLang } from "./uiLangSync.js";
 import HomeShortcut from "./HomeShortcut.jsx";
 import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
+import { IconPhone } from "./icons.jsx";
 import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { portalBrandTitle, portalInvoiceStatusLabel, portalT } from "./portalCopy.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
@@ -329,38 +330,32 @@ export default function Portal() {
       }}
     >
       <header className="portal-hero">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 16,
-            flexWrap: "wrap"
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div
-              className="isp-enduser-brand-head__logo-wrap"
-              style={{ borderColor: brand?.primaryColor || "#43a047" }}
-            >
-              <img
-                className="portal-hero-logo"
-                src={portalLogoSrc}
-                alt={
-                  brand?.displayName != null && String(brand.displayName).trim()
-                    ? String(brand.displayName).trim()
-                    : portalT(uiLang, "brandFallbackTitle")
-                }
-                width={40}
-                height={40}
-                style={{ width: 40, height: 40, objectFit: "contain" }}
-              />
-            </div>
-            <div>
-              <p className="eyebrow">{t("eyebrow")}</p>
-              <h1 style={{ color: brand?.primaryColor || "#5d4037", margin: 0 }}>
-                {portalBrandTitle(brand?.displayName, uiLang)}
-              </h1>
+        <div className="portal-hero-head">
+          <div className="portal-hero-intro">
+            <div className="portal-hero-brandline">
+              <div
+                className="isp-enduser-brand-head__logo-wrap"
+                style={{ borderColor: brand?.primaryColor || "#43a047" }}
+              >
+                <img
+                  className="portal-hero-logo"
+                  src={portalLogoSrc}
+                  alt={
+                    brand?.displayName != null && String(brand.displayName).trim()
+                      ? String(brand.displayName).trim()
+                      : portalT(uiLang, "brandFallbackTitle")
+                  }
+                  width={40}
+                  height={40}
+                  style={{ width: 40, height: 40, objectFit: "contain" }}
+                />
+              </div>
+              <div>
+                <p className="eyebrow">{t("eyebrow")}</p>
+                <h1 style={{ color: brand?.primaryColor || "#5d4037", margin: 0 }}>
+                  {portalBrandTitle(brand?.displayName, uiLang)}
+                </h1>
+              </div>
             </div>
           </div>
           <div className="portal-hero-toolbar portal-hero-toolbar--end">
@@ -389,8 +384,11 @@ export default function Portal() {
             <p className="portal-isp-contact__title">{t("contactTitle")}</p>
             <ul className="portal-isp-contact__list">
               {brand.contactPhone ? (
-                <li>
-                  <span className="portal-isp-contact__label">{t("contactPhone")}</span>{" "}
+                <li className="portal-isp-contact__line">
+                  <span className="portal-isp-contact__label portal-isp-contact__label--icon" title={t("contactPhone")}>
+                    <IconPhone width={18} height={18} aria-hidden />
+                    <span className="visually-hidden">{t("contactPhone")}</span>
+                  </span>
                   <a href={`tel:${String(brand.contactPhone).replace(/\s+/g, "")}`}>{brand.contactPhone}</a>
                 </li>
               ) : null}

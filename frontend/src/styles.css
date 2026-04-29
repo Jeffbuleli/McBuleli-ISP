@@ -4307,11 +4307,14 @@ a.public-footer-card:hover {
 }
 
 .wifi-hero-top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px 16px;
+}
+
+.wifi-hero-intro {
+  min-width: 0;
 }
 
 .wifi-hero h1 {
@@ -4357,6 +4360,45 @@ a.public-footer-card:hover {
   display: grid;
   gap: 8px;
   font-size: 0.95rem;
+}
+
+.wifi-isp-contact__list > li,
+.portal-isp-contact__list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.portal-isp-contact__label--icon,
+.wifi-isp-contact__label--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--mb-muted);
+}
+
+.portal-page--dark .portal-isp-contact__label--icon,
+.wifi-portal-page--dark .wifi-isp-contact__label--icon {
+  color: #9ea8b8;
+}
+
+.portal-hero-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px 16px;
+}
+
+.portal-hero-intro {
+  min-width: 0;
+}
+
+.portal-hero-brandline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .wifi-isp-contact__label {
