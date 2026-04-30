@@ -13,6 +13,9 @@ function categoryIdForItemHref(categories, href) {
 export default function DashboardSideNav({
   t,
   user,
+  workspaceTitle,
+  companyLogoSrc,
+  userRoleLabel,
   isFieldAgent,
   navSearch,
   setNavSearch,
@@ -89,6 +92,26 @@ export default function DashboardSideNav({
       aria-label={t("Navigation du tableau de bord", "Dashboard navigation")}
     >
       <div className={compact ? "dashboard-sidenav-inner dashboard-sidenav-inner--compact-scroll" : "dashboard-sidenav-inner"}>
+        <div className={`mb-sidenav-top${compact ? " mb-sidenav-top--compact" : ""}`}>
+          <div className="mb-sidenav-top__brand">
+            {companyLogoSrc ? (
+              <img className="mb-sidenav-top__logo" src={companyLogoSrc} alt="" width={40} height={40} loading="lazy" decoding="async" />
+            ) : (
+              <div className="mb-sidenav-top__logo mb-sidenav-top__logo--fallback" aria-hidden>
+                MB
+              </div>
+            )}
+            {!compact ? (
+              <div className="mb-sidenav-top__text">
+                <p className="mb-sidenav-top__company">{workspaceTitle || t("Espace opérateur", "Operator workspace")}</p>
+                <p className="mb-sidenav-top__user">
+                  <strong>{user?.fullName || "—"}</strong>
+                  {userRoleLabel ? <span className="mb-sidenav-top__role"> · {userRoleLabel}</span> : null}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </div>
         {typeof onToggleNavCompact === "function" ? (
           <div
             className="dashboard-sidenav-toolbar"

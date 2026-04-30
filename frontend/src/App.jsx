@@ -1,13 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
-import DashboardBannerCarousel from "./DashboardBannerCarousel.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
-import DashboardTeamChatButton from "./DashboardTeamChatButton.jsx";
 import TeamChatPanel from "./TeamChatPanel.jsx";
 import DashboardSideNav from "./DashboardSideNav.jsx";
 import DashboardMobileSheetMenu from "./DashboardMobileSheetMenu.jsx";
 import DashboardScreenGate from "./DashboardScreenGate.jsx";
-import DashboardStaffProfileAvatar from "./DashboardStaffProfileAvatar.jsx";
+import DashboardTopBar from "./DashboardTopBar.jsx";
+import DashboardStickyBanner from "./DashboardStickyBanner.jsx";
 import { useDashboardMobilePath } from "./useDashboardMobilePath.js";
 import { buildDashboardNavCategories } from "./dashboardNavCategories.js";
 import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
@@ -25,9 +24,7 @@ import {
   IconArrowLeft,
   IconHome,
   IconMail,
-  IconMenuHamburger,
-  IconPhone,
-  IconSignOut
+  IconPhone
 } from "./icons.jsx";
 
 const DashboardHistograms = lazy(() => import("./DashboardHistograms.jsx"));
@@ -3072,172 +3069,37 @@ function App() {
     <>
     <main className={`container app-shell app-shell--dashboard-dark${isMobileShell ? " app-shell--mobile-pwa" : ""}`}>
       <div className="dashboard-sticky-stack">
-        <header className="app-header app-header--dashboard">
-          {!isMobileShell ? (
-            <>
-              <div className="dashboard-header-top">
-                <div className="dashboard-brandline">
-                  <img
-                    className={
-                      dashboardTenantLogoSrc ? "dashboard-logo dashboard-logo--tenant" : "dashboard-logo dashboard-logo--mcbuleli"
-                    }
-                    src={dashboardTenantLogoSrc || mcbuleliLogoUrl}
-                    alt={
-                      dashboardTenantLogoSrc
-                        ? String(
-                            workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) ||
-                              branding?.displayName ||
-                              "Logo entreprise"
-                          ).trim() || "Logo entreprise"
-                        : "McBuleli"
-                    }
-                    width={44}
-                    height={44}
-                  />
-                  <div className="dashboard-brand-text">
-                    <h1>
-                      {workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) ||
-                        t("Espace opérateur", "Operator workspace")}
-                    </h1>
-                    <p className="app-meta dashboard-user-role">
-                      <strong>{user.fullName}</strong>
-                      <span className="dashboard-role-paren"> ({formatStaffRole(user.role, isEn)})</span>
-                    </p>
-                  </div>
-                </div>
-                <div className="dashboard-header-ad">
-                  {user?.dashboardBanners?.length ? (
-                    <DashboardBannerCarousel slides={user.dashboardBanners} layout="inline" />
-                  ) : user?.dashboardBannerHtml ? (
-                    <div
-                      className="dashboard-ad-slot dashboard-ad-slot--inline"
-                      dangerouslySetInnerHTML={{ __html: user.dashboardBannerHtml }}
-                    />
-                  ) : showDashboardHeaderPromos ? (
-                    <PublicHomePromos t={t} isEn={isEn} variant="dashboard" />
-                  ) : null}
-                </div>
-                <div
-                  className="dashboard-toolbar dashboard-toolbar--icons"
-                  role="toolbar"
-                  aria-label={t("Navigation", "Navigation")}
-                >
-                  {dashboardChatIspId ? (
-                    <DashboardTeamChatButton
-                      unreadCount={teamChatUnread}
-                      t={t}
-                      variant="desktop"
-                      onClick={() => setTeamChatOpen((o) => !o)}
-                    />
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn-icon-toolbar"
-                    onClick={onLogout}
-                    title={t("Sortie — déconnexion", "Sign out")}
-                    aria-label={t("Déconnexion", "Logout")}
-                  >
-                    <IconSignOut width={22} height={22} />
-                  </button>
-                  <a
-                    className="btn-icon-toolbar"
-                    href="/?site=public"
-                    title={t("Site public (accueil)", "Public site (home)")}
-                    aria-label={t("Site public", "Public site")}
-                  >
-                    <IconHome width={22} height={22} />
-                  </a>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="dashboard-header-top dashboard-header-top--mobile-pwa">
-                <div className="dashboard-brandline dashboard-brandline--mobile-pwa">
-                  <img
-                    className={
-                      dashboardTenantLogoSrc ? "dashboard-logo dashboard-logo--tenant" : "dashboard-logo dashboard-logo--mcbuleli"
-                    }
-                    src={dashboardTenantLogoSrc || mcbuleliLogoUrl}
-                    alt={
-                      dashboardTenantLogoSrc
-                        ? String(
-                            workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) ||
-                              branding?.displayName ||
-                              "Logo entreprise"
-                          ).trim() || "Logo entreprise"
-                        : "McBuleli"
-                    }
-                    width={40}
-                    height={40}
-                  />
-                  <div className="dashboard-brand-text">
-                    <h1 className="dashboard-brand-text__title">
-                      {workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) ||
-                        t("Espace opérateur", "Operator workspace")}
-                    </h1>
-                    <p className="dashboard-brand-text__subtitle app-meta">
-                      <span className="dashboard-brand-text__user-name">{user.fullName}</span>
-                      <span className="dashboard-role-paren"> · {formatStaffRole(user.role, isEn)}</span>
-                    </p>
-                  </div>
-                </div>
-                <div className="dashboard-mobile-toolbar-row" role="toolbar" aria-label={t("Raccourcis", "Shortcuts")}>
-                  {dashboardChatIspId ? (
-                    <DashboardTeamChatButton
-                      unreadCount={teamChatUnread}
-                      t={t}
-                      variant="mobile"
-                      onClick={() => setTeamChatOpen((o) => !o)}
-                    />
-                  ) : null}
-                  <button
-                    type="button"
-                    className="dashboard-mobile-icon-btn dashboard-mobile-icon-btn--toolbar"
-                    onClick={onLogout}
-                    title={t("Sortie — déconnexion", "Sign out")}
-                    aria-label={t("Déconnexion", "Logout")}
-                  >
-                    <IconSignOut width={18} height={18} />
-                  </button>
-                  <button
-                    type="button"
-                    className="dashboard-mobile-icon-btn dashboard-mobile-icon-btn--toolbar"
-                    onClick={() => setMobilePwaMenuOpen(true)}
-                    title={t("Toutes les sections", "All sections")}
-                    aria-label={t("Toutes les sections", "All sections")}
-                  >
-                    <IconMenuHamburger width={18} height={18} />
-                  </button>
-                  <DashboardStaffProfileAvatar
-                    userId={user.id || user.email}
-                    fullName={user.fullName}
-                    t={t}
-                  />
-                  <a
-                    className="dashboard-mobile-icon-btn dashboard-mobile-icon-btn--toolbar"
-                    href="/?site=public"
-                    title={t("Site public (accueil)", "Public site (home)")}
-                    aria-label={t("Site public", "Public site")}
-                  >
-                    <IconHome width={18} height={18} />
-                  </a>
-                </div>
-              </div>
-              <div className="dashboard-header-ad dashboard-header-ad--mobile-pwa">
-                {user?.dashboardBanners?.length ? (
-                  <DashboardBannerCarousel slides={user.dashboardBanners} layout="inline" />
-                ) : user?.dashboardBannerHtml ? (
-                  <div
-                    className="dashboard-ad-slot dashboard-ad-slot--inline"
-                    dangerouslySetInnerHTML={{ __html: user.dashboardBannerHtml }}
-                  />
-                ) : showDashboardHeaderPromos ? (
-                  <PublicHomePromos t={t} isEn={isEn} variant="dashboard" />
-                ) : null}
-              </div>
-            </>
-          )}
+        <header className="mb-header">
+          <DashboardTopBar
+            t={t}
+            user={user}
+            isFieldAgent={isFieldAgent}
+            dashboardChatIspId={dashboardChatIspId}
+            teamChatUnread={teamChatUnread}
+            onToggleChat={() => setTeamChatOpen((o) => !o)}
+            onOpenSettings={() => {
+              if (typeof window !== "undefined") window.location.hash = "#workspace-settings";
+            }}
+            onGoHome={() => {
+              if (typeof window !== "undefined") window.location.href = "/?site=public";
+            }}
+            onToggleSidebar={() => {
+              if (isMobileShell) {
+                setMobilePwaMenuOpen((o) => !o);
+              } else {
+                setDashboardNavCompact((v) => !v);
+              }
+            }}
+            sidebarOpen={isMobileShell ? mobilePwaMenuOpen : !dashboardNavCompactEffective}
+            isMobileShell={isMobileShell}
+          />
+          <DashboardStickyBanner
+            t={t}
+            slides={user?.dashboardBanners}
+            html={user?.dashboardBannerHtml}
+            fallback={showDashboardHeaderPromos ? <PublicHomePromos t={t} isEn={isEn} variant="dashboard" /> : null}
+            variant={isMobileShell ? "compact" : "default"}
+          />
         </header>
         {dashboardChatIspId ? (
           <TeamChatPanel
@@ -3262,6 +3124,11 @@ function App() {
           <DashboardSideNav
             t={t}
             user={user}
+            workspaceTitle={
+              workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) || t("Espace opérateur", "Operator workspace")
+            }
+            companyLogoSrc={dashboardTenantLogoSrc || mcbuleliLogoUrl}
+            userRoleLabel={formatStaffRole(user.role, isEn)}
             isFieldAgent={isFieldAgent}
             compact={dashboardNavCompactEffective}
             navCompactEffective={dashboardNavCompactEffective}

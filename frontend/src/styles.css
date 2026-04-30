@@ -241,6 +241,83 @@ a:hover {
   min-width: 0;
 }
 
+.mb-sidenav-top {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(93, 64, 55, 0.12);
+  background: linear-gradient(165deg, #fffdf9 0%, #f6faf6 100%);
+}
+
+.dashboard-sidenav--compact .mb-sidenav-top {
+  background: transparent;
+  border-bottom: none;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+}
+
+.mb-sidenav-top__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mb-sidenav-top__logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 10px 22px rgba(45, 36, 32, 0.1);
+  object-fit: contain;
+  padding: 6px;
+  flex-shrink: 0;
+}
+
+.mb-sidenav-top__logo--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--mb-primary);
+}
+
+.mb-sidenav-top__text {
+  min-width: 0;
+}
+
+.mb-sidenav-top__company {
+  margin: 0;
+  font-weight: 800;
+  color: rgba(45, 36, 32, 0.9);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mb-sidenav-top__user {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  color: rgba(45, 36, 32, 0.75);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mb-sidenav-top__user strong {
+  color: rgba(45, 36, 32, 0.92);
+  font-weight: 750;
+}
+
+.mb-sidenav-top__role {
+  font-weight: 650;
+  color: rgba(45, 36, 32, 0.7);
+}
+
 .dashboard-sidenav-inner {
   min-width: 0;
 }
@@ -1283,6 +1360,274 @@ a:hover {
   flex-direction: column;
   align-items: stretch;
   gap: 0;
+}
+
+/* ---- McBuleli dashboard v2 header (2-level sticky) ---- */
+.mb-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 0 6px;
+}
+
+.mb-topbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.mb-topbar__left,
+.mb-topbar__right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mb-topbar__center {
+  min-width: 0;
+}
+
+.mb-topbar__iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--mb-text);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mb-topbar__iconbtn:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.mb-topbar__search {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--mb-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.mb-topbar__search:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.mb-topbar__search-placeholder {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mb-topbar__search-kbd {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 720px) {
+  .mb-topbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .mb-topbar__iconbtn {
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+  }
+
+  .mb-topbar__search {
+    min-height: 40px;
+    border-radius: 13px;
+  }
+}
+
+.mb-sticky-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 54px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.mb-sticky-banner--compact {
+  min-height: 48px;
+  padding: 8px;
+  border-radius: 14px;
+}
+
+.mb-sticky-banner__inner {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.mb-sticky-banner__html {
+  min-width: 0;
+}
+
+.mb-sticky-banner__dismiss {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+}
+
+.mb-sticky-banner__dismiss:hover {
+  background: rgba(0, 0, 0, 0.26);
+}
+
+/* Command palette (Ctrl+K) */
+.mb-cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: start center;
+  padding: 18px 14px;
+}
+
+.mb-cmdk-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  border: none;
+}
+
+.mb-cmdk {
+  position: relative;
+  width: min(720px, 100%);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(18, 20, 23, 0.96);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.mb-cmdk__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mb-cmdk__input {
+  flex: 1 1 auto;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: rgba(255, 255, 255, 0.92);
+  font: inherit;
+}
+
+.mb-cmdk__hint {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.78rem;
+}
+
+.mb-cmdk__list {
+  padding: 8px;
+  max-height: min(62vh, 520px);
+  overflow: auto;
+}
+
+.mb-cmdk__item {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  text-align: left;
+}
+
+.mb-cmdk__item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.mb-cmdk__item--active {
+  background: rgba(99, 179, 143, 0.16);
+  border-color: rgba(99, 179, 143, 0.22);
+}
+
+.mb-cmdk__item-meta {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.86rem;
+}
+
+.mb-cmdk__empty {
+  padding: 18px 12px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.mb-cmdk__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.86rem;
+}
+
+.mb-cmdk__foot-spacer {
+  flex: 1 1 auto;
+}
+
+.mb-cmdk__foot-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 650;
 }
 
 .dashboard-header-top {
@@ -6786,4 +7131,166 @@ html:has(.app-shell--mobile-pwa) {
   background: rgba(30, 30, 30, 0.9);
   border: 1px solid var(--mb-border);
   margin-bottom: 12px;
+}
+
+/* ---- Standardized DataTable (system-wide) ---- */
+.mb-table {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.mb-table__head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mb-table__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 850;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.mb-table__desc {
+  margin: 6px 0 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.mb-table__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mb-table__search {
+  flex: 1 1 260px;
+  min-width: min(340px, 100%);
+}
+
+.mb-table__searchinput {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+}
+
+.mb-table__frame {
+  width: 100%;
+  overflow: auto;
+}
+
+.mb-table__table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.mb-table__table th,
+.mb-table__table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  vertical-align: top;
+}
+
+.mb-table__table th {
+  text-align: left;
+  font-size: 0.86rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 750;
+  background: rgba(0, 0, 0, 0.18);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.mb-table__sortbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.mb-table__sorticon {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.78rem;
+}
+
+.mb-table__state {
+  padding: 18px 14px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.mb-table__state--error {
+  color: #ff9d9d;
+}
+
+.mb-table__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.mb-table__pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mb-table__pagebtn {
+  min-height: 38px;
+  border-radius: 12px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+
+.mb-table__pagebtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mb-table__pagesize {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.9rem;
+}
+
+.mb-table__pagesize select {
+  min-height: 38px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 6px 10px;
+}
+
+@media (max-width: 720px) {
+  .mb-table__table {
+    min-width: 640px;
+  }
 }
