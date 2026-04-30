@@ -4919,6 +4919,22 @@ a.public-footer-card:hover {
   color: #9ea8b8;
 }
 
+.portal-page--dark .btn-icon-toolbar,
+.wifi-portal-page--dark .btn-icon-toolbar {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.10);
+  color: var(--mb-text, #e8eaed);
+  box-shadow: none;
+}
+
+.portal-page--dark .btn-icon-toolbar:hover,
+.wifi-portal-page--dark .btn-icon-toolbar:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(99, 179, 143, 0.35);
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.12);
+  color: #dffaed;
+}
+
 .portal-hero-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -6850,6 +6866,83 @@ html:has(.app-shell--mobile-pwa) {
   border-radius: 10px;
 }
 
+.dashboard-mobile-profile {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.dashboard-mobile-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: var(--mb-text, #e8eaed);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.dashboard-mobile-avatar--btn {
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dashboard-mobile-avatar--photo {
+  border-color: rgba(99, 179, 143, 0.45);
+}
+
+.dashboard-mobile-avatar__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.dashboard-mobile-profile-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 70;
+  min-width: 11rem;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(28, 32, 36, 0.98);
+  border: 1px solid var(--mb-border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.dashboard-mobile-profile-popover__btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #e8eaed;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.dashboard-mobile-profile-popover__btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dashboard-mobile-profile-popover__btn--muted {
+  color: var(--mb-muted);
+  font-size: 0.82rem;
+}
+
 .app-shell--mobile-pwa .dashboard-mobile-profile {
   position: relative;
   flex-shrink: 0;
@@ -6871,16 +6964,8 @@ html:has(.app-shell--mobile-pwa) {
 }
 
 .app-shell--mobile-pwa .dashboard-mobile-profile-popover {
-  position: absolute;
-  top: calc(100% + 6px);
   right: 0;
-  z-index: 70;
-  min-width: 11rem;
-  padding: 6px;
-  border-radius: 14px;
-  background: rgba(28, 32, 36, 0.98);
-  border: 1px solid var(--mb-border);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  left: auto;
 }
 
 .app-shell--mobile-pwa .dashboard-mobile-profile-popover__btn {
@@ -7110,9 +7195,9 @@ html:has(.app-shell--mobile-pwa) {
 }
 
 .app-shell--mobile-pwa .dashboard-mobile-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
