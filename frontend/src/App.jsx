@@ -626,6 +626,13 @@ function App() {
     sort: { key: "status", dir: "asc" }
   });
   const [expenses, setExpenses] = useState([]);
+  const [expenseTable, setExpenseTable] = useState({
+    q: "",
+    status: "all",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "createdAt", dir: "desc" }
+  });
   const [expenseSummary, setExpenseSummary] = useState(null);
   const [expenseFilter, setExpenseFilter] = useState(() => ({
     from: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
@@ -767,6 +774,39 @@ function App() {
     const pageRows = list.slice(start, start + pageSize);
     return { pageRows, total: list.length };
   }, [vouchers, voucherTable.page, voucherTable.pageSize, voucherTable.q, voucherTable.sort]);
+
+  const expenseTableView = useMemo(() => {
+    const q = String(expenseTable.q || "").trim().toLowerCase();
+    const stFilter = String(expenseTable.status || "all");
+    let list = Array.isArray(expenses) ? expenses : [];
+    if (stFilter !== "all") list = list.filter((ex) => String(ex?.status || "pending") === stFilter);
+    if (q) {
+      list = list.filter((ex) => {
+        const hay = `${ex?.description || ""} ${ex?.category || ""} ${ex?.fieldAgentName || ""} ${ex?.createdByName || ""} ${ex?.approvedByName || ""} ${ex?.rejectedByName || ""} ${
+          ex?.rejectionNote || ""
+        } ${ex?.periodStart || ""} ${ex?.periodEnd || ""} ${ex?.amountUsd || ""} ${ex?.status || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = expenseTable.sort?.key;
+    const sDir = expenseTable.sort?.dir === "asc" ? 1 : -1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(expenseTable.pageSize) || 10;
+    const page = Math.max(1, Number(expenseTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [expenses, expenseTable.page, expenseTable.pageSize, expenseTable.q, expenseTable.sort, expenseTable.status]);
 
   const fetchTeamChatUnread = useCallback(async () => {
     if (!user) return;
@@ -5509,116 +5549,148 @@ function App() {
                   )}
                 </p>
               ) : (
-                expenses.map((ex) => {
-                  const st = ex.status || "pending";
-                  return (
-                  <div key={ex.id} className="expenses-row">
-                      <div className="expenses-row-title">
-                      <strong>
-                          {(ex.amountUsd ?? 0).toLocaleString(undefined, {
-                            style: "currency",
-                            currency: "USD"
-                          })}
-                        </strong>
-                        <span className={`expense-status-badge expense-status-badge--${st}`}>
-                          {expenseApprovalStatusLabel(st, isEn)}
-                        </span>
-                        {ex.periodClosed ? (
-                          <span className="expense-status-badge expense-status-badge--locked">
-                            {t("Période clôturée", "Period closed")}
+                <DataTable
+                  title={null}
+                  rows={expenseTableView.pageRows}
+                  columns={[
+                    {
+                      key: "amountUsd",
+                      header: t("Montant", "Amount"),
+                      sortKey: "amountUsd",
+                      cell: (ex) =>
+                        (ex.amountUsd ?? 0).toLocaleString(undefined, { style: "currency", currency: "USD" })
+                    },
+                    {
+                      key: "status",
+                      header: t("Statut", "Status"),
+                      sortKey: "status",
+                      cell: (ex) => {
+                        const st = ex.status || "pending";
+                        return (
+                          <span className={`expense-status-badge expense-status-badge--${st}`}>
+                            {expenseApprovalStatusLabel(st, isEn)}
                           </span>
-                        ) : null}
-                        <span className="expenses-row-category">— {expenseCategoryLabel(ex.category, isEn)}</span>
-                    </div>
-                    {ex.description ? <div>{ex.description}</div> : null}
-                    <div className="expenses-row-meta">
-                      {t("Période", "Period")} {ex.periodStart} → {ex.periodEnd}
-                      {ex.fieldAgentName ? ` · ${t("Agent :", "Agent:")} ${ex.fieldAgentName}` : ""}
-                      {ex.category === "field_agent_percentage" && ex.agentPayoutPercent != null
-                        ? ` · ${ex.agentPayoutPercent}%`
-                        : ""}
-                      {ex.revenueBasisUsd != null
-                        ? ` · ${t("Base CA", "Rev. basis")} ${Number(ex.revenueBasisUsd).toLocaleString(undefined, {
-                            style: "currency",
-                            currency: "USD"
-                          })}`
-                        : ""}
-                      {ex.createdByName ? ` · ${t("Saisi par", "Entered by")} ${ex.createdByName}` : ""}
-                    </div>
-                      {st === "approved" && (ex.approvedByName || ex.approvedAt) ? (
-                        <div className="expenses-row-meta">
-                          {t("Approuvé", "Approved")}
-                          {ex.approvedByName ? ` ${t("par", "by")} ${ex.approvedByName}` : ""}
-                          {ex.approvedAt
-                            ? ` — ${new Date(ex.approvedAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}`
-                            : ""}
-                        </div>
-                      ) : null}
-                      {st === "rejected" ? (
-                        <div className="expenses-row-meta expenses-row-meta--warn">
-                          {t("Rejet", "Rejected")}
-                          {ex.rejectedByName ? ` ${t("par", "by")} ${ex.rejectedByName}` : ""}
-                          {ex.rejectedAt
-                            ? ` — ${new Date(ex.rejectedAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}`
-                            : ""}
-                          {ex.rejectionNote ? ` · ${ex.rejectionNote}` : ""}
-                        </div>
-                      ) : null}
-                      {ex.approvalBlockedSelf && st === "pending" ? (
-                        <p className="app-meta expenses-row-pending-hint">
-                          {t(
-                            "En attente d'un autre validateur (vous êtes le demandeur).",
-                            "Waiting for another approver (you are the requester)."
-                          )}
-                        </p>
-                      ) : null}
-                      {ex.periodClosed ? (
-                        <p className="app-meta expenses-row-pending-hint">
-                          {t(
-                            "Cette ligne chevauche une période clôturée (inventaire / révision) : aucune action n'est possible tant que la clôture n'est pas levée.",
-                            "This line overlaps a closed period (inventory / review): no action is possible until the closure is reopened."
-                          )}
-                        </p>
-                      ) : null}
-                      <div className="expenses-row-actions">
-                        {ex.canApprove ? (
-                          <button
-                            type="button"
-                            className="btn-expense-approve"
-                            disabled={!selectedIspId}
-                            onClick={() => onApproveExpense(ex.id)}
-                          >
-                            {t("Approuver", "Approve")}
-                          </button>
-                        ) : null}
-                        {ex.canReject ? (
-                          <button
-                            type="button"
-                            className="btn-expense-reject"
-                            disabled={!selectedIspId}
-                            onClick={() => onRejectExpense(ex.id)}
-                          >
-                            {t("Rejeter", "Reject")}
-                          </button>
-                        ) : null}
-                        {(isPlatformSuperRole(user.role) ||
-                          user.role === "company_manager" ||
-                          user.role === "isp_admin") &&
-                          (st === "pending" || st === "rejected") &&
-                          !ex.periodClosed && (
-                          <button
-                            type="button"
-                            className="btn-expense-delete"
-                            disabled={!selectedIspId}
-                            onClick={() => onDeleteExpense(ex.id)}
-                          >
-                            {t("Supprimer", "Delete")}
-                          </button>
-                        )}
-                  </div>
-                    </div>
-                  );
-                })
+                        );
+                      }
+                    },
+                    {
+                      key: "category",
+                      header: t("Catégorie", "Category"),
+                      sortKey: "category",
+                      cell: (ex) => expenseCategoryLabel(ex.category, isEn)
+                    },
+                    {
+                      key: "period",
+                      header: t("Période", "Period"),
+                      cell: (ex) => `${ex.periodStart || "—"} → ${ex.periodEnd || "—"}`
+                    },
+                    {
+                      key: "meta",
+                      header: t("Traçabilité", "Trace"),
+                      cell: (ex) => {
+                        const st = ex.status || "pending";
+                        return (
+                          <div style={{ display: "grid", gap: 4, minWidth: 220 }}>
+                            {ex.description ? <div>{ex.description}</div> : <div className="app-meta">—</div>}
+                            <div className="app-meta" style={{ margin: 0 }}>
+                              {ex.createdByName ? `${t("Saisi par", "Entered by")} ${ex.createdByName}` : "—"}
+                              {ex.fieldAgentName ? ` · ${t("Agent", "Agent")}: ${ex.fieldAgentName}` : ""}
+                            </div>
+                            {st === "approved" && (ex.approvedByName || ex.approvedAt) ? (
+                              <div className="app-meta" style={{ margin: 0 }}>
+                                {t("Approuvé", "Approved")}
+                                {ex.approvedByName ? ` ${t("par", "by")} ${ex.approvedByName}` : ""}
+                                {ex.approvedAt
+                                  ? ` — ${new Date(ex.approvedAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}`
+                                  : ""}
+                              </div>
+                            ) : null}
+                            {st === "rejected" ? (
+                              <div className="app-meta expenses-row-meta--warn" style={{ margin: 0 }}>
+                                {t("Rejet", "Rejected")}
+                                {ex.rejectedByName ? ` ${t("par", "by")} ${ex.rejectedByName}` : ""}
+                                {ex.rejectionNote ? ` · ${ex.rejectionNote}` : ""}
+                              </div>
+                            ) : null}
+                            {ex.periodClosed ? (
+                              <div className="app-meta" style={{ margin: 0 }}>
+                                {t("Période clôturée", "Period closed")}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      }
+                    },
+                    {
+                      key: "actions",
+                      header: t("Actions", "Actions"),
+                      cell: (ex) => {
+                        const st = ex.status || "pending";
+                        return (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, minWidth: 220 }}>
+                            {ex.canApprove ? (
+                              <button
+                                type="button"
+                                className="btn-expense-approve"
+                                disabled={!selectedIspId}
+                                onClick={() => onApproveExpense(ex.id)}
+                              >
+                                {t("Approuver", "Approve")}
+                              </button>
+                            ) : null}
+                            {ex.canReject ? (
+                              <button
+                                type="button"
+                                className="btn-expense-reject"
+                                disabled={!selectedIspId}
+                                onClick={() => onRejectExpense(ex.id)}
+                              >
+                                {t("Rejeter", "Reject")}
+                              </button>
+                            ) : null}
+                            {(isPlatformSuperRole(user.role) ||
+                              user.role === "company_manager" ||
+                              user.role === "isp_admin") &&
+                            (st === "pending" || st === "rejected") &&
+                            !ex.periodClosed ? (
+                              <button
+                                type="button"
+                                className="btn-expense-delete"
+                                disabled={!selectedIspId}
+                                onClick={() => onDeleteExpense(ex.id)}
+                              >
+                                {t("Supprimer", "Delete")}
+                              </button>
+                            ) : null}
+                          </div>
+                        );
+                      }
+                    }
+                  ]}
+                  searchValue={expenseTable.q}
+                  onSearchValueChange={(q) => setExpenseTable((s) => ({ ...s, q, page: 1 }))}
+                  filters={
+                    <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                      <span>{t("Statut", "Status")}</span>
+                      <select
+                        value={expenseTable.status}
+                        onChange={(e) => setExpenseTable((s) => ({ ...s, status: e.target.value, page: 1 }))}
+                      >
+                        <option value="all">{t("Tous", "All")}</option>
+                        <option value="pending">{t("En attente", "Pending")}</option>
+                        <option value="approved">{t("Approuvé", "Approved")}</option>
+                        <option value="rejected">{t("Rejeté", "Rejected")}</option>
+                      </select>
+                    </label>
+                  }
+                  page={expenseTable.page}
+                  pageSize={expenseTable.pageSize}
+                  totalRows={expenseTableView.total}
+                  onPageChange={(page) => setExpenseTable((s) => ({ ...s, page }))}
+                  onPageSizeChange={(pageSize) => setExpenseTable((s) => ({ ...s, pageSize, page: 1 }))}
+                  sort={expenseTable.sort}
+                  onSortChange={(sort) => setExpenseTable((s) => ({ ...s, sort }))}
+                />
               )}
             </div>
           </div>
