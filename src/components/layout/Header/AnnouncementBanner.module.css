@@ -1,0 +1,142 @@
+.announcement-banner {
+  position: fixed;
+  top: 64px;
+  left: 0;
+  right: 0;
+  background: linear-gradient(135deg, var(--color-primary-green) 0%, var(--color-primary-dark-green) 100%);
+  padding: var(--spacing-md) var(--spacing-lg);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  animation: slideDown var(--transition-normal);
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.announcement-content {
+  flex: 1;
+  color: white;
+  font-size: 14px;
+}
+
+.announcement-text {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.announcement-text p {
+  margin: 0;
+}
+
+.announcement-link {
+  color: white;
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity var(--transition-fast);
+}
+
+.announcement-link:hover {
+  opacity: 0.8;
+}
+
+.announcement-image {
+  height: 60px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.announcement-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.announcement-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.announcement-nav-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast);
+}
+
+.announcement-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.announcement-indicators {
+  display: flex;
+  gap: 6px;
+}
+
+.indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.indicator.active {
+  background: white;
+  width: 24px;
+  border-radius: 4px;
+}
+
+.announcement-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast);
+}
+
+.announcement-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+@media (max-width: 768px) {
+  .announcement-banner {
+    padding: var(--spacing-sm) var(--spacing-md);
+    flex-direction: column;
+  }
+
+  .announcement-nav {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+  }
+}

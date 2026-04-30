@@ -1,202 +1,151 @@
-# McBuleli
+# 🎯 McBuleli ISP - SaaS Management System
 
-Multi-tenant ISP billing and operations: many ISPs, one platform (DRC-ready workflows, Pawapay, Mobile Money TID, vouchers, MikroTik nodes, optional FreeRADIUS).
+## Complete UI/UX Redesign & Architecture
 
-## Included
+A modern, production-ready SaaS ISP management application with:
 
-- `backend`: Node.js/Express + PostgreSQL
-  - JWT authentication (`/api/auth/login`, `/api/auth/me`)
-  - password lifecycle (`/api/auth/change-password`, `/api/auth/accept-invite`)
-  - RBAC roles (`super_admin`, `company_manager`, `isp_admin`, `billing_agent`, `noc_operator`, `field_agent`)
-  - Multi-tenant ISP management
-  - tenant team user management (create/reset/deactivate/invite)
-  - per-ISP payment methods (`pawapay`, `cash`, `bank_transfer`, etc)
-  - manual Mobile Money TID verification queue (submit -> admin approve/reject)
-  - **Public API rate limiting** (in-memory per IP) on signup, Wi‑Fi public routes, and subscriber auth; set **`TRUST_PROXY=true`** behind a reverse proxy for correct client IPs
-  - **RADIUS accounting webhook** `POST /api/webhooks/radius-accounting` → `radius_accounting_ingest` (optional `ispId` in JSON); **`GET /api/network/radius-accounting-ingest`** for NOC review
-  - notification outbox worker with retries (`internal`, `webhook`, `twilio`, **`smtp`** on the email channel via **nodemailer**)
-  - test notification endpoint for provider validation
-  - access voucher generation/redeem with plan bandwidth and duration
-  - MikroTik node management + subscription provisioning events
-  - encrypted storage for network-node credentials
-  - optional FreeRADIUS sync events/logging; configurable table names (`FREERADIUS_TABLE_RADCHECK` / `FREERADIUS_TABLE_RADREPLY`) for stock `radcheck`/`radreply` schemas
-  - overdue billing job: suspend access for past-due unpaid invoices, mark invoices overdue, scheduled + manual trigger
-  - renewal invoices: create next invoice before subscription end, queue **SMS or email** (if `customers.email` is set and an active **email** provider is configured) plus internal fallback, extend period on payment
-  - subscription suspend/reactivate with network sync hooks
-  - manager-defined accreditation role profiles
-  - platform SaaS packages and tenant subscriptions: **Essential ($10/mo)** and **Pro ($15/mo)** are active self-serve plans; **Premium personnalisé** is a custom contract for high-volume ISPs
-  - **Self-serve tenant signup** (`POST /api/public/signup`) with **1-month trial** (`PLATFORM_TRIAL_DAYS=30`), then **Pawapay deposits** in **USD or CDF** (`POST /api/platform/billing/initiate-deposit`; `PLATFORM_USD_TO_CDF` for CDF amount estimate). **Unified Pawapay callback:** `POST /api/webhooks/pawapay` handles **deposits, payouts (withdrawals), and refunds** (same URL in the Pawapay dashboard for all). Optional secret: header `X-Pawapay-Callback-Secret` = `PAWAPAY_CALLBACK_SECRET` (or legacy `PAWAPAY_PLATFORM_CALLBACK_SECRET`). **`GET /api/webhooks/pawapay`** returns JSON instructions and example bodies for your test dashboard. `POST /api/webhooks/pawapay-platform` is an alias. Expired workspaces get **HTTP 402** until a matching deposit completes.
-  - customers (optional **email** for renewal notices), plans, subscriptions, invoices, payments
-  - **Network telemetry**: `POST /api/network/nodes/:nodeId/collect-telemetry` pulls active PPPoE / Hotspot session counts from MikroTik, stores snapshots, and merges peaks into `network_usage_daily` for dashboard stats
-  - super-admin global dashboard + per-ISP dashboard
-  - customer self-service portal: opaque token **or** subscriber JWT (`POST /api/subscriber/auth/login`, `POST /api/subscriber/auth/setup-password`) for `GET /api/portal/session` and `POST /api/portal/tid-submissions`; staff `POST /api/portal/tokens` (set `PLATFORM_PUBLIC_BASE_URL` so generated links open the correct frontend host)
-- `frontend`: React dashboard for:
-  - login/logout and **`/signup`** company registration (trial + plan pick)
-  - invite acceptance
-  - forced password update on first login/reset
-  - creating ISP tenants (super admin)
-  - selecting active ISP workspace
-  - managing ISP team users
-  - configuring payment methods per ISP
-  - assigning platform package subscriptions
-  - managing accreditation profiles for field teams
-  - customer/plan/subscription/invoice operations
-  - `/portal` customer view (invoices, subscriptions, TID submit) via portal link, phone + password, or post–Wi‑Fi setup token
-  - **Wi‑Fi guest packages**: admin plans include speed, access type (hotspot/PPPoE), max devices, published flag, availability, per-plan redirect; **`/wifi?ispId=`** public page + **Pawapay** Mobile Money (Orange / Airtel / M‑Pesa) without login; success activates subscription and redirects (plan → ISP branding → Google)
+- ✅ **Sticky Header + Announcement Banner** (2-level fixed layout)
+- ✅ **Responsive Sidebar** (mobile overlay, tablet/desktop collapsible)
+- ✅ **Reusable DataTable** (pagination, filtering, sorting, search)
+- ✅ **Dark Mode UI** (Green + Brown branding)
+- ✅ **Mobile-First Design** (PWA-ready, low-bandwidth optimized)
+- ✅ **Team Chat System** (real-time messaging)
+- ✅ **Extensible Architecture** (support unlimited modules)
+- ✅ **Production-Ready Code** (TypeScript, React, fully responsive)
 
-## Run locally
+## 🏗️ Project Structure
 
-### 1) PostgreSQL
-
-**Option A — Docker**
-
-```bash
-docker compose up -d
+```
+src/
+├── components/
+│   ├── layout/
+│   │   ├── Header/ (TopBar + AnnouncementBanner)
+│   │   ├── Sidebar/ (Navigation, Menu)
+│   │   └── MainLayout.tsx
+│   ├── common/
+│   │   ├── Table/ (DataTable, Pagination)
+│   │   ├── Chat/ (TeamChat, ChatMessage)
+│   │   ├── Cards/ (StatCard)
+│   │   └── Search/ (GlobalSearch)
+│   └── modules/
+│       ├── Dashboard/
+│       ├── UserManagement/
+│       ├── Finance/
+│       ├── Network/
+│       └── Settings/
+├── styles/
+│   ├── variables.css (Design tokens)
+│   └── globals.css (Global styles)
+└── App.tsx
 ```
 
-Then in `backend/.env` use for example:
+## 🎨 Design System
 
-`DATABASE_URL=postgresql://postgres:postgres@localhost:5432/isp_billing`
+### Colors
+- **Primary:** Green (#10b981)
+- **Secondary:** Brown (#92400e)
+- **Background:** Dark (#0f1419)
+- **Status:** Success, Warning, Error, Info
 
-**Option B — Postgres installé sur la machine (sans Docker)**
+### Spacing
+- xs, sm, md, lg, xl, 2xl, 3xl (CSS variables)
 
-Exemple avec Homebrew :
+### Responsive Breakpoints
+- Mobile: ≤ 768px
+- Tablet: ≤ 1024px
+- Desktop: > 1024px
+
+## 🚀 Key Features
+
+### 1. Global Header (Fixed)
+- Left: Hamburger + User Avatar
+- Center: Global Search (Ctrl+K)
+- Right: Chat, Settings, Home
+- Sticky announcement banner below
+
+### 2. Sidebar Navigation
+- Collapsible menu with icons & badges
+- Submenu support
+- Mobile overlay on small screens
+- Logout button at bottom
+
+### 3. Reusable DataTable
+- Server-side pagination (10/20/50/100 rows)
+- Search & filtering
+- Column sorting
+- Row actions dropdown
+- Responsive horizontal scroll on mobile
+- Empty states & loading indicators
+
+### 4. Team Chat
+- Real-time messaging
+- User avatars & timestamps
+- Auto-scroll to latest message
+- Emoji & file attachment buttons
+
+### 5. Dashboard Module
+- Stat cards with trends
+- Revenue & usage charts
+- Top consumers table
+- Customizable filters
+
+## 📦 Installation
 
 ```bash
-brew install postgresql@16
-brew services start postgresql@16
-createdb isp_billing
-```
-
-Puis dans `backend/.env` :
-
-`DATABASE_URL=postgresql://127.0.0.1:5432/isp_billing`
-
-(adaptez utilisateur/mot de passe si votre Postgres est configuré autrement.)
-
-### 2) Backend
-
-```bash
-cd backend
 npm install
-cp .env.example .env
-# Éditez .env (DATABASE_URL, JWT_SECRET, etc.)
 npm run dev
 ```
 
-API base: `http://localhost:4000/api`
+## 🔧 Usage
 
-Default super admin login:
+### DataTable Example
+```tsx
+import DataTable from '@/components/common/Table/DataTable';
 
-- email: `admin@isp.local`
-- password: `admin123`
-
-### 3) Frontend
-
-```bash
-cd frontend
-npm install
+<DataTable
+  data={users}
+  columns={[
+    { id: 'name', header: 'Name', sortable: true },
+    { id: 'email', header: 'Email', sortable: true },
+    { id: 'status', header: 'Status', cell: (val) => <Badge>{val}</Badge> }
+  ]}
+  searchable={true}
+  pageSize={10}
+/>
 ```
 
-Si le front appelle l’API directement sur votre machine (pas de proxy), créez `frontend/.env` :
+### MainLayout Example
+```tsx
+import MainLayout from '@/components/layout/MainLayout';
 
-```env
-VITE_API_URL=http://localhost:4000/api
-VITE_PUBLIC_API_ORIGIN=http://localhost:4000
+<MainLayout onMenuSelect={(menuId) => console.log(menuId)}>
+  <Dashboard />
+</MainLayout>
 ```
 
-Puis :
+## 📱 Responsive Behavior
 
-```bash
-npm run dev
-```
+- **Mobile:** Sidebar slides as overlay, main content full width
+- **Tablet:** Sidebar narrower, half-width charts
+- **Desktop:** Full sidebar, multi-column layouts
 
-Web app: `http://localhost:5173` (ou un autre port si 5173 est pris)
+## 🎯 Extensibility
 
-**Site marketing quand vous êtes connecté** : ouvrir `http://localhost:5173/?site=public` (le tableau de bord utilise aussi un lien « Site public » vers cette URL).
+The system is designed to scale:
 
-## Deploy to Vercel + Render
+1. **Add New Modules:** Create folder in `/modules`, follow same pattern
+2. **Reuse DataTable:** Apply to any list view
+3. **Custom Filters:** Define filter config for any table
+4. **Global Search:** Index and query any data source
+5. **Custom Banners:** Slides system for announcements
 
-The hosted setup is:
+## 🌍 Optimization for Africa
 
-- Frontend: Vercel project `mcbuleli-front.vercel.app`
-- Public app domain: `https://app.mcbuleli.live`
-- Backend: Render web service URL `https://mcbuleli-isp.onrender.com`
+- Low bandwidth: Optimized images, lazy loading
+- Dark mode: Reduced battery drain on mobile
+- Intuitive UX: Minimal clicks, clear navigation
+- Offline support: PWA-ready architecture
 
-### Frontend environment variables on Vercel
+## 📄 License
 
-Set these in the Vercel project, then redeploy:
-
-```bash
-VITE_API_URL=https://mcbuleli-isp.onrender.com/api
-VITE_PUBLIC_API_ORIGIN=https://mcbuleli-isp.onrender.com
-```
-
-`VITE_API_URL` must include `/api`; `VITE_PUBLIC_API_ORIGIN` is the same Render origin without `/api`.
-
-### Backend environment variables on Render
-
-Use `backend/.env.render.example` as the checklist. At minimum set:
-
-```bash
-NODE_ENV=production
-TRUST_PROXY=true
-DATABASE_URL=<Render PostgreSQL external or internal database URL>
-JWT_SECRET=<strong random secret>
-NETWORK_NODE_SECRET_KEY=<unique 32+ character random secret>
-PLATFORM_PUBLIC_BASE_URL=https://app.mcbuleli.live
-PUBLIC_API_BASE_URL=https://mcbuleli-isp.onrender.com
-CORS_ORIGINS=https://app.mcbuleli.live,https://mcbuleli-front.vercel.app
-```
-
-Pawapay callback URL: `https://mcbuleli-isp.onrender.com/api/webhooks/pawapay`.
-
-Use Render build command `npm install` and start command `npm start` from the `backend` directory.
-
-## White-label subdomains/custom domains
-
-The backend now supports host-based tenant resolution:
-
-- wildcard style subdomains: `admin1.mcbuleli.com`
-- optional custom domains: `portal.isp-example.com`
-
-### Required production setup
-
-1. DNS
-   - Add wildcard record: `*.mcbuleli.com` -> your frontend/reverse-proxy IP
-   - For tenant custom domains, ask tenants to point their domain to your proxy IP
-2. Reverse proxy (Nginx/Caddy/Traefik)
-   - Route both frontend and backend with original `Host` header preserved
-   - Forward `X-Forwarded-Host` to backend
-3. Backend app
-   - Set tenant subdomain/custom domain in Branding settings
-   - Backend resolves tenant from host via `/api/tenant/context`
-4. Frontend app
-   - Uses `/api/tenant/context` to lock ISP workspace by host
-   - For production, prefer `VITE_API_URL=/api` behind same domain proxy
-
-Note: `mcbuleli.com` is only an example domain. Replace with your purchased domain later.
-
-## MikroTik integration quick start
-
-1. In dashboard, open `MikroTik Network Node` and add router host, API credentials, profiles.
-2. Mark one node as default.
-3. Create or reactivate a subscription; provisioning runs automatically.
-4. Use `Sync Activate`/`Sync Suspend` buttons for manual retry.
-5. Check `Provisioning Events` for success/failed/skipped logs.
-
-Set `NETWORK_NODE_SECRET_KEY` to a **long random value** (32+ characters in production). With `NODE_ENV=production`, the backend **refuses to start** if the key is missing, too short, or a known placeholder. Store it in a secrets manager or K8s secret, rotate only with a plan to re-encrypt stored node credentials.
-To enable FreeRADIUS SQL sync into this app’s PostgreSQL (`radius_radcheck` / `radius_radreply`), set `FREERADIUS_SYNC_ENABLED=true`. Provisioning then writes **Simultaneous-Use** from each subscription’s device cap (plan / voucher / Wi‑Fi checkout) alongside password, **Auth-Type**, and **Mikrotik-Rate-Limit**. Point your FreeRADIUS `sql` module at the same DB so NAS authentication uses these rows.
-
-## Next implementation steps
-
-1. Per-CPE signal / throughput time-series and charts (SNMP / MikroTik interface stats)
-2. Optional: encrypt `customers.email` at rest for strict compliance tenants
-3. Correlate `radius_accounting_ingest` with subscriptions for live “who is online” dashboards
-4. Optional CAPTCHA or fraud signals on Wi‑Fi checkout for high-risk markets
-
-### Recently added
-
-- **Public rate limits** (per IP): signup, Wi‑Fi catalog/purchase/status polling, subscriber login/setup-password (`TRUST_PROXY`, env `PUBLIC_RL_*` overrides).
-- **`POST /api/webhooks/radius-accounting`**: stores normalized accounting rows (`RADIUS_ACCOUNTING_WEBHOOK_SECRET` required when `NODE_ENV=production`).
-- **Telemetry snapshots** now include short **PPPoE / Hotspot session name samples** from MikroTik.
+MIT
