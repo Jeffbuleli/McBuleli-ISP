@@ -13,7 +13,7 @@ export default function HomeShortcut({ title, className = "", idPrefix = "home" 
       title={t}
       aria-label={t}
     >
-      <IconHome width={22} height={22} />
+      <IconHome width={20} height={20} className="home-shortcut__icon" />
     </a>
   );
 }

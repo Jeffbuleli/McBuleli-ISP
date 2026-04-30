@@ -1797,6 +1797,38 @@ a:hover {
   padding: 6px 8px;
 }
 
+.dashboard-mobile-profile {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.dashboard-mobile-avatar {
+  width: 42px;
+  height: 42px;
+  max-width: 42px;
+  max-height: 42px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.dashboard-mobile-avatar--btn {
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dashboard-mobile-avatar__img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
 .btn-icon-toolbar {
   display: inline-flex;
   align-items: center;
@@ -1844,6 +1876,10 @@ a:hover {
   width: 36px;
   height: 36px;
   border-radius: 10px;
+}
+
+.home-shortcut__icon {
+  color: currentColor;
 }
 
 .dashboard-ad-slot {
@@ -6673,6 +6709,19 @@ body:has(.wifi-portal-page--dark) {
   border-radius: 12px;
   min-height: 44px;
   -webkit-tap-highlight-color: transparent;
+}
+
+.portal-page--dark .portal-hero-toolbar .btn-icon-toolbar {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #d6f4e5;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+
+.portal-page--dark .portal-hero-toolbar .btn-icon-toolbar:hover {
+  border-color: rgba(99, 179, 143, 0.52);
+  background: rgba(99, 179, 143, 0.16);
+  color: #9ce2bf;
 }
 
 .wifi-portal-page--dark .isp-enduser-brand-head {
