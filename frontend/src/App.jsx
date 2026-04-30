@@ -619,6 +619,12 @@ function App() {
   const [tidSubmissions, setTidSubmissions] = useState([]);
   const [tidConflicts, setTidConflicts] = useState([]);
   const [vouchers, setVouchers] = useState([]);
+  const [voucherTable, setVoucherTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "status", dir: "asc" }
+  });
   const [expenses, setExpenses] = useState([]);
   const [expenseSummary, setExpenseSummary] = useState(null);
   const [expenseFilter, setExpenseFilter] = useState(() => ({
@@ -732,6 +738,35 @@ function App() {
     const pageRows = list.slice(start, start + pageSize);
     return { pageRows, total: list.length };
   }, [networkNodes, networkNodeTable.page, networkNodeTable.pageSize, networkNodeTable.q, networkNodeTable.sort]);
+
+  const voucherTableView = useMemo(() => {
+    const q = String(voucherTable.q || "").trim().toLowerCase();
+    let list = Array.isArray(vouchers) ? vouchers : [];
+    if (q) {
+      list = list.filter((v) => {
+        const hay = `${v?.code || ""} ${v?.rateLimit || ""} ${v?.durationDays || ""} ${v?.maxDevices || ""} ${v?.status || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = voucherTable.sort?.key;
+    const sDir = voucherTable.sort?.dir === "desc" ? -1 : 1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(voucherTable.pageSize) || 10;
+    const page = Math.max(1, Number(voucherTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [vouchers, voucherTable.page, voucherTable.pageSize, voucherTable.q, voucherTable.sort]);
 
   const fetchTeamChatUnread = useCallback(async () => {
     if (!user) return;
@@ -4596,12 +4631,36 @@ function App() {
           <button type="submit" disabled={!selectedIspId}>
             Utiliser le bon
           </button>
-          <h3>Derniers bons</h3>
-          {vouchers.slice(0, 12).map((v) => (
-            <p key={v.id}>
-              {v.code} - {v.rateLimit} - {v.durationDays}d - devices {v.maxDevices ?? 1} - {v.status}
-            </p>
-          ))}
+          <DataTable
+            title={t("Derniers bons", "Latest vouchers")}
+            rows={voucherTableView.pageRows}
+            columns={[
+              { key: "code", header: t("Code", "Code"), sortKey: "code", cell: (v) => v.code || "—" },
+              { key: "rateLimit", header: t("Débit", "Speed"), sortKey: "rateLimit", cell: (v) => v.rateLimit || "—" },
+              {
+                key: "durationDays",
+                header: t("Durée", "Duration"),
+                sortKey: "durationDays",
+                cell: (v) => (v.durationDays != null ? `${v.durationDays}d` : "—")
+              },
+              {
+                key: "maxDevices",
+                header: t("Appareils", "Devices"),
+                sortKey: "maxDevices",
+                cell: (v) => (v.maxDevices != null ? String(v.maxDevices) : "—")
+              },
+              { key: "status", header: t("Statut", "Status"), sortKey: "status", cell: (v) => v.status || "—" }
+            ]}
+            searchValue={voucherTable.q}
+            onSearchValueChange={(q) => setVoucherTable((s) => ({ ...s, q, page: 1 }))}
+            page={voucherTable.page}
+            pageSize={voucherTable.pageSize}
+            totalRows={voucherTableView.total}
+            onPageChange={(page) => setVoucherTable((s) => ({ ...s, page }))}
+            onPageSizeChange={(pageSize) => setVoucherTable((s) => ({ ...s, pageSize, page: 1 }))}
+            sort={voucherTable.sort}
+            onSortChange={(sort) => setVoucherTable((s) => ({ ...s, sort }))}
+          />
         </form>
       </section>
 
