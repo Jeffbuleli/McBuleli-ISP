@@ -460,7 +460,7 @@ function withdrawalStatusLabel(status, isEn) {
   return status || "—";
 }
 
-const TENANTS_PAGE_SIZE = 6;
+// Legacy tenants pagination replaced by DataTable pagination.
 
 function humanizeProvisioningEvent(ev, isEn) {
   const d = ev.details && typeof ev.details === "object" ? ev.details : {};
@@ -576,6 +576,12 @@ function App() {
   const [forgotNotice, setForgotNotice] = useState("");
   const [forgotBusy, setForgotBusy] = useState(false);
   const [dashboardSidebarSearch, setDashboardSidebarSearch] = useState("");
+  const [tenantTable, setTenantTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "name", dir: "asc" }
+  });
   const [dashboardNavCompact, setDashboardNavCompact] = useState(readDashboardNavCompact);
   const [publicAuthCopyForgot, setPublicAuthCopyForgot] = useState({ fr: "", en: "" });
   const [resetTokenState, setResetTokenState] = useState("");
@@ -1323,7 +1329,7 @@ function App() {
   const filteredTenants = useMemo(() => {
     const list = superDashboard?.tenants;
     if (!Array.isArray(list)) return [];
-    const s = dashboardSidebarSearch.trim().toLowerCase();
+    const s = String(tenantTable.q || "").trim().toLowerCase();
     if (!s) return list;
     return list.filter((tenant) => {
       const admins = (tenant.adminUsers || [])
@@ -1334,23 +1340,30 @@ function App() {
       } ${tenant.packageName || ""} ${admins}`.toLowerCase();
       return hay.includes(s);
     });
-  }, [superDashboard?.tenants, dashboardSidebarSearch]);
+  }, [superDashboard?.tenants, tenantTable.q]);
 
-  const [tenantListPage, setTenantListPage] = useState(1);
-  const tenantPageCount = Math.max(1, Math.ceil(filteredTenants.length / TENANTS_PAGE_SIZE) || 1);
-
-  useEffect(() => {
-    setTenantListPage(1);
-  }, [dashboardSidebarSearch]);
-
-  useEffect(() => {
-    setTenantListPage((p) => Math.min(Math.max(1, p), tenantPageCount));
-  }, [tenantPageCount]);
-
-  const pagedTenants = useMemo(() => {
-    const start = (tenantListPage - 1) * TENANTS_PAGE_SIZE;
-    return filteredTenants.slice(start, start + TENANTS_PAGE_SIZE);
-  }, [filteredTenants, tenantListPage]);
+  const tenantTableView = useMemo(() => {
+    const list = Array.isArray(filteredTenants) ? filteredTenants : [];
+    const sKey = tenantTable.sort?.key;
+    const sDir = tenantTable.sort?.dir === "desc" ? -1 : 1;
+    let sorted = list;
+    if (sKey) {
+      sorted = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(tenantTable.pageSize) || 10;
+    const page = Math.max(1, Number(tenantTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = sorted.slice(start, start + pageSize);
+    return { pageRows, total: sorted.length };
+  }, [filteredTenants, tenantTable.page, tenantTable.pageSize, tenantTable.sort]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !user || !isEn || loading) return;
@@ -3443,71 +3456,57 @@ function App() {
             Compte propriétaire global. Les mots de passe des entreprises sont stockés de façon chiffrée et ne sont pas
             affichables ; utilisez les invitations ou la réinitialisation pour donner un nouvel accès.
           </p>
-          {dashboardSidebarSearch.trim() && !filteredTenants.length ? (
-            <p className="app-meta">{t("Aucun espace ne correspond à la recherche.", "No workspace matches your search.")}</p>
-          ) : null}
-          <div className="grid">
-            {pagedTenants.map((tenant) => (
-              <article className="panel" key={tenant.id}>
-                <h3>
-                  {tenant.name} {tenant.isDemo ? "(démo)" : ""}
-                </h3>
-                <p>
-                  {tenant.location} — {tenant.contactPhone} — {tenant.subscriptionStatus || "sans abonnement"}
-                </p>
-                <p>
-                  Plan: {tenant.packageName || "—"} · Fin:{" "}
-                  {tenant.subscriptionEndsAt
-                    ? new Date(tenant.subscriptionEndsAt).toLocaleDateString("fr-FR")
-                    : "—"}
-                </p>
-                <p>
-                  Créé le {new Date(tenant.createdAt).toLocaleDateString("fr-FR")} · Admins:{" "}
-                  {(tenant.adminUsers || []).map((admin) => `${admin.fullName} <${admin.email}>`).join(", ") || "—"}
-                </p>
-                <button type="button" onClick={() => refresh(tenant.id)}>
-                  Ouvrir cet espace
-                </button>
-              </article>
-            ))}
-          </div>
-          {filteredTenants.length > TENANTS_PAGE_SIZE ? (
-            <nav className="tenant-pagination" aria-label={t("Pagination des espaces", "Workspaces pagination")}>
-              <button
-                type="button"
-                className="btn-secondary-outline"
-                disabled={tenantListPage <= 1}
-                onClick={() => setTenantListPage((p) => Math.max(1, p - 1))}
-              >
-                ← {t("Précédent", "Previous")}
-              </button>
-              <div className="tenant-pagination-pages">
-                {Array.from({ length: tenantPageCount }, (_, i) => i + 1).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    className={
-                      n === tenantListPage
-                        ? "tenant-pagination-page tenant-pagination-page--active"
-                        : "tenant-pagination-page"
-                    }
-                    onClick={() => setTenantListPage(n)}
-                    aria-current={n === tenantListPage ? "page" : undefined}
-                  >
-                    {n}
+          <DataTable
+            title={t("Espaces entreprises", "Tenant workspaces")}
+            description={t("Recherche, tri et pagination standardisés.", "Standardized search, sorting and pagination.")}
+            rows={tenantTableView.pageRows}
+            columns={[
+              {
+                key: "name",
+                header: t("Nom", "Name"),
+                sortKey: "name",
+                cell: (ten) => `${ten.name || "—"}${ten.isDemo ? " (démo)" : ""}`
+              },
+              { key: "location", header: t("Localisation", "Location"), sortKey: "location", cell: (ten) => ten.location || "—" },
+              {
+                key: "contactPhone",
+                header: t("Téléphone", "Phone"),
+                sortKey: "contactPhone",
+                cell: (ten) => ten.contactPhone || "—"
+              },
+              {
+                key: "subscriptionStatus",
+                header: t("Abonnement", "Subscription"),
+                sortKey: "subscriptionStatus",
+                cell: (ten) => ten.subscriptionStatus || t("sans abonnement", "no subscription")
+              },
+              { key: "packageName", header: t("Forfait", "Package"), sortKey: "packageName", cell: (ten) => ten.packageName || "—" },
+              {
+                key: "createdAt",
+                header: t("Créé", "Created"),
+                sortKey: "createdAt",
+                cell: (ten) => (ten.createdAt ? new Date(ten.createdAt).toLocaleDateString("fr-FR") : "—")
+              },
+              {
+                key: "actions",
+                header: t("Actions", "Actions"),
+                cell: (ten) => (
+                  <button type="button" onClick={() => refresh(ten.id)}>
+                    {t("Ouvrir", "Open")}
                   </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="btn-secondary-outline"
-                disabled={tenantListPage >= tenantPageCount}
-                onClick={() => setTenantListPage((p) => Math.min(tenantPageCount, p + 1))}
-              >
-                {t("Suivant", "Next")} →
-              </button>
-            </nav>
-          ) : null}
+                )
+              }
+            ]}
+            searchValue={tenantTable.q}
+            onSearchValueChange={(q) => setTenantTable((s) => ({ ...s, q, page: 1 }))}
+            page={tenantTable.page}
+            pageSize={tenantTable.pageSize}
+            totalRows={tenantTableView.total}
+            onPageChange={(page) => setTenantTable((s) => ({ ...s, page }))}
+            onPageSizeChange={(pageSize) => setTenantTable((s) => ({ ...s, pageSize, page: 1 }))}
+            sort={tenantTable.sort}
+            onSortChange={(sort) => setTenantTable((s) => ({ ...s, sort }))}
+          />
         </section>
       ) : null}
 
