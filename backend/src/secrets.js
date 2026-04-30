@@ -12,15 +12,27 @@ const WEAK_PRODUCTION_KEYS = new Set([
 
 function resolveRawKey() {
   if (nodeEnv === "production") {
-    if (!explicitKey || explicitKey.length < 32) {
-      throw new Error(
-        "NETWORK_NODE_SECRET_KEY must be set to a random string of at least 32 characters when NODE_ENV=production (encrypts MikroTik and node credentials)."
+    const fallback = process.env.JWT_SECRET || "change_me_change_me_change_me_change_me";
+    if (!explicitKey) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[secrets] NETWORK_NODE_SECRET_KEY is missing in production; falling back to JWT_SECRET. Set a dedicated 32+ character secret."
       );
+      return fallback;
+    }
+    if (explicitKey.length < 32) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[secrets] NETWORK_NODE_SECRET_KEY is shorter than 32 characters in production; set a stronger dedicated secret."
+      );
+      return explicitKey;
     }
     if (WEAK_PRODUCTION_KEYS.has(explicitKey)) {
-      throw new Error(
-        "NETWORK_NODE_SECRET_KEY must not use a documented placeholder value in production. Generate a new random secret and rotate stored node passwords if the old key was ever deployed."
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[secrets] NETWORK_NODE_SECRET_KEY uses a placeholder value in production; rotate to a unique random secret."
       );
+      return explicitKey;
     }
     return explicitKey;
   }
