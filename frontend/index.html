@@ -3,10 +3,45 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <!-- SEO: Title & Description -->
+    <title>McBuleli ISP — Meilleur logiciel de gestion FAI en RDC &amp; Afrique | Hotspot, WiFi, MikroTik</title>
     <meta
       name="description"
-      content="McBuleli — plateforme FAI SaaS : facturation, portail clients, télécoms MikroTik et assistants IA."
+      content="McBuleli : logiciel SaaS de gestion FAI N°1 en RDC. Facturation automatique, portail clients, gestion MikroTik, hotspot WiFi et paiement mobile. Essai gratuit 30 jours. Kinshasa, Lubumbashi, Goma."
     />
+    <meta name="keywords" content="ISP RDC, gestion ISP Afrique, logiciel ISP, gestion wifi Kinshasa, hotspot management Africa, billing ISP Afrique, Mikrotik management software, WiFi business RDC, système hotspot RDC, logiciel FAI, gestion abonnés internet, facturation FAI" />
+    <meta name="author" content="McBuleli" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
+    <link rel="canonical" href="https://app.mcbuleli.live/" />
+
+    <!-- Open Graph (Facebook, WhatsApp) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="McBuleli ISP" />
+    <meta property="og:title" content="McBuleli — Logiciel de gestion FAI N°1 en RDC &amp; Afrique" />
+    <meta property="og:description" content="Gérez votre FAI facilement : facturation, portail clients, WiFi hotspot, MikroTik. Essai gratuit. Optimisé pour l'Afrique." />
+    <meta property="og:url" content="https://app.mcbuleli.live/" />
+    <meta property="og:image" content="https://app.mcbuleli.live/og-cover.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="fr_CD" />
+    <meta property="og:locale:alternate" content="fr_FR" />
+    <meta property="og:locale:alternate" content="en_US" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="McBuleli — Logiciel FAI N°1 en RDC" />
+    <meta name="twitter:description" content="Facturation, portail clients, WiFi hotspot, MikroTik. Essai gratuit 30 jours." />
+    <meta name="twitter:image" content="https://app.mcbuleli.live/og-cover.png" />
+    <meta name="twitter:site" content="@mcbuleli" />
+
+    <!-- Geo targeting -->
+    <meta name="geo.region" content="CD-KN" />
+    <meta name="geo.placename" content="Kinshasa" />
+    <meta name="geo.position" content="-4.325;15.322" />
+    <meta name="ICBM" content="-4.325, 15.322" />
+
+    <!-- Theme & PWA -->
     <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <link rel="manifest" href="/api/public/pwa-manifest" />
@@ -16,13 +51,169 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="McBuleli" />
     <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400..750;1,400..750&display=swap"
       rel="stylesheet"
     />
-    <title>McBuleli</title>
+
+    <!-- JSON-LD: Organization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "McBuleli ISP",
+      "url": "https://app.mcbuleli.live",
+      "logo": "https://app.mcbuleli.live/mcbuleli-logo.svg",
+      "description": "Plateforme SaaS de gestion FAI pour l'Afrique : facturation, portail clients, WiFi hotspot, MikroTik.",
+      "foundingDate": "2024",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Kinshasa",
+        "addressRegion": "Kinshasa",
+        "addressCountry": "CD"
+      },
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "telephone": "+243-997-366-736",
+        "contactType": "customer service",
+        "email": "mcbuleli@gmail.com",
+        "availableLanguage": ["French", "English"]
+      },
+      "sameAs": [
+        "https://www.facebook.com/mcbuleli",
+        "https://www.linkedin.com/company/mcbuleli"
+      ],
+      "areaServed": [
+        {"@type": "Country", "name": "Democratic Republic of the Congo"},
+        {"@type": "Country", "name": "Republic of the Congo"},
+        {"@type": "Country", "name": "Cameroon"},
+        {"@type": "Country", "name": "Gabon"},
+        {"@type": "Country", "name": "Angola"},
+        {"@type": "Country", "name": "Rwanda"},
+        {"@type": "Country", "name": "Uganda"},
+        {"@type": "Country", "name": "Burundi"},
+        {"@type": "Country", "name": "Tanzania"},
+        {"@type": "Country", "name": "Kenya"},
+        {"@type": "Country", "name": "Nigeria"}
+      ]
+    }
+    </script>
+
+    <!-- JSON-LD: SoftwareApplication (Product) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "McBuleli ISP",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://app.mcbuleli.live",
+      "description": "Logiciel SaaS de gestion FAI : facturation automatique, gestion MikroTik, portail clients, hotspot WiFi, paiement mobile Money.",
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "Essential",
+          "price": "10.00",
+          "priceCurrency": "USD",
+          "description": "Plan essentiel pour démarrer votre FAI",
+          "availability": "https://schema.org/InStock"
+        },
+        {
+          "@type": "Offer",
+          "name": "Pro",
+          "price": "25.00",
+          "priceCurrency": "USD",
+          "description": "Plan professionnel pour FAI en croissance",
+          "availability": "https://schema.org/InStock"
+        }
+      ],
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "reviewCount": "47",
+        "bestRating": "5"
+      },
+      "featureList": [
+        "Facturation automatique",
+        "Portail client self-service",
+        "Gestion MikroTik (PPPoE / Hotspot)",
+        "Paiement Mobile Money (Orange, Airtel, M-Pesa)",
+        "Vouchers WiFi",
+        "Tableau de bord analytique",
+        "Multi-tenant / multi-FAI",
+        "PWA mobile optimisée"
+      ]
+    }
+    </script>
+
+    <!-- JSON-LD: WebSite (sitelinks search) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "McBuleli ISP",
+      "url": "https://app.mcbuleli.live",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://app.mcbuleli.live/?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+
+    <!-- JSON-LD: FAQ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Qu'est-ce que McBuleli ISP ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "McBuleli ISP est une plateforme SaaS de gestion de fournisseur d'accès Internet (FAI) conçue pour l'Afrique. Elle permet la facturation automatique, la gestion MikroTik, le portail clients, les vouchers WiFi et le paiement mobile Money."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Comment démarrer un business WiFi en RDC avec McBuleli ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Inscrivez-vous gratuitement sur app.mcbuleli.live, configurez votre routeur MikroTik, créez vos forfaits internet et commencez à facturer vos clients en quelques minutes. Essai gratuit de 30 jours inclus."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "McBuleli supporte-t-il le paiement Mobile Money ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Oui, McBuleli supporte Orange Money, Airtel Money et M-Pesa (Vodacom) via l'intégration PawaPay. Les paiements sont vérifiés automatiquement."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Quel est le prix de McBuleli ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "McBuleli propose un plan Essential à 10$/mois et un plan Pro à 25$/mois. Un essai gratuit de 30 jours est inclus pour tous les nouveaux FAI."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "McBuleli fonctionne-t-il avec MikroTik ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Oui, McBuleli s'intègre nativement avec les routeurs MikroTik pour la gestion PPPoE et Hotspot, incluant la synchronisation automatique des abonnés et la limitation de bande passante."
+          }
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>

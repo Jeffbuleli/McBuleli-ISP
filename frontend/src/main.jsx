@@ -1,15 +1,22 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App.jsx";
-import Portal from "./Portal.jsx";
-import Signup from "./Signup.jsx";
-import WifiPortal from "./WifiPortal.jsx";
 import PublicSite from "./PublicSite.jsx";
-import PrivacyPolicy from "./PrivacyPolicy.jsx";
 import { registerServiceWorker } from "./pwaRegister.js";
 import "./styles.css";
 
+const App = lazy(() => import("./App.jsx"));
+const Portal = lazy(() => import("./Portal.jsx"));
+const Signup = lazy(() => import("./Signup.jsx"));
+const WifiPortal = lazy(() => import("./WifiPortal.jsx"));
+const PrivacyPolicy = lazy(() => import("./PrivacyPolicy.jsx"));
+
 registerServiceWorker();
+
+const LazyFallback = () => (
+  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh", color: "#aaa" }}>
+    Chargement…
+  </div>
+);
 
 function Root() {
   const path = typeof window !== "undefined" ? window.location.pathname : "";
@@ -27,22 +34,22 @@ function Root() {
   ]);
   const normalizedDashPath = path.replace(/\/$/, "") || "/";
   if (dashScreenPaths.has(normalizedDashPath)) {
-    return hasToken && !forcePublic ? <App /> : <PublicSite />;
+    return hasToken && !forcePublic ? <Suspense fallback={<LazyFallback />}><App /></Suspense> : <PublicSite />;
   }
   if (path === "/" || path === "") {
-    return hasToken && !forcePublic ? <App /> : <PublicSite />;
+    return hasToken && !forcePublic ? <Suspense fallback={<LazyFallback />}><App /></Suspense> : <PublicSite />;
   }
   if (path === "/privacy") {
-    return <PrivacyPolicy />;
+    return <Suspense fallback={<LazyFallback />}><PrivacyPolicy /></Suspense>;
   }
   if (path === "/login" || path.startsWith("/login/")) {
-    return <App />;
+    return <Suspense fallback={<LazyFallback />}><App /></Suspense>;
   }
   if (path === "/portal" || path.startsWith("/portal/")) {
-    return <Portal />;
+    return <Suspense fallback={<LazyFallback />}><Portal /></Suspense>;
   }
   if (path === "/signup" || path.startsWith("/signup/")) {
-    return <Signup />;
+    return <Suspense fallback={<LazyFallback />}><Signup /></Suspense>;
   }
   if (
     path === "/wifi" ||
@@ -50,9 +57,9 @@ function Root() {
     path === "/buy/packages" ||
     path.startsWith("/buy/packages/")
   ) {
-    return <WifiPortal />;
+    return <Suspense fallback={<LazyFallback />}><WifiPortal /></Suspense>;
   }
-  return <App />;
+  return <Suspense fallback={<LazyFallback />}><App /></Suspense>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(

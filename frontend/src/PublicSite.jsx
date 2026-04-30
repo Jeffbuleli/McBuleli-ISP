@@ -531,14 +531,14 @@ export default function PublicSite() {
             </p>
             <h1 className="public-hero-title">
               {t(
-                "Tout ce dont votre FAI a besoin pour avancer sereinement.",
-                "Everything your ISP needs to move forward with confidence."
+                "Le meilleur logiciel de gestion FAI en RDC et en Afrique.",
+                "The best ISP management software in DR Congo & Africa."
               )}
             </h1>
             <p className="public-hero-lead">
               {t(
-                "Encaissements mobiles, portail abonnés, Wi‑Fi invité, terrain et synchronisation MikroTik : vos équipes voient l’essentiel au même endroit, sans se noyer dans les fichiers.",
-                "Mobile collections, subscriber portal, guest Wi‑Fi, field work and MikroTik sync — your people see what matters in one place, without drowning in files."
+                "Facturation automatique, paiement Mobile Money, portail abonnés, Wi‑Fi hotspot, gestion MikroTik et agents terrain : tout pour gérer votre business WiFi depuis Kinshasa ou partout en Afrique.",
+                "Automated billing, Mobile Money payments, subscriber portal, WiFi hotspot, MikroTik management and field agents — everything to run your WiFi business from Kinshasa or anywhere in Africa."
               )}
             </p>
             <div className="public-cta">
@@ -810,8 +810,8 @@ export default function PublicSite() {
             </a>
             <p className="public-footer-tagline">
               {t(
-                "Tout pour encaisser, piloter vos sites et vos équipes depuis un tableau de bord unique—sans mille feuilles Excel ni messages perdus dans les groupes WhatsApp.",
-                "Billing, network operations and teammate coordination converge in one place—without scattered spreadsheets or lost WhatsApp threads."
+                "Le logiciel de gestion FAI N°1 en République Démocratique du Congo. Gérez votre business WiFi à Kinshasa, Lubumbashi, Goma ou partout en Afrique centrale—facturation, MikroTik, hotspot et paiement mobile depuis un seul tableau de bord.",
+                "The #1 ISP management software in DR Congo. Run your WiFi business in Kinshasa, Lubumbashi, Goma or anywhere in Central Africa—billing, MikroTik, hotspot and mobile payments from one dashboard."
               )}
             </p>
           </div>
