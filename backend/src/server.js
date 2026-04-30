@@ -7,6 +7,14 @@ import { processExpiredSubscriptions, processOverdueInvoices, processRenewalInvo
 import { assertNetworkNodeSecretKeyForProduction } from "./secrets.js";
 import { isS3BrandingConfigured } from "./brandingLogoStorage.js";
 
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT:", err);
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("UNHANDLED:", err);
+});
+
 const port = Number(process.env.PORT || 4000);
 const reminderIntervalMinutes = Number(process.env.TID_REMINDER_INTERVAL_MIN || 30);
 const notificationWorkerIntervalSec = Number(process.env.NOTIFICATION_WORKER_INTERVAL_SEC || 60);
