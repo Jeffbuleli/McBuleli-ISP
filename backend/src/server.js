@@ -77,9 +77,9 @@ async function start() {
   }
   await initDb();
   ensureBrandingUploadDir();
-  app.listen(port, () => {
+  app.listen(port, "0.0.0.0", () => {
     // eslint-disable-next-line no-console
-    console.log(`Backend running at http://localhost:${port}`);
+    console.log(`Backend running on 0.0.0.0:${port}`);
   });
   setInterval(() => {
     queueAutomaticTidReminders().catch(() => {});

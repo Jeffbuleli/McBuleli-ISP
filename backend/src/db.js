@@ -9,8 +9,14 @@ const __dirnameDb = path.dirname(fileURLToPath(import.meta.url));
 
 const { Pool } = pg;
 
-const connectionString =
-  process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/isp_billing";
+const nodeEnv = String(process.env.NODE_ENV || "development").toLowerCase();
+const connectionString = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/isp_billing";
+
+if (nodeEnv === "production" && !process.env.DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL is required when NODE_ENV=production. Configure your managed Postgres connection string in Render environment variables."
+  );
+}
 
 export const pool = new Pool({ connectionString });
 

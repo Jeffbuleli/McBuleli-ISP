@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: mcbuleli-isp
+    env: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm run start
+    healthCheckPath: /api/public/platform-packages
+    envVars:
+      - key: NODE_ENV
+        value: production
