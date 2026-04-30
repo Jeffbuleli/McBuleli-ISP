@@ -24,11 +24,15 @@ export function DataTable({
   pageSizeOptions = [10, 20, 50, 100],
   onPageChange,
   onPageSizeChange,
-  getRowKey
+  getRowKey,
+  /** Optional `(fr, en) => string` — pager labels + aria */
+  t
 }) {
   const safeRows = Array.isArray(rows) ? rows : [];
   const safeColumns = Array.isArray(columns) ? columns : [];
   const safePageSize = pageSizeOptions.includes(pageSize) ? pageSize : pageSizeOptions[0] || 10;
+
+  const tr = typeof t === "function" ? t : (_, en) => en;
 
   const totalPages = useMemo(() => {
     const total = typeof totalRows === "number" ? totalRows : safeRows.length;
@@ -138,22 +142,53 @@ export function DataTable({
 
       <div className="mb-table__foot">
         <div className="mb-table__pager">
-          <button type="button" className="mb-table__pagebtn" disabled={!canPrev} onClick={() => onPageChange?.(safePage - 1)}>
-            Previous
+          <button
+            type="button"
+            className="mb-table__pagebtn mb-table__pagebtn--prev"
+            disabled={!canPrev}
+            onClick={() => onPageChange?.(safePage - 1)}
+            aria-label={tr("Page précédente", "Previous page")}
+            title={tr("Page précédente", "Previous page")}
+          >
+            <span className="mb-table__pagebtn-label mb-table__pagebtn-label--full">{tr("Précédent", "Previous")}</span>
+            <span className="mb-table__pagebtn-label mb-table__pagebtn-label--compact" aria-hidden>
+              ‹
+            </span>
           </button>
-          <div className="mb-table__pagenums" aria-label="Pages">
+          <div className="mb-table__pagenums">
             <span className="mb-table__pagenum">
               {safePage} / {totalPages}
             </span>
           </div>
-          <button type="button" className="mb-table__pagebtn" disabled={!canNext} onClick={() => onPageChange?.(safePage + 1)}>
-            Next
+          <button
+            type="button"
+            className="mb-table__pagebtn mb-table__pagebtn--next"
+            disabled={!canNext}
+            onClick={() => onPageChange?.(safePage + 1)}
+            aria-label={tr("Page suivante", "Next page")}
+            title={tr("Page suivante", "Next page")}
+          >
+            <span className="mb-table__pagebtn-label mb-table__pagebtn-label--full">{tr("Suivant", "Next")}</span>
+            <span className="mb-table__pagebtn-label mb-table__pagebtn-label--compact" aria-hidden>
+              ›
+            </span>
           </button>
         </div>
 
         <label className="mb-table__pagesize">
-          <span className="mb-table__pagesize-label">Rows</span>
-          <select value={safePageSize} onChange={(e) => onPageSizeChange?.(Number(e.target.value))}>
+          <span className="mb-table__pagesize-label mb-table__pagesize-label--full">{tr("Lignes", "Rows")}</span>
+          <span
+            className="mb-table__pagesize-label mb-table__pagesize-label--compact"
+            aria-hidden
+            title={tr("Lignes par page", "Rows per page")}
+          >
+            #
+          </span>
+          <select
+            value={safePageSize}
+            onChange={(e) => onPageSizeChange?.(Number(e.target.value))}
+            aria-label={tr("Nombre de lignes par page", "Rows per page")}
+          >
             {pageSizeOptions.map((n) => (
               <option key={n} value={n}>
                 {n}
@@ -165,4 +200,3 @@ export function DataTable({
     </section>
   );
 }
-

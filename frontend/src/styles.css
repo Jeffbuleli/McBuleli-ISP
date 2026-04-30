@@ -7478,12 +7478,31 @@ html:has(.app-shell--mobile-pwa) {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
+  min-width: 0;
+  /* When the footer is narrow, switch pager to symbols (see @container below). */
+  container-type: inline-size;
+  container-name: mb-table-foot;
 }
 
 .mb-table__pager {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mb-table__pagenums {
+  flex: 0 0 auto;
+  min-width: 0;
+  text-align: center;
+}
+
+.mb-table__pagenum {
+  display: inline-block;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .mb-table__pagebtn {
@@ -7494,6 +7513,22 @@ html:has(.app-shell--mobile-pwa) {
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.9);
   cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mb-table__pagebtn-label--compact {
+  display: none;
+  font-size: 1.35rem;
+  line-height: 1;
+  font-weight: 600;
+  padding: 0 2px;
+}
+
+.mb-table__pagesize-label--compact {
+  display: none;
+  font-weight: 600;
+  opacity: 0.85;
+  padding-right: 2px;
 }
 
 .mb-table__pagebtn:disabled {
@@ -7507,6 +7542,7 @@ html:has(.app-shell--mobile-pwa) {
   gap: 10px;
   color: rgba(255, 255, 255, 0.72);
   font-size: 0.9rem;
+  flex-shrink: 0;
 }
 
 .mb-table__pagesize select {
@@ -7516,6 +7552,65 @@ html:has(.app-shell--mobile-pwa) {
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.9);
   padding: 6px 10px;
+}
+
+@container mb-table-foot (max-width: 26rem) {
+  .mb-table__foot {
+    gap: 8px;
+  }
+
+  .mb-table__pager {
+    gap: 6px;
+  }
+
+  .mb-table__pagebtn-label--full,
+  .mb-table__pagesize-label--full {
+    display: none;
+  }
+
+  .mb-table__pagebtn-label--compact,
+  .mb-table__pagesize-label--compact {
+    display: inline;
+  }
+
+  .mb-table__pagebtn {
+    padding: 8px 10px;
+    min-width: 40px;
+  }
+
+  .mb-table__pagesize {
+    gap: 6px;
+  }
+}
+
+/* Narrow viewport: same compact pager when @container is unavailable or foot stays wide */
+@media (max-width: 480px) {
+  .mb-table__foot {
+    gap: 8px;
+  }
+
+  .mb-table__pager {
+    gap: 6px;
+  }
+
+  .mb-table__pagebtn-label--full,
+  .mb-table__pagesize-label--full {
+    display: none;
+  }
+
+  .mb-table__pagebtn-label--compact,
+  .mb-table__pagesize-label--compact {
+    display: inline;
+  }
+
+  .mb-table__pagebtn {
+    padding: 8px 10px;
+    min-width: 40px;
+  }
+
+  .mb-table__pagesize {
+    gap: 6px;
+  }
 }
 
 /* ---- Unified toggle/checkbox style (mobile/tablet/desktop) ---- */
