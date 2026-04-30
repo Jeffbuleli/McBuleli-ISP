@@ -3472,6 +3472,16 @@ function App() {
         </section>
       ) : null}
 
+      <section className="panel" id="reports">
+        <h2>{t("Rapports / analyses", "Reports / analytics")}</h2>
+        <p className="app-meta">
+          {t(
+            "Cette section arrive avec les tableaux et graphiques (revenus, usage, rétention, churn) et des filtres interactifs. La navigation est déjà gérée par le registre de modules pour rester extensible.",
+            "This section is coming with tables and charts (revenue, usage, retention, churn) and interactive filters. Navigation is already handled by the module registry to remain extensible."
+          )}
+        </p>
+      </section>
+
             <section className="grid metrics">
               <Card title={t("Utilisateurs hotspot", "Hotspot Users")} value={networkStats?.hotspotUsers ?? 0} />
               <Card title={t("Utilisateurs PPPoE", "PPPoE Users")} value={networkStats?.pppoeUsers ?? 0} />
@@ -3788,6 +3798,19 @@ function App() {
             </button>
           </form>
         )}
+
+        <section className="panel" aria-label={t("Compte", "Account")}>
+          <h2>{t("Compte", "Account")}</h2>
+          <p className="app-meta">
+            {t(
+              "Déconnexion de cet appareil et fermeture de l’espace opérateur.",
+              "Sign out from this device and close the operator workspace."
+            )}
+          </p>
+          <button type="button" className="btn-expense-delete" onClick={onLogout}>
+            {t("Déconnexion", "Logout")}
+          </button>
+        </section>
       </section>
       </DashboardScreenGate>
 
