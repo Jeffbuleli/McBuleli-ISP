@@ -7,6 +7,7 @@ import DashboardMobileSheetMenu from "./DashboardMobileSheetMenu.jsx";
 import DashboardScreenGate from "./DashboardScreenGate.jsx";
 import DashboardTopBar from "./DashboardTopBar.jsx";
 import DashboardStickyBanner from "./DashboardStickyBanner.jsx";
+import { DataTable } from "./ui/DataTable.jsx";
 import { useDashboardMobilePath } from "./useDashboardMobilePath.js";
 import { buildDashboardNavCategories } from "./dashboardNavCategories.js";
 import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
@@ -631,6 +632,12 @@ function App() {
   const [plans, setPlans] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [invoiceTable, setInvoiceTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "status", dir: "asc" }
+  });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [mobilePwaMenuOpen, setMobilePwaMenuOpen] = useState(false);
@@ -650,6 +657,38 @@ function App() {
     () => tenantContext?.ispId || selectedIspId || user?.ispId || isps[0]?.id || "",
     [tenantContext?.ispId, selectedIspId, user?.ispId, isps]
   );
+
+  const invoiceTableView = useMemo(() => {
+    const q = String(invoiceTable.q || "").trim().toLowerCase();
+    let list = Array.isArray(invoices) ? invoices : [];
+    if (q) {
+      list = list.filter((inv) => {
+        const id = String(inv?.id || "").toLowerCase();
+        const st = String(inv?.status || "").toLowerCase();
+        return id.includes(q) || st.includes(q);
+      });
+    }
+
+    const sKey = invoiceTable.sort?.key;
+    const sDir = invoiceTable.sort?.dir === "desc" ? -1 : 1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+
+    const pageSize = Number(invoiceTable.pageSize) || 10;
+    const page = Math.max(1, Number(invoiceTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [invoices, invoiceTable]);
 
   const fetchTeamChatUnread = useCallback(async () => {
     if (!user) return;
@@ -5907,46 +5946,63 @@ function App() {
       <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
       <section className="panel billing-invoices-panel">
         <h2>{t("Factures", "Invoices")}</h2>
-        <div className="billing-invoices-scroll">
-          <div className="table billing-invoices-table">
-            <div className="row header">
-              <span>ID</span>
-              <span>{t("Montant", "Amount")}</span>
-              <span>{t("Statut", "Status")}</span>
-              <span>{t("Paiement", "Payment")}</span>
-              <span>PDF</span>
-            </div>
-            {invoices.map((invoice) => (
-              <div className="row" key={invoice.id}>
-                <span>{invoice.id.slice(0, 8)}</span>
-                <span>${invoice.amountUsd}</span>
-                <span>{invoiceStatusShort(invoice.status, isEn)}</span>
-                <span>
-                  {invoice.status === "unpaid" || invoice.status === "overdue" ? (
-                    !isFieldAgent ? (
-                      <button type="button" onClick={() => onMarkPaid(invoice.id, invoice.amountUsd)}>
-                        {t("Marquer payée", "Mark paid")}
-                      </button>
-                    ) : (
-                      "—"
-                    )
+        <DataTable
+          title={null}
+          rows={invoiceTableView.pageRows}
+          columns={[
+            {
+              key: "id",
+              header: "ID",
+              cell: (inv) => String(inv.id || "").slice(0, 8)
+            },
+            {
+              key: "amountUsd",
+              header: t("Montant", "Amount"),
+              sortKey: "amountUsd",
+              cell: (inv) => `$${inv.amountUsd ?? "—"}`
+            },
+            {
+              key: "status",
+              header: t("Statut", "Status"),
+              sortKey: "status",
+              cell: (inv) => invoiceStatusShort(inv.status, isEn)
+            },
+            {
+              key: "payment",
+              header: t("Paiement", "Payment"),
+              cell: (inv) =>
+                inv.status === "unpaid" || inv.status === "overdue" ? (
+                  !isFieldAgent ? (
+                    <button type="button" onClick={() => onMarkPaid(inv.id, inv.amountUsd)}>
+                      {t("Marquer payée", "Mark paid")}
+                    </button>
                   ) : (
-                    t("Payée", "Paid")
-                  )}
-                </span>
-                <span>
-                  <button
-                    type="button"
-                    className="btn-secondary-outline"
-                    onClick={() => onDownloadInvoiceProforma(invoice.id)}
-                  >
-                    {t("Proforma", "Proforma")}
-                  </button>
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+                    "—"
+                  )
+                ) : (
+                  t("Payée", "Paid")
+                )
+            },
+            {
+              key: "pdf",
+              header: "PDF",
+              cell: (inv) => (
+                <button type="button" className="btn-secondary-outline" onClick={() => onDownloadInvoiceProforma(inv.id)}>
+                  {t("Proforma", "Proforma")}
+                </button>
+              )
+            }
+          ]}
+          searchValue={invoiceTable.q}
+          onSearchValueChange={(q) => setInvoiceTable((s) => ({ ...s, q, page: 1 }))}
+          page={invoiceTable.page}
+          pageSize={invoiceTable.pageSize}
+          totalRows={invoiceTableView.total}
+          onPageChange={(page) => setInvoiceTable((s) => ({ ...s, page }))}
+          onPageSizeChange={(pageSize) => setInvoiceTable((s) => ({ ...s, pageSize, page: 1 }))}
+          sort={invoiceTable.sort}
+          onSortChange={(sort) => setInvoiceTable((s) => ({ ...s, sort }))}
+        />
       </section>
 
       <section className="panel">
