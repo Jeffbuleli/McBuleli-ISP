@@ -406,6 +406,52 @@ export async function initDb() {
   );
 
   await query(`
+    CREATE TABLE IF NOT EXISTS payment_intents (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+      customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+      channel TEXT NOT NULL CHECK (channel IN ('cash_agent', 'mobile_money_manual', 'bank_transfer', 'card_manual', 'crypto_wallet')),
+      amount_usd NUMERIC(10,2) NOT NULL,
+      external_ref TEXT NOT NULL,
+      payer_contact TEXT NULL,
+      evidence_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'approved_l1', 'approved', 'rejected', 'failed')),
+      review_note TEXT NULL,
+      approved_l1_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      approved_l1_at TIMESTAMP NULL,
+      approved_l2_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      approved_l2_at TIMESTAMP NULL,
+      reviewed_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_at TIMESTAMP NULL,
+      created_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_payment_intents_isp_created ON payment_intents (isp_id, created_at DESC);");
+  await query("CREATE INDEX IF NOT EXISTS idx_payment_intents_isp_status ON payment_intents (isp_id, status);");
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS accounting_ledger_entries (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      entry_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      journal_type TEXT NOT NULL CHECK (journal_type IN ('sales', 'cash_receipts', 'bank_receipts', 'adjustment')),
+      account_code TEXT NOT NULL,
+      account_label TEXT NOT NULL,
+      debit_usd NUMERIC(12,2) NOT NULL DEFAULT 0,
+      credit_usd NUMERIC(12,2) NOT NULL DEFAULT 0,
+      ref_type TEXT NULL,
+      ref_id UUID NULL,
+      memo TEXT NULL,
+      created_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_ledger_isp_date ON accounting_ledger_entries (isp_id, entry_date DESC);");
+
+  await query(`
     CREATE TABLE IF NOT EXISTS isp_payment_methods (
       id UUID PRIMARY KEY,
       isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
@@ -778,9 +824,28 @@ export async function initDb() {
       reviewed_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
       reviewed_at TIMESTAMP NULL,
       review_note TEXT NULL,
+      approved_l1_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      approved_l1_at TIMESTAMP NULL,
+      approved_l2_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      approved_l2_at TIMESTAMP NULL,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
+  await query(`
+    DO $tidchk$ BEGIN
+      ALTER TABLE payment_tid_submissions DROP CONSTRAINT IF EXISTS payment_tid_submissions_status_check;
+    EXCEPTION WHEN undefined_object THEN NULL;
+    END $tidchk$;
+  `);
+  await query(`
+    ALTER TABLE payment_tid_submissions
+    ADD CONSTRAINT payment_tid_submissions_status_check
+    CHECK (status IN ('pending', 'approved_l1', 'approved', 'rejected'))
+  `);
+  await query("ALTER TABLE payment_tid_submissions ADD COLUMN IF NOT EXISTS approved_l1_by UUID NULL REFERENCES users(id) ON DELETE SET NULL;");
+  await query("ALTER TABLE payment_tid_submissions ADD COLUMN IF NOT EXISTS approved_l1_at TIMESTAMP NULL;");
+  await query("ALTER TABLE payment_tid_submissions ADD COLUMN IF NOT EXISTS approved_l2_by UUID NULL REFERENCES users(id) ON DELETE SET NULL;");
+  await query("ALTER TABLE payment_tid_submissions ADD COLUMN IF NOT EXISTS approved_l2_at TIMESTAMP NULL;");
   await query(
     "CREATE INDEX IF NOT EXISTS idx_tid_submissions_isp_tid ON payment_tid_submissions (isp_id, tid);"
   );

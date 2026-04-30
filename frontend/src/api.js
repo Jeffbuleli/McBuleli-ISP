@@ -751,6 +751,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ispId })
     }),
+  getPaymentIntents: (ispId) => request(withIsp("/payments/intents", ispId)),
+  createPaymentIntent: (ispId, payload) =>
+    request(withIsp("/payments/intents", ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
+  reviewPaymentIntent: (ispId, intentId, payload) =>
+    request(withIsp(`/payments/intents/${encodeURIComponent(intentId)}/review`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
   generateVouchers: (ispId, payload) =>
     request(withIsp("/vouchers/generate", ispId), {
       method: "POST",
@@ -783,6 +794,19 @@ export const api = {
       body: JSON.stringify({ ...payload, ispId })
     }),
   getAccountingPeriodClosures: (ispId) => request(withIsp("/accounting/period-closures", ispId)),
+  getAccountingLedger: (ispId, from, to) => {
+    const q = `?from=${encodeURIComponent(String(from || "").slice(0, 10))}&to=${encodeURIComponent(
+      String(to || "").slice(0, 10)
+    )}`;
+    return request(withIsp(`/accounting/ledger${q}`, ispId));
+  },
+  downloadAccountingLedgerCsv: async (ispId, from, to) => {
+    const q = `?from=${encodeURIComponent(String(from || "").slice(0, 10))}&to=${encodeURIComponent(
+      String(to || "").slice(0, 10)
+    )}`;
+    const blob = await authFetchBlob(withIsp(`/accounting/ledger/export${q}`, ispId));
+    triggerBrowserDownload(blob, `accounting-ledger-${String(ispId).slice(0, 8)}.csv`);
+  },
   createAccountingPeriodClosure: (ispId, payload) =>
     request(withIsp("/accounting/period-closures", ispId), {
       method: "POST",

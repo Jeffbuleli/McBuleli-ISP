@@ -497,6 +497,7 @@ export default function TeamChatPanel({
                   : "—";
 
               const avSrc = publicAssetUrl(m.sender?.chatAvatarUrl || "");
+              const meAvatarSrc = publicAssetUrl(user?.chatAvatarUrl || "");
 
               const roleLabel = formatStaffRole(m.sender?.role, isEn);
 
@@ -507,21 +508,27 @@ export default function TeamChatPanel({
                     groupSame ? " dashboard-team-chat-msg--grouped" : ""
                   }`}
                 >
-                  {!isMe && (
-                    <div className="dashboard-team-chat-msg__avatarWrap" aria-hidden={groupSame}>
-                      {!groupSame ? (
-                        avSrc ? (
-                          <img src={avSrc} alt="" className="dashboard-team-chat-msg__avatar" />
+                  <div className="dashboard-team-chat-msg__avatarWrap" aria-hidden={groupSame}>
+                    {!groupSame ? (
+                      isMe ? (
+                        meAvatarSrc ? (
+                          <img src={meAvatarSrc} alt="" className="dashboard-team-chat-msg__avatar dashboard-team-chat-msg__avatar--me" />
                         ) : (
-                          <span className="dashboard-team-chat-msg__avatarFallback">
-                            {initialsFromUsername(m.sender?.chatUsername)}
+                          <span className="dashboard-team-chat-msg__avatarFallback dashboard-team-chat-msg__avatarFallback--me">
+                            {initialsFromUsername(user?.chatUsername || user?.fullName)}
                           </span>
                         )
+                      ) : avSrc ? (
+                        <img src={avSrc} alt="" className="dashboard-team-chat-msg__avatar" />
                       ) : (
-                        <span className="dashboard-team-chat-msg__avatarPlaceholder" />
-                      )}
-                    </div>
-                  )}
+                        <span className="dashboard-team-chat-msg__avatarFallback">
+                          {initialsFromUsername(m.sender?.chatUsername)}
+                        </span>
+                      )
+                    ) : (
+                      <span className="dashboard-team-chat-msg__avatarPlaceholder" />
+                    )}
+                  </div>
                   <div className="dashboard-team-chat-msg__bubble">
                     {!isMe && !groupSame ? (
                       <div className="dashboard-team-chat-msg__meta">

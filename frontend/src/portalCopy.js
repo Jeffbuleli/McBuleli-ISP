@@ -65,6 +65,10 @@ const STR = {
     homeShortcut: "Accueil — site public McBuleli",
     mcbuleliPoweredPrefix: "Propulsé par",
     announcementsTitle: "Messages de votre opérateur",
+    paymentHelpTitle: "Instructions de paiement (éviter les erreurs)",
+    paymentHelpLead:
+      "Vérifiez toujours le bénéficiaire, la banque/numéro ou wallet et utilisez la référence demandée avant d'envoyer le paiement.",
+    contactBankName: "Virement bancaire",
     depositRef: "ID dépôt",
     invStatusUnpaid: "Impayée",
     invStatusOverdue: "En retard",
@@ -137,6 +141,10 @@ const STR = {
     homeShortcut: "Home — McBuleli public site",
     mcbuleliPoweredPrefix: "Powered by",
     announcementsTitle: "Messages from your provider",
+    paymentHelpTitle: "Payment instructions (avoid mistakes)",
+    paymentHelpLead:
+      "Always verify beneficiary name, bank/account or wallet details, and use the required reference before sending payment.",
+    contactBankName: "Bank transfer",
     depositRef: "Deposit ID",
     invStatusUnpaid: "Unpaid",
     invStatusOverdue: "Overdue",

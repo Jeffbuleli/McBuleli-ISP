@@ -17,6 +17,24 @@ function normalizeGatewayStatus(input) {
   return "pending";
 }
 
+async function postLedgerEntriesForPaymentTx(client, { ispId, invoiceId, paymentId, amountUsd, methodType }) {
+  const amt = Number(amountUsd || 0);
+  if (!Number.isFinite(amt) || amt <= 0) return;
+  const method = normalizeMethodType(methodType);
+  const isCashLike = method === "cash" || method === "manual_mobile_money" || method === "mobile_money_manual";
+  const journalType = isCashLike ? "cash_receipts" : "bank_receipts";
+  const debitCode = isCashLike ? "53" : "52";
+  const debitLabel = isCashLike ? "Caisse" : "Banque / Wallet";
+  await client.query(
+    `INSERT INTO accounting_ledger_entries
+      (id, isp_id, journal_type, account_code, account_label, debit_usd, credit_usd, ref_type, ref_id, memo)
+     VALUES
+      (gen_random_uuid(), $1, $2, $3, $4, $5, 0, 'payment', $6, $7),
+      (gen_random_uuid(), $1, 'sales', '41', 'Clients', 0, $5, 'invoice', $8, $7)`,
+    [ispId, journalType, debitCode, debitLabel, amt, paymentId, `Payment ${method}`, invoiceId]
+  );
+}
+
 /**
  * Core payment write path inside an open transaction (caller supplies `client`).
  * Does not call provisionSubscriptionAccess (run after COMMIT).
@@ -125,6 +143,13 @@ export async function applyInvoicePaymentTx(client, { ispId, invoiceId, provider
     );
     if (paidUpd.rows[0]) {
       await extendSubscriptionAfterPayment(ispId, invoice.subscription_id, client.query.bind(client));
+      await postLedgerEntriesForPaymentTx(client, {
+        ispId,
+        invoiceId,
+        paymentId: paymentInsert.rows[0].id,
+        amountUsd: paymentInsert.rows[0].amountUsd,
+        methodType: methodNorm
+      });
       activated = true;
     }
   }

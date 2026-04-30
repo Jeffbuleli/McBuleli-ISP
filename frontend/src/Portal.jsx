@@ -90,6 +90,7 @@ export default function Portal() {
   const [setupPasswordInput, setSetupPasswordInput] = useState("");
   const [session, setSession] = useState(null);
   const [portalAnnouncements, setPortalAnnouncements] = useState([]);
+  const [paymentInstructions, setPaymentInstructions] = useState({ owner: null, items: [] });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [tidForm, setTidForm] = useState({ invoiceId: "", tid: "", submittedByPhone: "", amountUsd: "" });
@@ -116,25 +117,38 @@ export default function Portal() {
       if (!a || (a.type === "opaque" && (!a.token || a.token.length < 16))) {
         setSession(null);
         setPortalAnnouncements([]);
+        setPaymentInstructions({ owner: null, items: [] });
         setError(portalT(uiLang, "errBootstrap"));
         return;
       }
       if (a.type === "subscriber" && !a.jwt) {
         setSession(null);
         setPortalAnnouncements([]);
+        setPaymentInstructions({ owner: null, items: [] });
         setError(portalT(uiLang, "errNoSession"));
         return;
       }
       const data = await portalFetch("/portal/session", a);
       setSession(data);
       let pa = [];
+      let payIns = { owner: null, items: [] };
       try {
         const ann = await portalFetch("/portal/announcements", a);
         pa = ann.items || [];
       } catch {
         pa = [];
       }
+      try {
+        const ins = await portalFetch("/portal/payment-instructions", a);
+        payIns = {
+          owner: ins?.owner || null,
+          items: Array.isArray(ins?.items) ? ins.items : []
+        };
+      } catch {
+        payIns = { owner: null, items: [] };
+      }
       setPortalAnnouncements(pa);
+      setPaymentInstructions(payIns);
       if (a.type === "opaque" && a.token) {
         const url = new URL(window.location.href);
         url.searchParams.set("token", a.token);
@@ -321,6 +335,15 @@ export default function Portal() {
     if (!s || s === "AA") return "";
     return s;
   })();
+
+  function paymentMethodLabel(methodType) {
+    const m = String(methodType || "").toLowerCase();
+    if (m === "bank_transfer") return t("contactBankName");
+    if (m === "mobile_money" || m === "pawapay") return t("payMobileTitle");
+    if (m === "crypto_wallet" || m === "binance_pay") return "Crypto / Binance";
+    if (m === "cash") return "Cash Agent";
+    return methodType || "Payment";
+  }
 
   return (
     <>
@@ -546,6 +569,42 @@ export default function Portal() {
               )}
             </div>
           </section>
+
+          {paymentInstructions.items?.length ? (
+            <section className="panel">
+              <h2>{t("paymentHelpTitle")}</h2>
+              <p>
+                {t("paymentHelpLead")}
+              </p>
+              {paymentInstructions.items.map((item) => (
+                <div key={item.id} style={{ marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                  <p style={{ margin: "0 0 6px", fontWeight: 700 }}>
+                    {paymentMethodLabel(item.methodType)} — {item.providerName}
+                  </p>
+                  {item.instructions?.accountName ? <p style={{ margin: 0 }}>Account owner: <b>{item.instructions.accountName}</b></p> : null}
+                  {item.instructions?.bankName ? <p style={{ margin: 0 }}>Bank: <b>{item.instructions.bankName}</b></p> : null}
+                  {item.instructions?.accountNumber ? <p style={{ margin: 0 }}>Account number: <b>{item.instructions.accountNumber}</b></p> : null}
+                  {item.instructions?.iban ? <p style={{ margin: 0 }}>IBAN: <b>{item.instructions.iban}</b></p> : null}
+                  {item.instructions?.swiftCode ? <p style={{ margin: 0 }}>SWIFT: <b>{item.instructions.swiftCode}</b></p> : null}
+                  {item.instructions?.mobileMoneyNumber ? <p style={{ margin: 0 }}>Mobile money: <b>{item.instructions.mobileMoneyNumber}</b></p> : null}
+                  {item.instructions?.walletAddress ? <p style={{ margin: 0 }}>Wallet: <b>{item.instructions.walletAddress}</b></p> : null}
+                  {item.instructions?.walletNetwork ? <p style={{ margin: 0 }}>Network: <b>{item.instructions.walletNetwork}</b></p> : null}
+                  {item.instructions?.memoTag ? <p style={{ margin: 0 }}>Memo/Tag: <b>{item.instructions.memoTag}</b></p> : null}
+                  {item.instructions?.validationEtaMinutes ? (
+                    <p style={{ margin: 0 }}>
+                      Validation ETA: <b>{item.instructions.validationEtaMinutes} min</b>
+                    </p>
+                  ) : null}
+                  {item.instructions?.note ? <p style={{ margin: "4px 0 0" }}>{item.instructions.note}</p> : null}
+                </div>
+              ))}
+              {paymentInstructions.owner?.displayName ? (
+                <p className="app-meta" style={{ marginBottom: 0 }}>
+                  Beneficiary company: <b>{paymentInstructions.owner.displayName}</b>
+                </p>
+              ) : null}
+            </section>
+          ) : null}
 
           <form className="panel" onSubmit={onStartMobileMoneyPayment}>
             <h2>{t("payMobileTitle")}</h2>

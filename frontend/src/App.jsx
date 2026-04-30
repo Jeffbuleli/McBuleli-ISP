@@ -82,6 +82,7 @@ function tidSubmissionStatusLabel(status, isEn) {
   const s = String(status || "").toLowerCase();
   const m = {
     pending: { fr: "en attente", en: "pending" },
+    approved_l1: { fr: "approuvé niveau 1", en: "approved level 1" },
     approved: { fr: "approuvé", en: "approved" },
     rejected: { fr: "rejeté", en: "rejected" },
     cancelled: { fr: "annulé", en: "cancelled" },
@@ -89,6 +90,10 @@ function tidSubmissionStatusLabel(status, isEn) {
   };
   const row = m[s];
   return row ? (isEn ? row.en : row.fr) : status || "—";
+}
+
+function paymentIntentStatusLabel(status, isEn) {
+  return tidSubmissionStatusLabel(status, isEn);
 }
 
 function invoiceStatusShort(status, isEn) {
@@ -628,6 +633,22 @@ function App() {
   const [onlineSessionsWindowMinutes, setOnlineSessionsWindowMinutes] = useState(30);
   const [tidSubmissions, setTidSubmissions] = useState([]);
   const [tidConflicts, setTidConflicts] = useState([]);
+  const [paymentIntents, setPaymentIntents] = useState([]);
+  const [paymentIntentTable, setPaymentIntentTable] = useState({
+    q: "",
+    status: "all",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "createdAt", dir: "desc" }
+  });
+  const [accountingLedger, setAccountingLedger] = useState([]);
+  const [accountingLedgerTotals, setAccountingLedgerTotals] = useState({ totalDebitUsd: 0, totalCreditUsd: 0 });
+  const [ledgerTable, setLedgerTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "entryDate", dir: "desc" }
+  });
   const [vouchers, setVouchers] = useState([]);
   const [voucherTable, setVoucherTable] = useState({
     q: "",
@@ -824,6 +845,66 @@ function App() {
     const pageRows = list.slice(start, start + pageSize);
     return { pageRows, total: list.length };
   }, [expenses, expenseTable.page, expenseTable.pageSize, expenseTable.q, expenseTable.sort, expenseTable.status]);
+
+  const paymentIntentTableView = useMemo(() => {
+    const q = String(paymentIntentTable.q || "").trim().toLowerCase();
+    const stFilter = String(paymentIntentTable.status || "all");
+    let list = Array.isArray(paymentIntents) ? paymentIntents : [];
+    if (stFilter !== "all") list = list.filter((it) => String(it?.status || "pending") === stFilter);
+    if (q) {
+      list = list.filter((it) => {
+        const hay = `${it?.channel || ""} ${it?.externalRef || ""} ${it?.payerContact || ""} ${it?.status || ""} ${it?.amountUsd || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = paymentIntentTable.sort?.key;
+    const sDir = paymentIntentTable.sort?.dir === "asc" ? 1 : -1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(paymentIntentTable.pageSize) || 10;
+    const page = Math.max(1, Number(paymentIntentTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [paymentIntents, paymentIntentTable.page, paymentIntentTable.pageSize, paymentIntentTable.q, paymentIntentTable.sort, paymentIntentTable.status]);
+
+  const ledgerTableView = useMemo(() => {
+    const q = String(ledgerTable.q || "").trim().toLowerCase();
+    let list = Array.isArray(accountingLedger) ? accountingLedger : [];
+    if (q) {
+      list = list.filter((it) => {
+        const hay = `${it?.entryDate || ""} ${it?.journalType || ""} ${it?.accountCode || ""} ${it?.accountLabel || ""} ${it?.memo || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = ledgerTable.sort?.key;
+    const sDir = ledgerTable.sort?.dir === "asc" ? 1 : -1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(ledgerTable.pageSize) || 10;
+    const page = Math.max(1, Number(ledgerTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [accountingLedger, ledgerTable.page, ledgerTable.pageSize, ledgerTable.q, ledgerTable.sort]);
 
   const withdrawalTableView = useMemo(() => {
     const q = String(withdrawalTable.q || "").trim().toLowerCase();
@@ -1078,6 +1159,21 @@ function App() {
     submittedByPhone: "",
     amountUsd: ""
   });
+  const [paymentIntentForm, setPaymentIntentForm] = useState({
+    invoiceId: "",
+    channel: "cash_agent",
+    externalRef: "",
+    payerContact: "",
+    amountUsd: "",
+    bankName: "",
+    accountName: "",
+    accountNumber: "",
+    processorName: "",
+    cardLast4: "",
+    authCode: "",
+    walletNetwork: "",
+    walletAddress: ""
+  });
   const [voucherForm, setVoucherForm] = useState({
     planId: "",
     quantity: 1,
@@ -1287,8 +1383,10 @@ function App() {
       let vchs = [];
       let telemetry = [];
       let radiusAcct = [];
-let onlineSessionsPayload = { windowMinutes: 30, items: [] };
-let withdrawalData = { items: [] };
+      let onlineSessionsPayload = { windowMinutes: 30, items: [] };
+      let withdrawalData = { items: [] };
+      let paymentIntentRows = [];
+      let ledgerPayload = { totals: { totalDebitUsd: 0, totalCreditUsd: 0 }, rows: [] };
 
       if (activeIspId) {
         if (currentUser.role === "field_agent") {
@@ -1297,13 +1395,18 @@ let withdrawalData = { items: [] };
             api.getCustomers(activeIspId),
             api.getPlans(activeIspId),
             api.getSubscriptions(activeIspId),
-            api.getInvoices(activeIspId)
+            api.getInvoices(activeIspId),
+            api.getPaymentIntents(activeIspId)
           ]);
           dash = take(settled, 0, {}, "dashboard");
           c = take(settled, 1, [], "customers");
           p = take(settled, 2, [], "plans");
           s = take(settled, 3, [], "subscriptions");
           i = take(settled, 4, [], "invoices");
+          paymentIntentRows = take(settled, 5, [], "paymentIntents");
+          setPaymentIntents(Array.isArray(paymentIntentRows) ? paymentIntentRows : []);
+          setAccountingLedger([]);
+          setAccountingLedgerTotals({ totalDebitUsd: 0, totalCreditUsd: 0 });
           setExpenses([]);
           setExpenseSummary(null);
           setAccountingPeriodClosures([]);
@@ -1337,7 +1440,9 @@ let withdrawalData = { items: [] };
 api.getOnlineSessions(activeIspId, 80, 30),
 api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to),
 api.getAccountingPeriodClosures(activeIspId),
-api.getWithdrawals(activeIspId)
+api.getWithdrawals(activeIspId),
+api.getPaymentIntents(activeIspId),
+api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         ]);
         dash = take(settled, 0, {}, "dashboard");
         c = take(settled, 1, [], "customers");
@@ -1361,17 +1466,24 @@ api.getWithdrawals(activeIspId)
         vchs = take(settled, 19, [], "vouchers");
         telemetry = take(settled, 20, [], "telemetry");
         radiusAcct = take(settled, 21, [], "radiusAccounting");
-onlineSessionsPayload = take(settled, 0, { windowMinutes: 30, items: [] }, "onlineSessions");
-
-const expData = take(settled, 1, { items: [], summary: null }, "expenses");
-
-const closuresList = take(settled, 2, [], "accountingPeriodClosures");
-
-withdrawalData = take(settled, 3, { cashbox: null, items: [] }, "withdrawals");
+        onlineSessionsPayload = take(settled, 22, { windowMinutes: 30, items: [] }, "onlineSessions");
+        const expData = take(settled, 23, { items: [], summary: null }, "expenses");
+        const closuresList = take(settled, 24, [], "accountingPeriodClosures");
+        withdrawalData = take(settled, 25, { cashbox: null, items: [] }, "withdrawals");
+        paymentIntentRows = take(settled, 26, [], "paymentIntents");
+        ledgerPayload = take(
+          settled,
+          27,
+          { totals: { totalDebitUsd: 0, totalCreditUsd: 0 }, rows: [] },
+          "accountingLedger"
+        );
         setExpenses(Array.isArray(expData?.items) ? expData.items : []);
         setExpenseSummary(expData?.summary || null);
         setAccountingPeriodClosures(Array.isArray(closuresList) ? closuresList : []);
         setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
+        setPaymentIntents(Array.isArray(paymentIntentRows) ? paymentIntentRows : []);
+        setAccountingLedger(Array.isArray(ledgerPayload?.rows) ? ledgerPayload.rows : []);
+        setAccountingLedgerTotals(ledgerPayload?.totals || { totalDebitUsd: 0, totalCreditUsd: 0 });
         if (withdrawalData?.cashbox) {
           dash = { ...dash, cashbox: withdrawalData.cashbox };
           }
@@ -1381,6 +1493,9 @@ withdrawalData = take(settled, 3, { cashbox: null, items: [] }, "withdrawals");
         setExpenseSummary(null);
         setAccountingPeriodClosures([]);
         setWithdrawals([]);
+        setPaymentIntents([]);
+        setAccountingLedger([]);
+        setAccountingLedgerTotals({ totalDebitUsd: 0, totalCreditUsd: 0 });
       }
 
       if (loadFailures.length) {
@@ -2836,6 +2951,65 @@ withdrawalData = take(settled, 3, { cashbox: null, items: [] }, "withdrawals");
     if (note === null) return;
     await api.reviewTidSubmission(selectedIspId, submissionId, { decision, note: note || "" });
     refresh();
+  }
+
+  async function onReviewPaymentIntent(intentId, decision) {
+    const note = window.prompt(
+      t("Note facultative (audit) :", "Optional note (audit trail):"),
+      ""
+    );
+    if (note === null) return;
+    await api.reviewPaymentIntent(selectedIspId, intentId, { decision, note: note || "" });
+    refresh();
+  }
+
+  async function onCreatePaymentIntent(e) {
+    e.preventDefault();
+    const ev = {};
+    if (paymentIntentForm.channel === "bank_transfer") {
+      ev.bankName = paymentIntentForm.bankName;
+      ev.accountName = paymentIntentForm.accountName;
+      ev.accountNumber = paymentIntentForm.accountNumber;
+    }
+    if (paymentIntentForm.channel === "card_manual") {
+      ev.processorName = paymentIntentForm.processorName;
+      ev.cardLast4 = paymentIntentForm.cardLast4;
+      ev.authCode = paymentIntentForm.authCode;
+    }
+    if (paymentIntentForm.channel === "crypto_wallet") {
+      ev.walletNetwork = paymentIntentForm.walletNetwork;
+      ev.walletAddress = paymentIntentForm.walletAddress;
+    }
+    await api.createPaymentIntent(selectedIspId, {
+      invoiceId: paymentIntentForm.invoiceId,
+      channel: paymentIntentForm.channel,
+      externalRef: paymentIntentForm.externalRef,
+      payerContact: paymentIntentForm.payerContact || undefined,
+      amountUsd: paymentIntentForm.amountUsd || undefined,
+      evidence: ev
+    });
+    setNotice(t("Paiement manuel enregistré en attente de validation.", "Manual payment recorded and pending validation."));
+    setPaymentIntentForm({
+      invoiceId: "",
+      channel: "cash_agent",
+      externalRef: "",
+      payerContact: "",
+      amountUsd: "",
+      bankName: "",
+      accountName: "",
+      accountNumber: "",
+      processorName: "",
+      cardLast4: "",
+      authCode: "",
+      walletNetwork: "",
+      walletAddress: ""
+    });
+    refresh();
+  }
+
+  async function onDownloadLedgerCsv() {
+    if (!selectedIspId) return;
+    await api.downloadAccountingLedgerCsv(selectedIspId, expenseFilter.from, expenseFilter.to);
   }
 
   async function onQueueTidReminders() {
@@ -4613,6 +4787,73 @@ withdrawalData = take(settled, 3, { cashbox: null, items: [] }, "withdrawals");
       </section>
 
       <section className="grid">
+        <form className="panel" onSubmit={onCreatePaymentIntent}>
+          <h2>{t("Encaissement manuel (cash / banque / carte / crypto)", "Manual collection (cash / bank / card / crypto)")}</h2>
+          <select
+            value={paymentIntentForm.invoiceId}
+            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, invoiceId: e.target.value })}
+          >
+            <option value="">
+              {t("Choisir une facture ouverte (impayée / en retard)", "Select an open invoice (unpaid / overdue)")}
+            </option>
+            {invoices
+              .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
+              .map((inv) => (
+                <option key={inv.id} value={inv.id}>
+                  {inv.id.slice(0, 8)} — ${inv.amountUsd} ({invoiceStatusShort(inv.status, isEn)})
+                </option>
+              ))}
+          </select>
+          <select
+            value={paymentIntentForm.channel}
+            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, channel: e.target.value })}
+          >
+            <option value="cash_agent">{t("Cash agent terrain", "Field cash collection")}</option>
+            <option value="bank_transfer">{t("Virement bancaire", "Bank transfer")}</option>
+            <option value="card_manual">{t("Carte bancaire (manuel)", "Card payment (manual)")}</option>
+            <option value="crypto_wallet">{t("Crypto / Binance", "Crypto / Binance")}</option>
+            <option value="mobile_money_manual">{t("Mobile Money manuel", "Manual Mobile Money")}</option>
+          </select>
+          <input
+            placeholder={t("Référence transaction / hash / reçu", "Transaction ref / hash / receipt")}
+            value={paymentIntentForm.externalRef}
+            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, externalRef: e.target.value })}
+          />
+          <input
+            placeholder={t("Téléphone ou contact payeur", "Payer phone or contact")}
+            value={paymentIntentForm.payerContact}
+            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, payerContact: e.target.value })}
+          />
+          <input
+            placeholder={t("Montant USD (facultatif)", "Amount USD (optional)")}
+            value={paymentIntentForm.amountUsd}
+            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, amountUsd: e.target.value })}
+          />
+          {paymentIntentForm.channel === "bank_transfer" ? (
+            <>
+              <input placeholder={t("Banque", "Bank name")} value={paymentIntentForm.bankName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, bankName: e.target.value })} />
+              <input placeholder={t("Nom du titulaire", "Account owner name")} value={paymentIntentForm.accountName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, accountName: e.target.value })} />
+              <input placeholder={t("Numéro de compte", "Account number")} value={paymentIntentForm.accountNumber} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, accountNumber: e.target.value })} />
+            </>
+          ) : null}
+          {paymentIntentForm.channel === "card_manual" ? (
+            <>
+              <input placeholder={t("Acquéreur / PSP", "Processor / PSP")} value={paymentIntentForm.processorName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, processorName: e.target.value })} />
+              <input placeholder={t("4 derniers chiffres carte", "Card last 4 digits")} value={paymentIntentForm.cardLast4} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, cardLast4: e.target.value })} />
+              <input placeholder={t("Code autorisation", "Authorization code")} value={paymentIntentForm.authCode} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, authCode: e.target.value })} />
+            </>
+          ) : null}
+          {paymentIntentForm.channel === "crypto_wallet" ? (
+            <>
+              <input placeholder={t("Réseau (TRC20, BEP20, etc.)", "Network (TRC20, BEP20, etc.)")} value={paymentIntentForm.walletNetwork} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, walletNetwork: e.target.value })} />
+              <input placeholder={t("Adresse wallet destinataire", "Destination wallet address")} value={paymentIntentForm.walletAddress} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, walletAddress: e.target.value })} />
+            </>
+          ) : null}
+          <button type="submit" disabled={!selectedIspId}>
+            {t("Enregistrer l'encaissement manuel", "Record manual collection")}
+          </button>
+        </form>
+
         <form className="panel" onSubmit={onSubmitTid}>
           <h2>{t("Mobile Money manuel (TID)", "Manual Mobile Money (TID)")}</h2>
           <select
@@ -4685,6 +4926,57 @@ withdrawalData = take(settled, 3, { cashbox: null, items: [] }, "withdrawals");
               ))}
             </>
           )}
+        </section>
+
+        <section className="panel">
+          <h2>{t("Paiements manuels à valider", "Manual payments to validate")}</h2>
+          <DataTable
+            title={null}
+            rows={paymentIntentTableView.pageRows}
+            columns={[
+              { key: "channel", header: t("Canal", "Channel"), sortKey: "channel", cell: (r) => r.channel || "—" },
+              { key: "externalRef", header: t("Référence", "Reference"), sortKey: "externalRef", cell: (r) => r.externalRef || "—" },
+              { key: "amountUsd", header: "USD", sortKey: "amountUsd", cell: (r) => Number(r.amountUsd || 0).toFixed(2) },
+              { key: "status", header: t("Statut", "Status"), sortKey: "status", cell: (r) => paymentIntentStatusLabel(r.status, isEn) },
+              { key: "createdAt", header: t("Créé", "Created"), sortKey: "createdAt", cell: (r) => (r.createdAt ? new Date(r.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "—") },
+              {
+                key: "actions",
+                header: t("Actions", "Actions"),
+                cell: (r) =>
+                  (isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin" || user.role === "billing_agent") &&
+                  (r.status === "pending" || r.status === "approved_l1") ? (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button type="button" onClick={() => onReviewPaymentIntent(r.id, "approved")}>{t("Approuver", "Approve")}</button>
+                      <button type="button" className="btn-secondary-outline" onClick={() => onReviewPaymentIntent(r.id, "rejected")}>{t("Rejeter", "Reject")}</button>
+                    </div>
+                  ) : "—"
+              }
+            ]}
+            searchValue={paymentIntentTable.q}
+            onSearchValueChange={(q) => setPaymentIntentTable((s) => ({ ...s, q, page: 1 }))}
+            filters={
+              <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                <span>{t("Statut", "Status")}</span>
+                <select
+                  value={paymentIntentTable.status}
+                  onChange={(e) => setPaymentIntentTable((s) => ({ ...s, status: e.target.value, page: 1 }))}
+                >
+                  <option value="all">{t("Tous", "All")}</option>
+                  <option value="pending">{t("En attente", "Pending")}</option>
+                  <option value="approved_l1">{t("Niveau 1", "Level 1")}</option>
+                  <option value="approved">{t("Approuvé", "Approved")}</option>
+                  <option value="rejected">{t("Rejeté", "Rejected")}</option>
+                </select>
+              </label>
+            }
+            page={paymentIntentTable.page}
+            pageSize={paymentIntentTable.pageSize}
+            totalRows={paymentIntentTableView.total}
+            onPageChange={(page) => setPaymentIntentTable((s) => ({ ...s, page }))}
+            onPageSizeChange={(pageSize) => setPaymentIntentTable((s) => ({ ...s, pageSize, page: 1 }))}
+            sort={paymentIntentTable.sort}
+            onSortChange={(sort) => setPaymentIntentTable((s) => ({ ...s, sort }))}
+          />
         </section>
       </section>
 
@@ -5594,8 +5886,58 @@ withdrawalData = take(settled, 3, { cashbox: null, items: [] }, "withdrawals");
                   })}
                 </strong>
               </div>
+              <div className="expenses-summary-card">
+                <span>{t("Grand livre - Débit", "Ledger - Debit")}</span>
+                <strong>
+                  {(accountingLedgerTotals.totalDebitUsd ?? 0).toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD"
+                  })}
+                </strong>
+              </div>
+              <div className="expenses-summary-card">
+                <span>{t("Grand livre - Crédit", "Ledger - Credit")}</span>
+                <strong>
+                  {(accountingLedgerTotals.totalCreditUsd ?? 0).toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD"
+                  })}
+                </strong>
+              </div>
             </div>
           ) : null}
+          <div className="panel" style={{ marginBottom: 12 }}>
+            <DataTable
+              title={t("Grand livre comptable", "Accounting ledger")}
+              description={t(
+                "Écritures automatiques des encaissements (caisse/banque) et compte client.",
+                "Automatic receipt entries (cash/bank) and customer account balancing."
+              )}
+              rows={ledgerTableView.pageRows}
+              actions={
+                <button type="button" className="btn-secondary-outline" onClick={onDownloadLedgerCsv} disabled={!selectedIspId}>
+                  {t("Exporter CSV", "Export CSV")}
+                </button>
+              }
+              columns={[
+                { key: "entryDate", header: t("Date", "Date"), sortKey: "entryDate", cell: (r) => r.entryDate || "—" },
+                { key: "journalType", header: t("Journal", "Journal"), sortKey: "journalType", cell: (r) => r.journalType || "—" },
+                { key: "accountCode", header: t("Compte", "Account"), sortKey: "accountCode", cell: (r) => `${r.accountCode || "—"} ${r.accountLabel || ""}`.trim() },
+                { key: "debitUsd", header: t("Débit USD", "Debit USD"), sortKey: "debitUsd", cell: (r) => Number(r.debitUsd || 0).toFixed(2) },
+                { key: "creditUsd", header: t("Crédit USD", "Credit USD"), sortKey: "creditUsd", cell: (r) => Number(r.creditUsd || 0).toFixed(2) },
+                { key: "memo", header: t("Mémo", "Memo"), sortKey: "memo", cell: (r) => r.memo || "—" }
+              ]}
+              searchValue={ledgerTable.q}
+              onSearchValueChange={(q) => setLedgerTable((s) => ({ ...s, q, page: 1 }))}
+              page={ledgerTable.page}
+              pageSize={ledgerTable.pageSize}
+              totalRows={ledgerTableView.total}
+              onPageChange={(page) => setLedgerTable((s) => ({ ...s, page }))}
+              onPageSizeChange={(pageSize) => setLedgerTable((s) => ({ ...s, pageSize, page: 1 }))}
+              sort={ledgerTable.sort}
+              onSortChange={(sort) => setLedgerTable((s) => ({ ...s, sort }))}
+            />
+          </div>
           <div className="expenses-layout">
             {(isPlatformSuperRole(user.role) ||
               user.role === "company_manager" ||

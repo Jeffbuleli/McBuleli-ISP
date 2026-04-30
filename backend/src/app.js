@@ -114,6 +114,55 @@ function normalizeMethodType(value) {
     .toLowerCase();
 }
 
+const FINANCE_TIERS = {
+  L1: "L1",
+  L2: "L2",
+  L3: "L3",
+  L4: "L4"
+};
+
+function tierRank(tier) {
+  const map = { L1: 1, L2: 2, L3: 3, L4: 4 };
+  return map[String(tier || "").toUpperCase()] || 0;
+}
+
+function defaultAccreditationForRole(role) {
+  const r = String(role || "").trim().toLowerCase();
+  if (r === "field_agent") return FINANCE_TIERS.L1;
+  if (r === "billing_agent" || r === "noc_operator") return FINANCE_TIERS.L2;
+  if (r === "isp_admin" || r === "company_manager") return FINANCE_TIERS.L3;
+  if (r === "super_admin" || r === "system_owner") return FINANCE_TIERS.L4;
+  return FINANCE_TIERS.L1;
+}
+
+async function resolveUserFinanceTier(ispId, userId, roleFallback) {
+  if (!ispId || !userId) return defaultAccreditationForRole(roleFallback);
+  const membership = await query(
+    `SELECT accreditation_level AS "accreditationLevel"
+     FROM user_isp_memberships
+     WHERE isp_id = $1 AND user_id = $2
+     LIMIT 1`,
+    [ispId, userId]
+  );
+  return membership.rows[0]?.accreditationLevel || defaultAccreditationForRole(roleFallback);
+}
+
+function paymentNeedsSecondApproval({ amountUsd, methodType }) {
+  const amount = Number(amountUsd || 0);
+  const method = normalizeMethodType(methodType);
+  return amount >= 100 || method === "cash" || method === "manual_mobile_money" || method === "bank_transfer";
+}
+
+function paymentIntentChannelToMethod(channel) {
+  const c = String(channel || "").toLowerCase();
+  if (c === "cash_agent") return "cash";
+  if (c === "mobile_money_manual") return "manual_mobile_money";
+  if (c === "bank_transfer") return "bank_transfer";
+  if (c === "card_manual") return "gateway";
+  if (c === "crypto_wallet") return "crypto_wallet";
+  return "other";
+}
+
 function resolvePublicApiBase(req) {
   const explicit = process.env.PUBLIC_API_BASE_URL || process.env.APP_PUBLIC_URL;
   if (explicit) return String(explicit).replace(/\/$/, "");
@@ -169,8 +218,8 @@ function teamUserImportCells(row) {
   const email = pick("email", "mail");
   const role = pick("role");
   const password = pick("password", "pass", "secret");
-  const accreditationLevel =
-    pick("accreditation_level", "accreditationlevel", "accreditation") || "basic";
+  const accreditationRaw = pick("accreditation_level", "accreditationlevel", "accreditation");
+  const accreditationLevel = accreditationRaw || defaultAccreditationForRole(role);
   return { fullName, email, role, password, accreditationLevel };
 }
 
@@ -1675,6 +1724,51 @@ app.get("/api/portal/announcements", authenticatePortal, async (req, res) => {
   res.json({ items: r.rows.map(mapAnnouncementRow) });
 });
 
+app.get("/api/portal/payment-instructions", authenticatePortal, async (req, res) => {
+  const { ispId } = req.portal;
+  const [methods, branding] = await Promise.all([
+    query(
+      `SELECT id, method_type AS "methodType", provider_name AS "providerName", config_json AS "configJson"
+       FROM isp_payment_methods
+       WHERE isp_id = $1 AND is_active = TRUE
+       ORDER BY created_at DESC`,
+      [ispId]
+    ),
+    query(
+      `SELECT display_name AS "displayName", contact_phone AS "contactPhone", contact_email AS "contactEmail"
+       FROM isp_branding WHERE isp_id = $1`,
+      [ispId]
+    )
+  ]);
+
+  const items = methods.rows.map((row) => {
+    const cfg = row.configJson && typeof row.configJson === "object" ? row.configJson : {};
+    return {
+      id: row.id,
+      methodType: row.methodType,
+      providerName: row.providerName,
+      instructions: {
+        accountName: cfg.accountName || cfg.ownerName || "",
+        bankName: cfg.bankName || "",
+        accountNumber: cfg.accountNumber || "",
+        iban: cfg.iban || "",
+        swiftCode: cfg.swiftCode || "",
+        mobileMoneyNumber: cfg.mobileMoneyNumber || cfg.phone || "",
+        walletAddress: cfg.walletAddress || "",
+        walletNetwork: cfg.walletNetwork || "",
+        memoTag: cfg.memoTag || "",
+        validationEtaMinutes: Number(cfg.validationEtaMinutes || 15),
+        note: cfg.note || ""
+      }
+    };
+  });
+
+  return res.json({
+    owner: branding.rows[0] || null,
+    items
+  });
+});
+
 app.post("/api/portal/tid-submissions", authenticatePortal, async (req, res) => {
   const { ispId, customerId } = req.portal;
   const { invoiceId, tid, submittedByPhone, amountUsd } = req.body;
@@ -3082,11 +3176,12 @@ app.post(
   async (req, res) => {
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
-    const { roleKey, accreditationLevel = "basic", permissions = [] } = req.body;
+    const { roleKey, accreditationLevel, permissions = [] } = req.body;
+    const effectiveAccreditationLevel = accreditationLevel || defaultAccreditationForRole(roleKey);
     if (!roleKey) return res.status(400).json({ message: "roleKey is required" });
     const upsert = await query(
       "INSERT INTO isp_role_profiles (id, isp_id, role_key, accreditation_level, permissions, is_active) VALUES (gen_random_uuid(), $1, $2, $3, $4::jsonb, TRUE) ON CONFLICT (isp_id, role_key) DO UPDATE SET accreditation_level = EXCLUDED.accreditation_level, permissions = EXCLUDED.permissions RETURNING id, isp_id AS \"ispId\", role_key AS \"roleKey\", accreditation_level AS \"accreditationLevel\", permissions, is_active AS \"isActive\"",
-      [ispId, roleKey, accreditationLevel, JSON.stringify(permissions)]
+      [ispId, roleKey, effectiveAccreditationLevel, JSON.stringify(permissions)]
     );
     await logAudit({
       ispId,
@@ -3094,7 +3189,7 @@ app.post(
       action: "role_profile.upserted",
       entityType: "role_profile",
       entityId: upsert.rows[0].id,
-      details: { roleKey, accreditationLevel }
+      details: { roleKey, accreditationLevel: effectiveAccreditationLevel }
     });
     res.json(upsert.rows[0]);
   }
@@ -3712,7 +3807,7 @@ app.post(
           await query(
             `INSERT INTO user_isp_memberships (user_id, isp_id, role, accreditation_level, is_active)
              VALUES ($1, $2, $3, $4, TRUE)`,
-            [uid, targetIspId, role, c.accreditationLevel || "basic"]
+            [uid, targetIspId, role, c.accreditationLevel || defaultAccreditationForRole(role)]
           );
           const row = await fetchTeamUserRow(targetIspId, uid);
           if (row) created.push(row);
@@ -3740,13 +3835,13 @@ app.post(
         const hash = await bcrypt.hash(password, 10);
         const inserted = await query(
           "INSERT INTO users (id, isp_id, full_name, email, password_hash, role, accreditation_level, is_active, must_change_password) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, TRUE, TRUE) RETURNING id",
-          [targetIspId, c.fullName, emailLower, hash, role, c.accreditationLevel || "basic"]
+          [targetIspId, c.fullName, emailLower, hash, role, c.accreditationLevel || defaultAccreditationForRole(role)]
         );
         const newId = inserted.rows[0].id;
         await query(
           `INSERT INTO user_isp_memberships (user_id, isp_id, role, accreditation_level, is_active)
            VALUES ($1, $2, $3, $4, TRUE)`,
-          [newId, targetIspId, role, c.accreditationLevel || "basic"]
+          [newId, targetIspId, role, c.accreditationLevel || defaultAccreditationForRole(role)]
         );
         const row = await fetchTeamUserRow(targetIspId, newId);
         if (row) created.push(row);
@@ -3781,7 +3876,8 @@ app.post(
   const targetIspId = resolveIspId(req, res);
   if (!targetIspId) return;
 
-  const { fullName, email, password, role, accreditationLevel = "basic", phone, address, assignedSite } = req.body;
+  const { fullName, email, password, role, accreditationLevel, phone, address, assignedSite } = req.body;
+  const effectiveAccreditationLevel = accreditationLevel || defaultAccreditationForRole(role);
   if (!fullName || !email || !role) {
     return res.status(400).json({ message: "fullName, email and role are required" });
   }
@@ -3827,7 +3923,7 @@ app.post(
     await query(
       `INSERT INTO user_isp_memberships (user_id, isp_id, role, accreditation_level, phone, address, assigned_site, is_active)
        VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)`,
-      [uid, targetIspId, role, accreditationLevel, phone || null, address || null, assignedSite || null]
+      [uid, targetIspId, role, effectiveAccreditationLevel, phone || null, address || null, assignedSite || null]
     );
     await logAudit({
       ispId: targetIspId,
@@ -3835,7 +3931,7 @@ app.post(
       action: "user.workspace_linked",
       entityType: "user",
       entityId: uid,
-      details: { role, accreditationLevel, email: emailLower }
+      details: { role, accreditationLevel: effectiveAccreditationLevel, email: emailLower }
     });
     const row = await fetchTeamUserRow(targetIspId, uid);
     return res.status(201).json(row);
@@ -3862,7 +3958,7 @@ app.post(
       emailLower,
       hash,
       role,
-      accreditationLevel,
+      effectiveAccreditationLevel,
       phone || null,
       address || null,
       assignedSite || null
@@ -3872,7 +3968,7 @@ app.post(
   await query(
     `INSERT INTO user_isp_memberships (user_id, isp_id, role, accreditation_level, phone, address, assigned_site, is_active)
      VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)`,
-    [newId, targetIspId, role, accreditationLevel, phone || null, address || null, assignedSite || null]
+    [newId, targetIspId, role, effectiveAccreditationLevel, phone || null, address || null, assignedSite || null]
   );
   await logAudit({
     ispId: targetIspId,
@@ -3880,7 +3976,7 @@ app.post(
     action: "user.created",
     entityType: "user",
     entityId: newId,
-    details: { role, accreditationLevel, email: emailLower }
+    details: { role, accreditationLevel: effectiveAccreditationLevel, email: emailLower }
   });
   const row = await fetchTeamUserRow(targetIspId, newId);
   return res.status(201).json(row);
@@ -4958,7 +5054,15 @@ app.get(
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
     const result = await query(
-      "SELECT id, invoice_id AS \"invoiceId\", customer_id AS \"customerId\", subscription_id AS \"subscriptionId\", tid, submitted_by_phone AS \"submittedByPhone\", amount_usd AS \"amountUsd\", status, review_note AS \"reviewNote\", created_at AS \"createdAt\" FROM payment_tid_submissions WHERE isp_id = $1 ORDER BY created_at DESC",
+      `SELECT id, invoice_id AS "invoiceId", customer_id AS "customerId", subscription_id AS "subscriptionId",
+              tid, submitted_by_phone AS "submittedByPhone", amount_usd AS "amountUsd", status,
+              review_note AS "reviewNote", created_at AS "createdAt",
+              reviewed_by AS "reviewedBy", reviewed_at AS "reviewedAt",
+              approved_l1_by AS "approvedL1By", approved_l1_at AS "approvedL1At",
+              approved_l2_by AS "approvedL2By", approved_l2_at AS "approvedL2At"
+       FROM payment_tid_submissions
+       WHERE isp_id = $1
+       ORDER BY created_at DESC`,
       [ispId]
     );
     return res.json(result.rows);
@@ -4992,6 +5096,7 @@ app.post(
     if (!["approved", "rejected"].includes(decision)) {
       return res.status(400).json({ message: "decision must be approved or rejected" });
     }
+    const reviewerTier = await resolveUserFinanceTier(ispId, req.user.sub, req.user.role);
 
     const client = await pool.connect();
     try {
@@ -5005,14 +5110,16 @@ app.post(
         await client.query("ROLLBACK");
         return res.status(404).json({ message: "Submission not found" });
       }
-      if (submission.status !== "pending") {
+      if (!["pending", "approved_l1"].includes(submission.status)) {
         await client.query("ROLLBACK");
         return res.status(409).json({ message: "Submission already reviewed" });
       }
 
       if (decision === "rejected") {
         await client.query(
-          "UPDATE payment_tid_submissions SET status = $1, reviewed_by = $2, reviewed_at = NOW(), review_note = $3 WHERE id = $4",
+          `UPDATE payment_tid_submissions
+           SET status = $1, reviewed_by = $2, reviewed_at = NOW(), review_note = $3
+           WHERE id = $4`,
           ["rejected", req.user.sub, note || null, submissionId]
         );
         await client.query("COMMIT");
@@ -5025,6 +5132,47 @@ app.post(
           details: { note: note || null }
         });
         return res.json({ message: "Submission rejected" });
+      }
+
+      const needsL2 = paymentNeedsSecondApproval({
+        amountUsd: submission.amount_usd,
+        methodType: "manual_mobile_money"
+      });
+      if (needsL2 && submission.status === "pending") {
+        if (tierRank(reviewerTier) < tierRank(FINANCE_TIERS.L2)) {
+          await client.query("ROLLBACK");
+          return res.status(403).json({ message: "L2 accreditation required for first approval." });
+        }
+        await client.query(
+          `UPDATE payment_tid_submissions
+           SET status = 'approved_l1',
+               approved_l1_by = $1,
+               approved_l1_at = NOW(),
+               review_note = COALESCE($2, review_note)
+           WHERE id = $3`,
+          [req.user.sub, note || null, submissionId]
+        );
+        await client.query("COMMIT");
+        await logAudit({
+          ispId,
+          actorUserId: req.user.sub,
+          action: "payment.tid_approved_l1",
+          entityType: "payment_tid_submission",
+          entityId: submissionId,
+          details: { note: note || null, accreditationLevel: reviewerTier }
+        });
+        return res.json({ message: "First approval saved. Waiting for second approver.", pendingSecondApproval: true });
+      }
+
+      if (needsL2 && submission.status === "approved_l1") {
+        if (String(submission.approved_l1_by || "") === String(req.user.sub || "")) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ message: "Second approval must be performed by another user." });
+        }
+        if (tierRank(reviewerTier) < tierRank(FINANCE_TIERS.L3)) {
+          await client.query("ROLLBACK");
+          return res.status(403).json({ message: "L3 accreditation required for second approval." });
+        }
       }
 
       const pay = await applyInvoicePaymentTx(client, {
@@ -5041,8 +5189,15 @@ app.post(
       }
 
       await client.query(
-        "UPDATE payment_tid_submissions SET status = $1, reviewed_by = $2, reviewed_at = NOW(), review_note = $3 WHERE id = $4",
-        ["approved", req.user.sub, note || null, submissionId]
+        `UPDATE payment_tid_submissions
+         SET status = 'approved',
+             reviewed_by = $1,
+             reviewed_at = NOW(),
+             review_note = $2,
+             approved_l2_by = CASE WHEN status = 'approved_l1' THEN $1 ELSE approved_l2_by END,
+             approved_l2_at = CASE WHEN status = 'approved_l1' THEN NOW() ELSE approved_l2_at END
+         WHERE id = $3`,
+        [req.user.sub, note || null, submissionId]
       );
       await client.query("COMMIT");
 
@@ -5064,7 +5219,9 @@ app.post(
           note: note || null,
           duplicate: Boolean(pay.duplicate),
           invoiceAlreadyPaid: Boolean(pay.invoiceAlreadyPaid),
-          activated: Boolean(pay.activated)
+          activated: Boolean(pay.activated),
+          accreditationLevel: reviewerTier,
+          requiredSecondApproval: needsL2
         }
       });
       return res.json({
@@ -5125,6 +5282,251 @@ app.post(
       details: { queued }
     });
     return res.json({ queued, totalPending: pending.rows.length });
+  }
+);
+
+app.get(
+  "/api/payments/intents",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "field_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const rows = await query(
+      `SELECT id, invoice_id AS "invoiceId", customer_id AS "customerId", subscription_id AS "subscriptionId",
+              channel, amount_usd AS "amountUsd", external_ref AS "externalRef", payer_contact AS "payerContact",
+              evidence_json AS "evidence", status, review_note AS "reviewNote",
+              approved_l1_by AS "approvedL1By", approved_l1_at AS "approvedL1At",
+              approved_l2_by AS "approvedL2By", approved_l2_at AS "approvedL2At",
+              reviewed_by AS "reviewedBy", reviewed_at AS "reviewedAt",
+              created_by AS "createdBy", created_at AS "createdAt"
+       FROM payment_intents WHERE isp_id = $1 ORDER BY created_at DESC`,
+      [ispId]
+    );
+    return res.json(rows.rows);
+  }
+);
+
+app.post(
+  "/api/payments/intents",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "field_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { invoiceId, channel, amountUsd, externalRef, payerContact, evidence = {} } = req.body || {};
+    if (!invoiceId || !channel || !externalRef) {
+      return res.status(400).json({ message: "invoiceId, channel and externalRef are required" });
+    }
+    const allowedChannels = new Set(["cash_agent", "mobile_money_manual", "bank_transfer", "card_manual", "crypto_wallet"]);
+    if (!allowedChannels.has(String(channel))) {
+      return res.status(400).json({ message: "Invalid channel." });
+    }
+    const inv = await query(
+      `SELECT id, isp_id, customer_id, subscription_id, amount_usd, status
+       FROM invoices WHERE id = $1 AND isp_id = $2`,
+      [invoiceId, ispId]
+    );
+    const invoice = inv.rows[0];
+    if (!invoice) return res.status(404).json({ message: "Invoice not found." });
+    if (!["unpaid", "overdue"].includes(invoice.status)) {
+      return res.status(400).json({ message: "Invoice is not open for payment." });
+    }
+    const amount = Number(amountUsd || invoice.amount_usd);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ message: "Invalid amountUsd." });
+    }
+    const safeEvidence = evidence && typeof evidence === "object" ? evidence : {};
+    if (String(channel) === "bank_transfer") {
+      const bankName = String(safeEvidence.bankName || "").trim();
+      const accountNumber = String(safeEvidence.accountNumber || "").trim();
+      const accountName = String(safeEvidence.accountName || "").trim();
+      if (!bankName || !accountNumber || !accountName) {
+        return res.status(400).json({
+          message: "bank_transfer requires evidence.bankName, evidence.accountNumber and evidence.accountName."
+        });
+      }
+    }
+    if (String(channel) === "card_manual") {
+      const processorName = String(safeEvidence.processorName || "").trim();
+      const cardLast4 = String(safeEvidence.cardLast4 || "").trim();
+      const authCode = String(safeEvidence.authCode || "").trim();
+      if (!processorName || !/^\d{4}$/.test(cardLast4) || !authCode) {
+        return res.status(400).json({
+          message: "card_manual requires evidence.processorName, evidence.cardLast4 (4 digits), and evidence.authCode."
+        });
+      }
+    }
+    if (String(channel) === "crypto_wallet") {
+      const walletNetwork = String(safeEvidence.walletNetwork || "").trim();
+      const walletAddress = String(safeEvidence.walletAddress || "").trim();
+      const txHash = String(externalRef || "").trim();
+      if (!walletNetwork || !walletAddress || txHash.length < 8) {
+        return res.status(400).json({
+          message: "crypto_wallet requires walletNetwork, walletAddress and a valid transaction hash/reference."
+        });
+      }
+    }
+    const created = await query(
+      `INSERT INTO payment_intents
+       (id, isp_id, invoice_id, customer_id, subscription_id, channel, amount_usd, external_ref, payer_contact, evidence_json, status, created_by)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, 'pending', $10)
+       RETURNING id, invoice_id AS "invoiceId", channel, amount_usd AS "amountUsd", external_ref AS "externalRef", status, created_at AS "createdAt"`,
+      [
+        ispId,
+        invoice.id,
+        invoice.customer_id,
+        invoice.subscription_id,
+        channel,
+        amount,
+        String(externalRef).slice(0, 255),
+        payerContact || null,
+        JSON.stringify(safeEvidence),
+        req.user.sub
+      ]
+    );
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "payment.intent_created",
+      entityType: "payment_intent",
+      entityId: created.rows[0].id,
+      details: { invoiceId: invoice.id, channel, externalRef: String(externalRef).slice(0, 255), amountUsd: amount }
+    });
+    return res.status(201).json(created.rows[0]);
+  }
+);
+
+app.post(
+  "/api/payments/intents/:intentId/review",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { intentId } = req.params;
+    const { decision, note } = req.body || {};
+    if (!["approved", "rejected"].includes(String(decision || ""))) {
+      return res.status(400).json({ message: "decision must be approved or rejected" });
+    }
+    const reviewerTier = await resolveUserFinanceTier(ispId, req.user.sub, req.user.role);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const got = await client.query(
+        "SELECT * FROM payment_intents WHERE id = $1 AND isp_id = $2 FOR UPDATE",
+        [intentId, ispId]
+      );
+      const intent = got.rows[0];
+      if (!intent) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Payment intent not found." });
+      }
+      if (!["pending", "approved_l1"].includes(intent.status)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Payment intent already reviewed." });
+      }
+      if (decision === "rejected") {
+        await client.query(
+          `UPDATE payment_intents
+           SET status = 'rejected', review_note = $1, reviewed_by = $2, reviewed_at = NOW()
+           WHERE id = $3`,
+          [note || null, req.user.sub, intentId]
+        );
+        await client.query("COMMIT");
+        await logAudit({
+          ispId,
+          actorUserId: req.user.sub,
+          action: "payment.intent_rejected",
+          entityType: "payment_intent",
+          entityId: intentId,
+          details: { note: note || null }
+        });
+        return res.json({ message: "Payment intent rejected." });
+      }
+      const methodType = paymentIntentChannelToMethod(intent.channel);
+      const needsL2 = paymentNeedsSecondApproval({ amountUsd: intent.amount_usd, methodType });
+      if (needsL2 && intent.status === "pending") {
+        if (tierRank(reviewerTier) < tierRank(FINANCE_TIERS.L2)) {
+          await client.query("ROLLBACK");
+          return res.status(403).json({ message: "L2 accreditation required for first approval." });
+        }
+        await client.query(
+          `UPDATE payment_intents
+           SET status = 'approved_l1', review_note = COALESCE($1, review_note),
+               approved_l1_by = $2, approved_l1_at = NOW()
+           WHERE id = $3`,
+          [note || null, req.user.sub, intentId]
+        );
+        await client.query("COMMIT");
+        await logAudit({
+          ispId,
+          actorUserId: req.user.sub,
+          action: "payment.intent_approved_l1",
+          entityType: "payment_intent",
+          entityId: intentId,
+          details: { note: note || null, accreditationLevel: reviewerTier }
+        });
+        return res.json({ message: "First approval saved. Waiting for second approver.", pendingSecondApproval: true });
+      }
+      if (needsL2 && intent.status === "approved_l1") {
+        if (String(intent.approved_l1_by || "") === String(req.user.sub || "")) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ message: "Second approval must be done by another user." });
+        }
+        if (tierRank(reviewerTier) < tierRank(FINANCE_TIERS.L3)) {
+          await client.query("ROLLBACK");
+          return res.status(403).json({ message: "L3 accreditation required for second approval." });
+        }
+      }
+      const pay = await applyInvoicePaymentTx(client, {
+        ispId,
+        invoiceId: intent.invoice_id,
+        providerRef: intent.external_ref,
+        amountUsd: intent.amount_usd,
+        status: "confirmed",
+        methodType
+      });
+      if (!pay.ok) {
+        await client.query("ROLLBACK");
+        return res.status(pay.code || 400).json({ message: pay.message || "Payment failed." });
+      }
+      await client.query(
+        `UPDATE payment_intents
+         SET status = 'approved',
+             review_note = $1,
+             reviewed_by = $2,
+             reviewed_at = NOW(),
+             approved_l2_by = CASE WHEN status = 'approved_l1' THEN $2 ELSE approved_l2_by END,
+             approved_l2_at = CASE WHEN status = 'approved_l1' THEN NOW() ELSE approved_l2_at END
+         WHERE id = $3`,
+        [note || null, req.user.sub, intentId]
+      );
+      await client.query("COMMIT");
+      if (pay.activated) {
+        await provisionSubscriptionAccess({
+          ispId,
+          subscriptionId: intent.subscription_id,
+          action: "activate"
+        });
+      }
+      await logAudit({
+        ispId,
+        actorUserId: req.user.sub,
+        action: "payment.intent_approved",
+        entityType: "payment_intent",
+        entityId: intentId,
+        details: { accreditationLevel: reviewerTier, requiredSecondApproval: needsL2, duplicate: Boolean(pay.duplicate) }
+      });
+      return res.json({ message: "Payment intent approved.", activated: Boolean(pay.activated), duplicate: Boolean(pay.duplicate) });
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_e) {}
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 );
 
@@ -6775,6 +7177,87 @@ app.delete(
       details: del.rows[0]
     });
     return res.json({ message: "Clôture levée — les dépenses sur cette plage peuvent à nouveau être modifiées.", ...del.rows[0] });
+  }
+);
+
+app.get(
+  "/api/accounting/ledger",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const from = String(req.query.from || "").slice(0, 10);
+    const to = String(req.query.to || "").slice(0, 10);
+    const useRange = /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to);
+    const rows = await query(
+      useRange
+        ? `SELECT id, entry_date AS "entryDate", journal_type AS "journalType", account_code AS "accountCode",
+                  account_label AS "accountLabel", debit_usd AS "debitUsd", credit_usd AS "creditUsd",
+                  ref_type AS "refType", ref_id AS "refId", memo, created_at AS "createdAt"
+           FROM accounting_ledger_entries
+           WHERE isp_id = $1 AND entry_date BETWEEN $2::date AND $3::date
+           ORDER BY entry_date DESC, created_at DESC`
+        : `SELECT id, entry_date AS "entryDate", journal_type AS "journalType", account_code AS "accountCode",
+                  account_label AS "accountLabel", debit_usd AS "debitUsd", credit_usd AS "creditUsd",
+                  ref_type AS "refType", ref_id AS "refId", memo, created_at AS "createdAt"
+           FROM accounting_ledger_entries
+           WHERE isp_id = $1
+           ORDER BY entry_date DESC, created_at DESC
+           LIMIT 400`,
+      useRange ? [ispId, from, to] : [ispId]
+    );
+    const sums = await query(
+      useRange
+        ? `SELECT COALESCE(SUM(debit_usd),0)::float AS "totalDebitUsd",
+                  COALESCE(SUM(credit_usd),0)::float AS "totalCreditUsd"
+           FROM accounting_ledger_entries
+           WHERE isp_id = $1 AND entry_date BETWEEN $2::date AND $3::date`
+        : `SELECT COALESCE(SUM(debit_usd),0)::float AS "totalDebitUsd",
+                  COALESCE(SUM(credit_usd),0)::float AS "totalCreditUsd"
+           FROM accounting_ledger_entries
+           WHERE isp_id = $1`,
+      useRange ? [ispId, from, to] : [ispId]
+    );
+    return res.json({
+      totals: sums.rows[0] || { totalDebitUsd: 0, totalCreditUsd: 0 },
+      rows: rows.rows
+    });
+  }
+);
+
+app.get(
+  "/api/accounting/ledger/export",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const from = String(req.query.from || "").slice(0, 10);
+    const to = String(req.query.to || "").slice(0, 10);
+    const useRange = /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to);
+    const rows = await query(
+      useRange
+        ? `SELECT entry_date AS "entryDate", journal_type AS "journalType", account_code AS "accountCode",
+                  account_label AS "accountLabel", debit_usd AS "debitUsd", credit_usd AS "creditUsd",
+                  ref_type AS "refType", ref_id AS "refId", memo, created_at AS "createdAt"
+           FROM accounting_ledger_entries
+           WHERE isp_id = $1 AND entry_date BETWEEN $2::date AND $3::date
+           ORDER BY entry_date DESC, created_at DESC`
+        : `SELECT entry_date AS "entryDate", journal_type AS "journalType", account_code AS "accountCode",
+                  account_label AS "accountLabel", debit_usd AS "debitUsd", credit_usd AS "creditUsd",
+                  ref_type AS "refType", ref_id AS "refId", memo, created_at AS "createdAt"
+           FROM accounting_ledger_entries
+           WHERE isp_id = $1
+           ORDER BY entry_date DESC, created_at DESC
+           LIMIT 2000`,
+      useRange ? [ispId, from, to] : [ispId]
+    );
+    const headers = ["entryDate", "journalType", "accountCode", "accountLabel", "debitUsd", "creditUsd", "refType", "refId", "memo", "createdAt"];
+    const csv = rowsToCsv(headers, rows.rows || []);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="accounting-ledger-${ispId.slice(0, 8)}.csv"`);
+    return res.status(200).send(`\uFEFF${csv}`);
   }
 );
 

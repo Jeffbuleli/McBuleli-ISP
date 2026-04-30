@@ -807,12 +807,12 @@ a:hover {
   position: relative;
   flex-shrink: 0;
   display: inline-block;
-  width: 40px;
-  height: 22px;
+  width: 42px;
+  height: 24px;
   margin-top: 1px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 
@@ -821,10 +821,10 @@ a:hover {
   top: 2px;
   left: 2px;
   right: auto;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: linear-gradient(180deg, #fff 0%, #eef1f5 100%);
+  background: linear-gradient(180deg, #fff 0%, #e8edf2 100%);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   transition: left 0.2s ease, right 0.2s ease;
   pointer-events: none;
@@ -1126,6 +1126,10 @@ a:hover {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.dashboard-team-chat-msg__avatar--me {
+  border-color: rgba(99, 179, 143, 0.45);
+}
+
 .dashboard-team-chat-msg__avatarFallback {
   display: inline-flex;
   width: 32px;
@@ -1138,6 +1142,12 @@ a:hover {
   background: rgba(99, 179, 143, 0.25);
   color: #b8e0cc;
   border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.dashboard-team-chat-msg__avatarFallback--me {
+  background: rgba(99, 179, 143, 0.3);
+  border-color: rgba(99, 179, 143, 0.45);
+  color: #dcf7e8;
 }
 
 .dashboard-team-chat-msg__avatarPlaceholder {
@@ -7452,6 +7462,78 @@ html:has(.app-shell--mobile-pwa) {
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.9);
   padding: 6px 10px;
+}
+
+/* ---- Unified toggle/checkbox style (mobile/tablet/desktop) ---- */
+input[type="checkbox"]:not(.dashboard-team-chat-sound-toggle__input) {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 42px;
+  min-width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.12);
+  position: relative;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+input[type="checkbox"]:not(.dashboard-team-chat-sound-toggle__input)::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffffff 0%, #e8edf2 100%);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+  transition: transform 0.18s ease;
+}
+
+input[type="checkbox"]:not(.dashboard-team-chat-sound-toggle__input):checked {
+  background: rgba(99, 179, 143, 0.5);
+  border-color: rgba(99, 179, 143, 0.6);
+}
+
+input[type="checkbox"]:not(.dashboard-team-chat-sound-toggle__input):checked::before {
+  transform: translateX(18px);
+}
+
+input[type="checkbox"]:not(.dashboard-team-chat-sound-toggle__input):focus-visible {
+  outline: 2px solid rgba(99, 179, 143, 0.55);
+  outline-offset: 3px;
+}
+
+label > input[type="checkbox"]:not(.dashboard-team-chat-sound-toggle__input):first-child {
+  margin-right: 10px;
+}
+
+/* ---- Unified scrollbar tone across modules and breakpoints ---- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 179, 143, 0.55) rgba(255, 255, 255, 0.06);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(99, 179, 143, 0.8), rgba(93, 64, 55, 0.65));
+  border-radius: 999px;
+  border: 2px solid rgba(18, 20, 22, 0.75);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(110, 199, 156, 0.95), rgba(120, 82, 70, 0.8));
 }
 
 @media (max-width: 720px) {
