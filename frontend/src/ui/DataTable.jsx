@@ -11,7 +11,7 @@ export function DataTable({
   columns,
   loading,
   error,
-  emptyLabel = "No results.",
+  emptyLabel,
   searchValue,
   onSearchValueChange,
   filters,
@@ -25,7 +25,7 @@ export function DataTable({
   onPageChange,
   onPageSizeChange,
   getRowKey,
-  /** Optional `(fr, en) => string` — pager labels + aria */
+  /** `(fr, en) => string` — aligné sur `uiLang` depuis l’accueil (obligatoire pour un libellé cohérent) */
   t
 }) {
   const safeRows = Array.isArray(rows) ? rows : [];
@@ -33,6 +33,7 @@ export function DataTable({
   const safePageSize = pageSizeOptions.includes(pageSize) ? pageSize : pageSizeOptions[0] || 10;
 
   const tr = typeof t === "function" ? t : (_, en) => en;
+  const emptyText = emptyLabel != null && emptyLabel !== "" ? emptyLabel : tr("Aucun résultat.", "No results.");
 
   const totalPages = useMemo(() => {
     const total = typeof totalRows === "number" ? totalRows : safeRows.length;
@@ -43,6 +44,8 @@ export function DataTable({
 
   const canPrev = safePage > 1;
   const canNext = safePage < totalPages;
+
+  const pageStatusLabel = tr(`Page ${safePage} sur ${totalPages}`, `Page ${safePage} of ${totalPages}`);
 
   return (
     <section className="mb-table" aria-busy={loading ? "true" : "false"}>
@@ -59,12 +62,12 @@ export function DataTable({
         <div className="mb-table__tools">
           {onSearchValueChange ? (
             <label className="mb-table__search">
-              <span className="visually-hidden">Search</span>
+              <span className="visually-hidden">{tr("Rechercher", "Search")}</span>
               <input
                 type="search"
                 value={searchValue || ""}
                 onChange={(e) => onSearchValueChange(e.target.value)}
-                placeholder="Search…"
+                placeholder={tr("Rechercher…", "Search…")}
                 className="mb-table__searchinput"
                 autoComplete="off"
               />
@@ -110,7 +113,7 @@ export function DataTable({
             {loading ? (
               <tr>
                 <td className="mb-table__state" colSpan={safeColumns.length || 1}>
-                  Loading…
+                  {tr("Chargement…", "Loading…")}
                 </td>
               </tr>
             ) : error ? (
@@ -132,7 +135,7 @@ export function DataTable({
             ) : (
               <tr>
                 <td className="mb-table__state" colSpan={safeColumns.length || 1}>
-                  {emptyLabel}
+                  {emptyText}
                 </td>
               </tr>
             )}
@@ -150,14 +153,17 @@ export function DataTable({
             aria-label={tr("Page précédente", "Previous page")}
             title={tr("Page précédente", "Previous page")}
           >
-            <span className="mb-table__pagebtn-label mb-table__pagebtn-label--full">{tr("Précédent", "Previous")}</span>
-            <span className="mb-table__pagebtn-label mb-table__pagebtn-label--compact" aria-hidden>
-              ‹
+            <span className="mb-table__pagebtn-glyph" aria-hidden>
+              {"\u003c\u003c"}
             </span>
           </button>
-          <div className="mb-table__pagenums">
-            <span className="mb-table__pagenum">
-              {safePage} / {totalPages}
+          <div className="mb-table__pagenums" role="status" aria-label={pageStatusLabel}>
+            <span className="mb-table__pagepill">
+              <span className="mb-table__pagenum mb-table__pagenum--cur">{safePage}</span>
+              <span className="mb-table__pagesep" aria-hidden>
+                {tr(" sur ", " of ")}
+              </span>
+              <span className="mb-table__pagenum mb-table__pagenum--tot">{totalPages}</span>
             </span>
           </div>
           <button
@@ -168,9 +174,8 @@ export function DataTable({
             aria-label={tr("Page suivante", "Next page")}
             title={tr("Page suivante", "Next page")}
           >
-            <span className="mb-table__pagebtn-label mb-table__pagebtn-label--full">{tr("Suivant", "Next")}</span>
-            <span className="mb-table__pagebtn-label mb-table__pagebtn-label--compact" aria-hidden>
-              ›
+            <span className="mb-table__pagebtn-glyph" aria-hidden>
+              {"\u003e\u003e"}
             </span>
           </button>
         </div>
@@ -188,6 +193,7 @@ export function DataTable({
             value={safePageSize}
             onChange={(e) => onPageSizeChange?.(Number(e.target.value))}
             aria-label={tr("Nombre de lignes par page", "Rows per page")}
+            title={tr("Nombre de lignes par page", "Rows per page")}
           >
             {pageSizeOptions.map((n) => (
               <option key={n} value={n}>
