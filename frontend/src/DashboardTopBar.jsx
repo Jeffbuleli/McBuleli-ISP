@@ -10,11 +10,14 @@ import {
   IconMenuHamburger,
   IconX
 } from "./icons.jsx";
+import LangSwitch from "./LangSwitch.jsx";
 
 export default function DashboardTopBar({
   t,
   user,
   isFieldAgent,
+  uiLang,
+  onUiLangChange,
   dashboardChatIspId,
   teamChatUnread,
   onToggleChat,
@@ -77,6 +80,15 @@ export default function DashboardTopBar({
         </div>
 
         <div className="mb-topbar__right" role="toolbar" aria-label={t("Actions", "Actions")}>
+          {typeof onUiLangChange === "function" && (uiLang === "fr" || uiLang === "en") ? (
+            <LangSwitch
+              className="mb-topbar__lang"
+              value={uiLang}
+              onChange={onUiLangChange}
+              idPrefix="mb-dash"
+              compact
+            />
+          ) : null}
           {dashboardChatIspId ? (
             <DashboardTeamChatButton unreadCount={teamChatUnread} t={t} variant={isMobileShell ? "mobile" : "desktop"} onClick={onToggleChat} />
           ) : null}

@@ -365,61 +365,101 @@ function translateToEnglish(input) {
   return out;
 }
 
-function CsvImportResultBlock({ createdCount, skipped, errors, maxRows = 40, onDismiss }) {
+/** Libellés types de moyen de paiement (liste déroulante + affichage) */
+const PAYMENT_METHOD_TYPE_I18N = {
+  cash: ["Espèces (cash)", "Cash"],
+  pawapay: ["Mobile Money", "Mobile Money"],
+  onafriq: ["ONAFRIQ", "ONAFRIQ"],
+  paypal: ["PayPal", "PayPal"],
+  binance_pay: ["Binance Pay", "Binance Pay"],
+  mobile_money: ["Mobile Money (générique)", "Mobile Money (generic)"],
+  gateway: ["Gateway personnalisé", "Custom gateway"],
+  bank_transfer: ["Virement bancaire", "Bank transfer"],
+  crypto_wallet: ["Portefeuille crypto", "Crypto wallet"],
+  other: ["Autre", "Other"]
+};
+
+function paymentMethodTypeText(mt, t) {
+  const p = PAYMENT_METHOD_TYPE_I18N[mt];
+  return p ? t(p[0], p[1]) : mt || "—";
+}
+
+function CsvImportResultBlock({ createdCount, skipped, errors, maxRows = 40, onDismiss, t }) {
+  const tr = typeof t === "function" ? t : (_, en) => en;
   const sk = skipped || [];
   const er = errors || [];
   if (sk.length === 0 && er.length === 0 && !createdCount) return null;
   return (
     <div style={{ marginTop: 12, padding: 12, background: "#f8f9fb", fontSize: "0.9rem", borderRadius: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-        <strong>Résultat de l'import</strong>
+        <strong>{tr("Résultat de l'import", "Import result")}</strong>
         {onDismiss ? (
           <button type="button" onClick={onDismiss}>
-            Fermer
+            {tr("Fermer", "Close")}
           </button>
         ) : null}
       </div>
       <p style={{ margin: "8px 0" }}>
-        <strong>{createdCount}</strong> ligne{createdCount === 1 ? "" : "s"} importée{createdCount === 1 ? "" : "s"}.
+        <strong>{createdCount}</strong>{" "}
+        {createdCount === 1
+          ? tr("ligne importée.", "row imported.")
+          : tr("lignes importées.", "rows imported.")}{" "}
         {sk.length ? (
           <>
-            {" "}
-            <strong>{sk.length}</strong> ignorée{sk.length === 1 ? "" : "s"}.
+            <strong>{sk.length}</strong>{" "}
+            {sk.length === 1 ? tr("ignorée.", "skipped.") : tr("ignorées.", "skipped.")}{" "}
           </>
         ) : null}
         {er.length ? (
           <>
-            {" "}
-            <strong>{er.length}</strong> erreur{er.length === 1 ? "" : "s"}.
+            <strong>{er.length}</strong> {er.length === 1 ? tr("erreur.", "error.") : tr("erreurs.", "errors.")}
           </>
         ) : null}
       </p>
       {sk.length > 0 ? (
         <details open={sk.length <= 15} style={{ marginTop: 8 }}>
-          <summary>Lignes ignorées (premières {Math.min(sk.length, maxRows)})</summary>
+          <summary>
+            {tr("Lignes ignorées (premières ", "Skipped rows (first ")}
+            {Math.min(sk.length, maxRows)})
+          </summary>
           <ul style={{ margin: "8px 0", paddingLeft: 20 }}>
             {sk.slice(0, maxRows).map((s, i) => (
               <li key={i}>
-                Ligne {s.line} : {s.reason || "ignorée"}
-                {s.phone != null ? ` — tél. ${s.phone}` : ""}
+                {tr("Ligne ", "Row ")}
+                {s.line} : {s.reason || tr("ignorée", "skipped")}
+                {s.phone != null ? ` — ${tr("tél.", "phone")} ${s.phone}` : ""}
                 {s.email != null ? ` — ${s.email}` : ""}
               </li>
             ))}
           </ul>
-          {sk.length > maxRows ? <p>… et {sk.length - maxRows} autres ignorées.</p> : null}
+          {sk.length > maxRows ? (
+            <p>
+              … {tr("et ", "and ")}
+              {sk.length - maxRows} {tr("autres ignorées.", "more skipped.")}
+            </p>
+          ) : null}
         </details>
       ) : null}
       {er.length > 0 ? (
         <details open style={{ marginTop: 8 }}>
-          <summary>Erreurs (premières {Math.min(er.length, maxRows)})</summary>
+          <summary>
+            {tr("Erreurs (premières ", "Errors (first ")}
+            {Math.min(er.length, maxRows)})
+          </summary>
           <ul style={{ margin: "8px 0", paddingLeft: 20 }}>
             {er.slice(0, maxRows).map((e, i) => (
               <li key={i}>
-                Ligne {e.line} : {e.message || "Erreur inconnue"}
+                {tr("Ligne ", "Row ")}
+                {e.line} : {e.message || tr("Erreur inconnue", "Unknown error")}
               </li>
             ))}
           </ul>
-          {er.length > maxRows ? <p>… et {er.length - maxRows} autres erreurs.</p> : null}
+          {er.length > maxRows ? (
+            <p>
+              … {tr("et ", "and ")}
+              {er.length - maxRows} {tr("autres erreurs.", "more errors.")}
+            </p>
+          ) : null}
         </details>
       ) : null}
     </div>
@@ -1600,6 +1640,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("ui_lang", uiLang);
+      window.dispatchEvent(new Event(UI_LANG_SYNC_EVENT));
     }
   }, [uiLang]);
 
@@ -1675,35 +1716,6 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
     const pageRows = sorted.slice(start, start + pageSize);
     return { pageRows, total: sorted.length };
   }, [filteredTenants, tenantTable.page, tenantTable.pageSize, tenantTable.sort]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !user || !isEn || loading) return;
-    const root = document.querySelector("main.container.app-shell");
-    if (!root) return;
-
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const textNodes = [];
-    let n = walker.nextNode();
-    while (n) {
-      textNodes.push(n);
-      n = walker.nextNode();
-    }
-    for (const node of textNodes) {
-      const v = node.nodeValue || "";
-      const nv = translateToEnglish(v);
-      if (nv !== v) node.nodeValue = nv;
-    }
-
-    const elems = root.querySelectorAll("input, textarea, button, option, label, h1, h2, h3, p, span, a, small");
-    for (const el of elems) {
-      if (el.getAttribute("placeholder")) {
-        el.setAttribute("placeholder", translateToEnglish(el.getAttribute("placeholder")));
-      }
-      if (el.getAttribute("title")) {
-        el.setAttribute("title", translateToEnglish(el.getAttribute("title")));
-      }
-    }
-  }, [user, isEn, notice, error, loading, selectedIspId, expenses.length, customers.length, plans.length, users.length]);
 
   useEffect(() => {
     async function bootstrap() {
@@ -3491,6 +3503,8 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             t={t}
             user={user}
             isFieldAgent={isFieldAgent}
+            uiLang={uiLang}
+            onUiLangChange={setUiLang}
             dashboardChatIspId={dashboardChatIspId}
             teamChatUnread={teamChatUnread}
             onToggleChat={() => setTeamChatOpen((o) => !o)}
@@ -4258,70 +4272,67 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
       <section className="grid" id="billing-ops">
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreatePaymentMethod}>
-            <h2>Moyens de paiement FAI</h2>
+            <h2>{t("Moyens de paiement FAI", "ISP payment methods")}</h2>
             <select
               value={paymentMethodForm.methodType}
               onChange={(e) =>
                 setPaymentMethodForm({ ...paymentMethodForm, methodType: e.target.value })
               }
             >
-              <option value="cash">Espèces (cash)</option>
-              <option value="pawapay">Mobile Money</option>
-              <option value="onafriq">ONAFRIQ</option>
-              <option value="paypal">PayPal</option>
-              <option value="binance_pay">Binance Pay</option>
-              <option value="mobile_money">Mobile Money (générique)</option>
-              <option value="gateway">Gateway personnalisé</option>
-              <option value="bank_transfer">Virement bancaire</option>
-              <option value="crypto_wallet">Portefeuille crypto</option>
-              <option value="other">Autre</option>
+              {Object.keys(PAYMENT_METHOD_TYPE_I18N).map((key) => (
+                <option key={key} value={key}>
+                  {paymentMethodTypeText(key, t)}
+                </option>
+              ))}
             </select>
             <input
-              placeholder="Nom du fournisseur"
+              placeholder={t("Nom du fournisseur", "Provider name")}
               value={paymentMethodForm.providerName}
               onChange={(e) =>
                 setPaymentMethodForm({ ...paymentMethodForm, providerName: e.target.value })
               }
             />
             <input
-              placeholder='Configuration JSON (ex : {"apiKey":"xxx"})'
+              placeholder={t('Configuration JSON (ex : {"apiKey":"xxx"})', 'Config JSON (e.g. {"apiKey":"xxx"})')}
               value={paymentMethodForm.configText}
               onChange={(e) =>
                 setPaymentMethodForm({ ...paymentMethodForm, configText: e.target.value })
               }
             />
             <button type="submit" disabled={!selectedIspId}>
-              Ajouter un moyen de paiement
+              {t("Ajouter un moyen de paiement", "Add payment method")}
             </button>
             {paymentMethods.map((pm) => (
               <p key={pm.id}>
-                {pm.methodType} — {pm.providerName} [{pm.isActive ? "actif" : "inactif"}]{" "}
+                {paymentMethodTypeText(pm.methodType, t)} — {pm.providerName} [
+                {pm.isActive ? t("actif", "active") : t("inactif", "inactive")}]{" "}
                 <button type="button" onClick={() => onTogglePaymentMethod(pm.id, !pm.isActive)}>
-                  {pm.isActive ? "Désactiver" : "Activer"}
+                  {pm.isActive ? t("Désactiver", "Disable") : t("Activer", "Enable")}
                 </button>
                 {" "}
                 <button type="button" onClick={() => onGenerateGatewayCallback(pm.id)} disabled={!pm.isActive}>
-                  Générer callback gateway
+                  {t("Générer callback gateway", "Generate gateway callback")}
                 </button>
                 {" "}
                 <button type="button" onClick={() => onTestGatewayCallback(pm.id)} disabled={!pm.isActive}>
-                  Tester callback (activation)
+                  {t("Tester callback (activation)", "Test callback (activation)")}
                 </button>
                 {gatewayCallbackByMethod[pm.id] ? (
                   <span>
-                    {" "}— URL: <code>{gatewayCallbackByMethod[pm.id].callbackUrl}</code>{" "}
+                    {" "}
+                    — {t("URL", "URL")}: <code>{gatewayCallbackByMethod[pm.id].callbackUrl}</code>{" "}
                     <button
                       type="button"
                       onClick={() => copyToClipboard(gatewayCallbackByMethod[pm.id].callbackUrl)}
                     >
-                      Copier URL
+                      {t("Copier URL", "Copy URL")}
                     </button>{" "}
-                    — Secret: <code>{gatewayCallbackByMethod[pm.id].callbackSecret}</code>{" "}
+                    — {t("Secret", "Secret")}: <code>{gatewayCallbackByMethod[pm.id].callbackSecret}</code>{" "}
                     <button
                       type="button"
                       onClick={() => copyToClipboard(gatewayCallbackByMethod[pm.id].callbackSecret)}
                     >
-                      Copier secret
+                      {t("Copier secret", "Copy secret")}
                     </button>
                   </span>
                 ) : null}
@@ -4332,9 +4343,9 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
 
         {(isPlatformSuperRole(user.role) || user.role === "company_manager") && (
           <form className="panel" onSubmit={onUpsertRoleProfile}>
-            <h2>Profils d'habilitation</h2>
+            <h2>{t("Profils d'habilitation", "Accreditation profiles")}</h2>
             <input
-              placeholder="Clé de rôle (ex. field_agent)"
+              placeholder={t("Clé de rôle (ex. field_agent)", "Role key (e.g. field_agent)")}
               value={roleProfileForm.roleKey}
               onChange={(e) => setRoleProfileForm({ ...roleProfileForm, roleKey: e.target.value })}
             />
@@ -4344,20 +4355,20 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                 setRoleProfileForm({ ...roleProfileForm, accreditationLevel: e.target.value })
               }
             >
-              <option value="basic">Basique</option>
-              <option value="standard">Standard</option>
-              <option value="senior">Senior</option>
-              <option value="manager">Manager</option>
+              <option value="basic">{t("Basique", "Basic")}</option>
+              <option value="standard">{t("Standard", "Standard")}</option>
+              <option value="senior">{t("Senior", "Senior")}</option>
+              <option value="manager">{t("Manager", "Manager")}</option>
             </select>
             <input
-              placeholder='Permissions JSON (ex : ["collect_payment"])'
+              placeholder={t('Permissions JSON (ex : ["collect_payment"])', 'Permissions JSON (e.g. ["collect_payment"])')}
               value={roleProfileForm.permissionsText}
               onChange={(e) =>
                 setRoleProfileForm({ ...roleProfileForm, permissionsText: e.target.value })
               }
             />
             <button type="submit" disabled={!selectedIspId}>
-              Enregistrer le profil de rôle
+              {t("Enregistrer le profil de rôle", "Save role profile")}
             </button>
             {roleProfiles.map((profile) => (
               <p key={profile.id}>
@@ -4601,7 +4612,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
       <section className="grid" id="team-settings">
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onUpsertNotificationProvider}>
-            <h2>Fournisseurs de notifications</h2>
+            <h2>{t("Fournisseurs de notifications", "Notification providers")}</h2>
             <select
               value={notificationProviderForm.channel}
               onChange={(e) =>
@@ -4609,7 +4620,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               }
             >
               <option value="sms">SMS</option>
-              <option value="email">E-mail</option>
+              <option value="email">{t("E-mail", "Email")}</option>
               <option value="whatsapp">WhatsApp</option>
             </select>
             <select
@@ -4621,7 +4632,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                 })
               }
             >
-              <option value="webhook">Webhook HTTP</option>
+              <option value="webhook">{t("Webhook HTTP", "HTTP webhook")}</option>
               <option value="twilio">Twilio</option>
               <option value="smtp">SMTP</option>
             </select>
@@ -4976,12 +4987,12 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
 
       <section className="grid">
         <form className="panel" onSubmit={onGenerateVouchers}>
-          <h2>Générer des bons d'accès</h2>
+          <h2>{t("Générer des bons d'accès", "Generate access vouchers")}</h2>
           <select
             value={voucherForm.planId}
             onChange={(e) => setVoucherForm({ ...voucherForm, planId: e.target.value })}
           >
-            <option value="">Choisir une formule</option>
+            <option value="">{t("Choisir une formule", "Select a plan")}</option>
             {plans.map((plan) => (
               <option key={plan.id} value={plan.id}>
                 {plan.name} ({plan.rateLimit}, {plan.durationDays} {t("jours", "days")})
@@ -4996,32 +5007,35 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             onChange={(e) => setVoucherForm({ ...voucherForm, quantity: e.target.value })}
           />
           <label style={{ display: "block", marginTop: 8 }}>
-            Appareils max par bon (défaut = limite de la formule)
+            {t(
+              "Appareils max par bon (défaut = limite de la formule)",
+              "Max devices per voucher (defaults to plan limit)"
+            )}
             <input
               type="number"
               min="1"
               max="100"
-              placeholder="Défaut formule"
+              placeholder={t("Défaut formule", "Plan default")}
               value={voucherForm.maxDevices}
               onChange={(e) => setVoucherForm({ ...voucherForm, maxDevices: e.target.value })}
               style={{ marginLeft: 8, width: 120 }}
             />
           </label>
           <button type="submit" disabled={!selectedIspId}>
-            Générer les bons
+            {t("Générer les bons", "Generate vouchers")}
           </button>
           <button type="button" onClick={onPrintVouchers} disabled={!selectedIspId}>
-            Imprimer les bons inutilisés
+            {t("Imprimer les bons inutilisés", "Print unused vouchers")}
           </button>
           <button type="button" onClick={onExportVouchers} disabled={!selectedIspId}>
-            Exporter CSV
+            {t("Exporter CSV", "Export CSV")}
           </button>
         </form>
 
         <form className="panel" onSubmit={onRedeemVoucher}>
-          <h2>Utiliser un bon</h2>
+          <h2>{t("Utiliser un bon", "Redeem voucher")}</h2>
           <input
-            placeholder="Code du bon"
+            placeholder={t("Code du bon", "Voucher code")}
             value={voucherRedeemForm.code}
             onChange={(e) => setVoucherRedeemForm({ ...voucherRedeemForm, code: e.target.value })}
           />
@@ -5033,11 +5047,14 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                 setVoucherRedeemForm({ ...voucherRedeemForm, redeemByPhone: e.target.checked })
               }
             />
-            Utiliser par téléphone (FAI = locataire sélectionné)
+            {t(
+              "Utiliser par téléphone (FAI = locataire sélectionné)",
+              "Redeem by phone (ISP = selected tenant)"
+            )}
           </label>
           {voucherRedeemForm.redeemByPhone ? (
             <input
-              placeholder="Téléphone client (chiffres, indicatif)"
+              placeholder={t("Téléphone client (chiffres, indicatif)", "Customer phone (digits, country code)")}
               value={voucherRedeemForm.phone}
               onChange={(e) => setVoucherRedeemForm({ ...voucherRedeemForm, phone: e.target.value })}
             />
@@ -5048,7 +5065,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                 setVoucherRedeemForm({ ...voucherRedeemForm, customerId: e.target.value })
               }
             >
-              <option value="">Choisir un client</option>
+              <option value="">{t("Choisir un client", "Select a customer")}</option>
               {customers.map((cst) => (
                 <option key={cst.id} value={cst.id}>
                   {cst.fullName}
@@ -5058,12 +5075,15 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           )}
           <input
             type="password"
-            placeholder="Mot de passe portail (obligatoire si absent, min. 6 car.)"
+            placeholder={t(
+              "Mot de passe portail (obligatoire si absent, min. 6 car.)",
+              "Portal password (required if none, min. 6 chars)"
+            )}
             value={voucherRedeemForm.newPassword}
             onChange={(e) => setVoucherRedeemForm({ ...voucherRedeemForm, newPassword: e.target.value })}
           />
           <button type="submit" disabled={!selectedIspId}>
-            Utiliser le bon
+            {t("Utiliser le bon", "Redeem voucher")}
           </button>
           <DataTable
             t={t}
@@ -5101,16 +5121,16 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
 
       <section className="grid">
         <section className="panel">
-          <h2>Formule plateforme (facturation SaaS)</h2>
+          <h2>{t("Formule plateforme (facturation SaaS)", "Platform plan (SaaS billing)")}</h2>
           <form onSubmit={onCreatePlatformSubscription}>
             <select
               value={platformSubForm.packageId}
               onChange={(e) => setPlatformSubForm({ ...platformSubForm, packageId: e.target.value })}
             >
-              <option value="">Choisir une formule</option>
+              <option value="">{t("Choisir une formule", "Select a plan")}</option>
               {platformPackages.map((pkg) => (
                 <option key={pkg.id} value={pkg.id}>
-                  {pkg.name} (${pkg.monthlyPriceUsd}/month)
+                  {`${pkg.name} ($${pkg.monthlyPriceUsd}${t(" / mois", " / month")})`}
                 </option>
               ))}
             </select>
@@ -5122,12 +5142,13 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               }
             />
             <button type="submit" disabled={!selectedIspId || !isPlatformSuperRole(user.role)}>
-              Attribuer la formule
+              {t("Attribuer la formule", "Assign plan")}
             </button>
           </form>
           {platformSubscriptions.map((sub) => (
             <p key={sub.id}>
-              {sub.packageName} ({sub.status}) jusqu'au {new Date(sub.endsAt).toLocaleDateString("fr-FR")}
+              {sub.packageName} ({sub.status}) {t("jusqu'au", "until")}{" "}
+              {new Date(sub.endsAt).toLocaleDateString(isEn ? "en-GB" : "fr-FR")}
             </p>
           ))}
         </section>
@@ -5136,38 +5157,44 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
       <section className="grid">
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreateUser}>
-            <h2>Créer un utilisateur équipe</h2>
+            <h2>{t("Créer un utilisateur équipe", "Create team user")}</h2>
             <input
-              placeholder="Nom complet"
+              placeholder={t("Nom complet", "Full name")}
               value={userForm.fullName}
               onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
             />
             <input
-              placeholder="E-mail"
+              placeholder={t("E-mail", "Email")}
               value={userForm.email}
               onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
             />
             <input
-              placeholder="Mot de passe (obligatoire seulement pour un nouvel e-mail)"
+              placeholder={t(
+                "Mot de passe (obligatoire seulement pour un nouvel e-mail)",
+                "Password (required only for a new email)"
+              )}
               type="password"
               value={userForm.password}
               onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
             />
             <p className="app-meta">
-              Si l’e-mail existe déjà sur McBuleli, le compte est rattaché à ce FAI sans changer le mot de passe.
+              {t(
+                "Si l’e-mail existe déjà sur McBuleli, le compte est rattaché à ce FAI sans changer le mot de passe.",
+                "If the email already exists on McBuleli, the account is linked to this ISP without changing the password."
+              )}
             </p>
             <input
-              placeholder="Téléphone (facultatif)"
+              placeholder={t("Téléphone (facultatif)", "Phone (optional)")}
               value={userForm.phone}
               onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
             />
             <input
-              placeholder="Adresse (facultatif)"
+              placeholder={t("Adresse (facultatif)", "Address (optional)")}
               value={userForm.address}
               onChange={(e) => setUserForm({ ...userForm, address: e.target.value })}
             />
             <input
-              placeholder="Site / zone affectée (facultatif)"
+              placeholder={t("Site / zone affectée (facultatif)", "Site / zone (optional)")}
               value={userForm.assignedSite}
               onChange={(e) => setUserForm({ ...userForm, assignedSite: e.target.value })}
             />
@@ -5176,12 +5203,12 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
             >
               {isPlatformSuperRole(user.role) && (
-                <option value="company_manager">Dirigeant entreprise</option>
+                <option value="company_manager">{t("Dirigeant entreprise", "Company manager")}</option>
               )}
-              <option value="isp_admin">Administrateur FAI</option>
-              <option value="billing_agent">Agent facturation</option>
-              <option value="noc_operator">Opérateur NOC</option>
-              <option value="field_agent">Agent terrain</option>
+              <option value="isp_admin">{t("Administrateur FAI", "ISP administrator")}</option>
+              <option value="billing_agent">{t("Agent facturation", "Billing agent")}</option>
+              <option value="noc_operator">{t("Opérateur NOC", "NOC operator")}</option>
+              <option value="field_agent">{t("Agent terrain", "Field agent")}</option>
             </select>
             <select
               value={userForm.accreditationLevel}
@@ -5189,13 +5216,13 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                 setUserForm({ ...userForm, accreditationLevel: e.target.value })
               }
             >
-              <option value="basic">Basique</option>
-              <option value="standard">Standard</option>
-              <option value="senior">Senior</option>
-              <option value="manager">Manager</option>
+              <option value="basic">{t("Accréditation : basique", "Accreditation: basic")}</option>
+              <option value="standard">{t("Accréditation : standard", "Accreditation: standard")}</option>
+              <option value="senior">{t("Accréditation : senior", "Accreditation: senior")}</option>
+              <option value="manager">{t("Accréditation : manager", "Accreditation: manager")}</option>
             </select>
             <button type="submit" disabled={!selectedIspId}>
-              Créer l'utilisateur
+              {t("Créer l'utilisateur", "Create user")}
             </button>
           </form>
         )}
@@ -5240,12 +5267,12 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                 />
                 <select value={teamImportRole} onChange={(e) => setTeamImportRole(e.target.value)}>
                   {isPlatformSuperRole(user.role) && (
-                    <option value="company_manager">Dirigeant entreprise</option>
+                    <option value="company_manager">{t("Dirigeant entreprise", "Company manager")}</option>
                   )}
-                  <option value="isp_admin">Administrateur FAI</option>
-                  <option value="billing_agent">Agent facturation</option>
-                  <option value="noc_operator">Opérateur NOC</option>
-                  <option value="field_agent">Agent terrain</option>
+                  <option value="isp_admin">{t("Administrateur FAI", "ISP administrator")}</option>
+                  <option value="billing_agent">{t("Agent facturation", "Billing agent")}</option>
+                  <option value="noc_operator">{t("Opérateur NOC", "NOC operator")}</option>
+                  <option value="field_agent">{t("Agent terrain", "Field agent")}</option>
                 </select>
                 <button type="submit" disabled={!selectedIspId}>
                   {t("Importer le CSV équipe", "Import team CSV")}
@@ -5253,6 +5280,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               </form>
               {teamImportReport ? (
                 <CsvImportResultBlock
+                  t={t}
                   createdCount={teamImportReport.createdCount}
                   skipped={teamImportReport.skipped}
                   errors={teamImportReport.errors}
@@ -5264,12 +5292,15 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           {generatedInvite && (
             <div>
               <p>
-                Dernier lien d'invitation : <code>{generatedInvite.inviteLink}</code>
+                {t("Dernier lien d'invitation :", "Latest invite link:")}{" "}
+                <code>{generatedInvite.inviteLink}</code>
               </p>
               <p>
-                Jeton : <code>{generatedInvite.token}</code>
+                {t("Jeton :", "Token:")} <code>{generatedInvite.token}</code>
               </p>
-              <p>Expire : {generatedInvite.expiresIn}</p>
+              <p>
+                {t("Expire :", "Expires:")} {generatedInvite.expiresIn}
+              </p>
             </div>
           )}
           {users.map((item) => {
@@ -5289,8 +5320,13 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                   <strong>{item.fullName}</strong> — {item.email}{" "}
                   <span className="app-meta">
                     [
-                    {item.isActive ? "actif dans ce FAI" : "inactif dans ce FAI"}
-                    {item.userAccountActive === false ? " · compte global suspendu" : ""}]
+                    {item.isActive
+                      ? t("actif dans ce FAI", "active in this ISP")
+                      : t("inactif dans ce FAI", "inactive in this ISP")}
+                    {item.userAccountActive === false
+                      ? t(" · compte global suspendu", " · account suspended globally")
+                      : ""}
+                    ]
                   </span>
                 </p>
                 {canManageTeam ? (
@@ -5305,12 +5341,12 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                       }
                     >
                       {isPlatformSuperRole(user.role) && (
-                        <option value="company_manager">Dirigeant entreprise</option>
+                        <option value="company_manager">{t("Dirigeant entreprise", "Company manager")}</option>
                       )}
-                      <option value="isp_admin">Administrateur FAI</option>
-                      <option value="billing_agent">Agent facturation</option>
-                      <option value="noc_operator">Opérateur NOC</option>
-                      <option value="field_agent">Agent terrain</option>
+                      <option value="isp_admin">{t("Administrateur FAI", "ISP administrator")}</option>
+                      <option value="billing_agent">{t("Agent facturation", "Billing agent")}</option>
+                      <option value="noc_operator">{t("Opérateur NOC", "NOC operator")}</option>
+                      <option value="field_agent">{t("Agent terrain", "Field agent")}</option>
                     </select>
                     <select
                       value={d.accreditationLevel}
@@ -5321,27 +5357,27 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                         })
                       }
                     >
-                      <option value="basic">Accréditation : basique</option>
-                      <option value="standard">Standard</option>
-                      <option value="senior">Senior</option>
-                      <option value="manager">Manager</option>
+                      <option value="basic">{t("Accréditation : basique", "Accreditation: basic")}</option>
+                      <option value="standard">{t("Accréditation : standard", "Accreditation: standard")}</option>
+                      <option value="senior">{t("Accréditation : senior", "Accreditation: senior")}</option>
+                      <option value="manager">{t("Accréditation : manager", "Accreditation: manager")}</option>
                     </select>
                     <input
-                      placeholder="Téléphone"
+                      placeholder={t("Téléphone", "Phone")}
                       value={d.phone}
                       onChange={(e) =>
                         setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, phone: e.target.value } })
                       }
                     />
                     <input
-                      placeholder="Adresse"
+                      placeholder={t("Adresse", "Address")}
                       value={d.address}
                       onChange={(e) =>
                         setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, address: e.target.value } })
                       }
                     />
                     <input
-                      placeholder="Site / zone"
+                      placeholder={t("Site / zone", "Site / zone")}
                       value={d.assignedSite}
                       onChange={(e) =>
                         setTeamRowDraft({
@@ -5351,33 +5387,33 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                       }
                     />
                     <button type="button" onClick={() => onSaveTeamUser(item.id)}>
-                      Enregistrer fiche & rôle
+                      {t("Enregistrer fiche & rôle", "Save profile & role")}
                     </button>
                   </div>
                 ) : null}
                 {canManageTeam ? (
                   <p style={{ marginBottom: 0 }}>
                     <button type="button" onClick={() => onResetPassword(item.id)}>
-                      Réinitialiser le mot de passe
+                      {t("Réinitialiser le mot de passe", "Reset password")}
                     </button>{" "}
                     <button type="button" onClick={() => onCreateInvite(item.id)}>
-                      Créer une invitation
+                      {t("Créer une invitation", "Create invite")}
                     </button>{" "}
                     {item.isActive ? (
                       <button type="button" onClick={() => onDeactivateUser(item.id)}>
-                        Désactiver dans ce FAI
+                        {t("Désactiver dans ce FAI", "Disable in this ISP")}
                       </button>
                     ) : (
                       <button type="button" onClick={() => onReactivateUser(item.id)}>
-                        Réactiver dans ce FAI
+                        {t("Réactiver dans ce FAI", "Reactivate in this ISP")}
                       </button>
                     )}{" "}
                     <button type="button" onClick={() => onSuspendUserGlobally(item.id)}>
-                      Suspendre compte (toutes entreprises)
+                      {t("Suspendre compte (toutes entreprises)", "Suspend account (all companies)")}
                     </button>{" "}
                     {item.userAccountActive === false ? (
                       <button type="button" onClick={() => onReactivateUserGlobally(item.id)}>
-                        Réactiver connexion (global)
+                        {t("Réactiver connexion (global)", "Reactivate login (global)")}
                       </button>
                     ) : null}
                   </p>
@@ -5408,14 +5444,15 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
       ) : null}
 
       <section className="panel">
-        <h2>File d'attente des notifications</h2>
+        <h2>{t("File d'attente des notifications", "Notification outbox")}</h2>
         <p>
-          En file : {notificationOutbox.filter((row) => row.status === "queued").length} | Envoyé :{" "}
-          {notificationOutbox.filter((row) => row.status === "sent").length} | Échec :{" "}
+          {t("En file :", "Queued:")}{" "}
+          {notificationOutbox.filter((row) => row.status === "queued").length} | {t("Envoyé :", "Sent:")}{" "}
+          {notificationOutbox.filter((row) => row.status === "sent").length} | {t("Échec :", "Failed:")}{" "}
           {notificationOutbox.filter((row) => row.status === "failed").length}
         </p>
         <button onClick={onProcessNotificationOutbox} disabled={!selectedIspId}>
-          Traiter la file maintenant
+          {t("Traiter la file maintenant", "Process outbox now")}
         </button>
         {notificationOutbox.slice(0, 12).map((row) => (
           <p key={row.id}>
@@ -5426,7 +5463,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
       </section>
 
       <section className="panel">
-        <h2>Envoyer une notification de test</h2>
+        <h2>{t("Envoyer une notification de test", "Send test notification")}</h2>
         <form onSubmit={onSendTestNotification}>
           <select
             value={notificationTestForm.channel}
@@ -5435,25 +5472,25 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             }
           >
             <option value="sms">SMS</option>
-            <option value="email">E-mail</option>
+            <option value="email">{t("E-mail", "Email")}</option>
             <option value="whatsapp">WhatsApp</option>
           </select>
           <input
-            placeholder="Destinataire (téléphone ou e-mail)"
+            placeholder={t("Destinataire (téléphone ou e-mail)", "Recipient (phone or email)")}
             value={notificationTestForm.recipient}
             onChange={(e) =>
               setNotificationTestForm({ ...notificationTestForm, recipient: e.target.value })
             }
           />
           <input
-            placeholder="Message"
+            placeholder={t("Message", "Message")}
             value={notificationTestForm.message}
             onChange={(e) =>
               setNotificationTestForm({ ...notificationTestForm, message: e.target.value })
             }
           />
           <button type="submit" disabled={!selectedIspId}>
-            Envoyer le test
+            {t("Envoyer le test", "Send test")}
           </button>
         </form>
       </section>
@@ -5472,10 +5509,10 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
 
       <section className="grid metrics">
 <section className="panel">
-  <Card title="Clients" value={dashboard?.totalCustomers ?? 0} />
-  <Card title="Abonnements actifs" value={dashboard?.activeSubscriptions ?? 0} />
-  <Card title="Factures impayées" value={dashboard?.unpaidInvoices ?? 0} />
-  <Card title="Chiffre d'affaires (USD)" value={dashboard?.revenueUsd ?? 0} />
+  <Card title={t("Clients", "Customers")} value={dashboard?.totalCustomers ?? 0} />
+  <Card title={t("Abonnements actifs", "Active subscriptions")} value={dashboard?.activeSubscriptions ?? 0} />
+  <Card title={t("Factures impayées", "Unpaid invoices")} value={dashboard?.unpaidInvoices ?? 0} />
+  <Card title={t("Chiffre d'affaires (USD)", "Revenue (USD)")} value={dashboard?.revenueUsd ?? 0} />
 
   <Card
     title={t("Sessions en ligne", "Online sessions")}
@@ -6241,36 +6278,39 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         {!isFieldAgent ? (
           <>
         <form className="panel" onSubmit={onCreateCustomer}>
-          <h2>Créer un client</h2>
+          <h2>{t("Créer un client", "Create customer")}</h2>
           <input
-            placeholder="Nom complet"
+            placeholder={t("Nom complet", "Full name")}
             value={customerForm.fullName}
             onChange={(e) => setCustomerForm({ ...customerForm, fullName: e.target.value })}
           />
           <input
-            placeholder="Téléphone (+243…)"
+            placeholder={t("Téléphone (+243…)", "Phone (+243…)")}
             value={customerForm.phone}
             onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })}
           />
           <input
-            placeholder="E-mail pour les renouvellements (facultatif)"
+            placeholder={t("E-mail pour les renouvellements (facultatif)", "Email for renewals (optional)")}
             value={customerForm.email}
             onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })}
           />
           <input
             type="password"
-            placeholder="Mot de passe portail initial (facultatif, min. 6 car.)"
+            placeholder={t(
+              "Mot de passe portail initial (facultatif, min. 6 car.)",
+              "Initial portal password (optional, min. 6 chars)"
+            )}
             value={customerForm.initialPassword}
             onChange={(e) => setCustomerForm({ ...customerForm, initialPassword: e.target.value })}
           />
           <label className="app-meta" style={{ display: "block", marginBottom: 8 }}>
-            Agent terrain (facultatif)
+            {t("Agent terrain (facultatif)", "Field agent (optional)")}
             <select
               value={customerForm.fieldAgentId}
               onChange={(e) => setCustomerForm({ ...customerForm, fieldAgentId: e.target.value })}
               style={{ display: "block", width: "100%", marginTop: 4 }}
             >
-              <option value="">— Aucun —</option>
+              <option value="">{t("— Aucun —", "— None —")}</option>
               {fieldTeamUsers.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.fullName}
@@ -6279,7 +6319,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             </select>
           </label>
           <button type="submit" disabled={!selectedIspId}>
-            Enregistrer le client
+            {t("Enregistrer le client", "Save customer")}
           </button>
         </form>
 
@@ -6324,6 +6364,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           </form>
           {customerImportReport ? (
             <CsvImportResultBlock
+              t={t}
               createdCount={customerImportReport.createdCount}
               skipped={customerImportReport.skipped}
               errors={customerImportReport.errors}
@@ -6384,11 +6425,21 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         ) : null}
 
         <form className="panel" onSubmit={onPatchCustomerEmail}>
-          <h2>{isFieldAgent ? "E-mail client (clients assignés)" : "E-mail et agent terrain"}</h2>
+          <h2>
+            {isFieldAgent
+              ? t("E-mail client (clients assignés)", "Customer email (assigned customers)")
+              : t("E-mail et agent terrain", "Email and field agent")}
+          </h2>
           <p>
             {isFieldAgent
-              ? "Vous pouvez mettre à jour l’adresse e-mail des abonnés qui vous sont assignés."
-              : "E-mail pour les renouvellements (SMTP) et attribution d’un agent terrain pour le suivi sur le terrain."}
+              ? t(
+                  "Vous pouvez mettre à jour l’adresse e-mail des abonnés qui vous sont assignés.",
+                  "You can update the email address of subscribers assigned to you."
+                )
+              : t(
+                  "E-mail pour les renouvellements (SMTP) et attribution d’un agent terrain pour le suivi sur le terrain.",
+                  "Email for renewals (SMTP) and assigning a field agent for on-site follow-up."
+                )}
           </p>
           <select
             value={customerEmailForm.customerId}
@@ -6402,7 +6453,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               });
             }}
           >
-            <option value="">Choisir un client</option>
+            <option value="">{t("Choisir un client", "Select a customer")}</option>
             {customers.map((cst) => (
               <option key={cst.id} value={cst.id}>
                 {cst.fullName}
@@ -6411,7 +6462,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             ))}
           </select>
           <input
-            placeholder="E-mail (vide = effacer)"
+            placeholder={t("E-mail (vide = effacer)", "Email (empty = clear)")}
             value={customerEmailForm.email}
             onChange={(e) => setCustomerEmailForm({ ...customerEmailForm, email: e.target.value })}
           />
@@ -6421,7 +6472,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             user.role === "isp_admin" ||
             user.role === "billing_agent") ? (
             <label className="app-meta" style={{ display: "block", marginBottom: 8 }}>
-              Agent terrain
+              {t("Agent terrain", "Field agent")}
               <select
                 value={customerEmailForm.fieldAgentId || ""}
                 onChange={(e) =>
@@ -6429,7 +6480,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                 }
                 style={{ display: "block", width: "100%", marginTop: 4 }}
               >
-                <option value="">— Aucun —</option>
+                <option value="">{t("— Aucun —", "— None —")}</option>
                 {fieldTeamUsers.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.fullName}
@@ -6439,7 +6490,9 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             </label>
           ) : null}
           <button type="submit" disabled={!selectedIspId || !customerEmailForm.customerId}>
-            {isFieldAgent ? "Enregistrer l'e-mail" : "Enregistrer e-mail et agent"}
+            {isFieldAgent
+              ? t("Enregistrer l'e-mail", "Save email")
+              : t("Enregistrer e-mail et agent", "Save email and agent")}
           </button>
         </form>
       </DashboardScreenGate>
@@ -6455,9 +6508,12 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           user.role === "billing_agent" ||
           user.role === "field_agent") && (
           <form className="panel" onSubmit={onIssuePortalToken}>
-            <h2>Portail libre-service client</h2>
+            <h2>{t("Portail libre-service client", "Customer self-service portal")}</h2>
             <p>
-              Générez un lien limité dans le temps pour consulter les factures et envoyer une TID Mobile Money.
+              {t(
+                "Générez un lien limité dans le temps pour consulter les factures et envoyer une TID Mobile Money.",
+                "Generate a time-limited link to view invoices and submit a Mobile Money TID."
+              )}
             </p>
             <select
               value={portalTokenForm.customerId}
@@ -6465,7 +6521,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                 setPortalTokenForm({ ...portalTokenForm, customerId: e.target.value })
               }
             >
-              <option value="">Choisir un client</option>
+              <option value="">{t("Choisir un client", "Select a customer")}</option>
               {customers.map((cst) => (
                 <option key={cst.id} value={cst.id}>
                   {cst.fullName}
@@ -6476,18 +6532,18 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               type="number"
               min={1}
               max={365}
-              title="Validité du lien en jours"
+              title={t("Validité du lien en jours", "Link validity in days")}
               value={portalTokenForm.expiresDays}
               onChange={(e) =>
                 setPortalTokenForm({ ...portalTokenForm, expiresDays: e.target.value })
               }
             />
             <button type="submit" disabled={!selectedIspId}>
-              Générer le lien portail
+              {t("Générer le lien portail", "Generate portal link")}
             </button>
             {lastPortalIssue?.portalUrl && (
               <p>
-                <strong>Lien :</strong>{" "}
+                <strong>{t("Lien :", "Link:")}</strong>{" "}
                 <a href={lastPortalIssue.portalUrl} target="_blank" rel="noreferrer">
                   {lastPortalIssue.portalUrl}
                 </a>
@@ -6495,7 +6551,10 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             )}
             {lastPortalIssue?.expiresAt && (
               <p>
-                <small>Expire le {new Date(lastPortalIssue.expiresAt).toLocaleString("fr-FR")}</small>
+                <small>
+                  {t("Expire le", "Expires")}{" "}
+                  {new Date(lastPortalIssue.expiresAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}
+                </small>
               </p>
             )}
           </form>
@@ -6506,31 +6565,34 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
         <>
         <form className="panel" onSubmit={onCreatePlan}>
-          <h2>Créer une formule Wi‑Fi / accès</h2>
+          <h2>{t("Créer une formule Wi‑Fi / accès", "Create Wi‑Fi / access plan")}</h2>
           <input
-            placeholder="Nom"
+            placeholder={t("Nom", "Name")}
             value={planForm.name}
             onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
           />
           <input
             type="number"
-            placeholder="Prix (USD)"
+            placeholder={t("Prix (USD)", "Price (USD)")}
             value={planForm.priceUsd}
             onChange={(e) => setPlanForm({ ...planForm, priceUsd: e.target.value })}
           />
           <input
             type="number"
-            placeholder="Durée (jours)"
+            placeholder={t("Durée (jours)", "Duration (days)")}
             value={planForm.durationDays}
             onChange={(e) => setPlanForm({ ...planForm, durationDays: e.target.value })}
           />
           <input
-            placeholder="Libellé débit affiché aux clients (ex. 20 Mbps)"
+            placeholder={t(
+              "Libellé débit affiché aux clients (ex. 20 Mbps)",
+              "Speed label shown to customers (e.g. 20 Mbps)"
+            )}
             value={planForm.speedLabel}
             onChange={(e) => setPlanForm({ ...planForm, speedLabel: e.target.value })}
           />
           <input
-            placeholder="Limite technique (ex. 10M/10M)"
+            placeholder={t("Limite technique (ex. 10M/10M)", "Technical limit (e.g. 10M/10M)")}
             value={planForm.rateLimit}
             onChange={(e) => setPlanForm({ ...planForm, rateLimit: e.target.value })}
           />
@@ -6539,12 +6601,12 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             onChange={(e) => setPlanForm({ ...planForm, defaultAccessType: e.target.value })}
           >
             <option value="pppoe">PPPoE</option>
-            <option value="hotspot">Hotspot</option>
+            <option value="hotspot">{t("Hotspot", "Hotspot")}</option>
           </select>
           <input
             type="number"
             min={1}
-            placeholder="Nombre max d'appareils"
+            placeholder={t("Nombre max d'appareils", "Max devices")}
             value={planForm.maxDevices}
             onChange={(e) => setPlanForm({ ...planForm, maxDevices: e.target.value })}
           />
@@ -6552,8 +6614,8 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             value={planForm.availabilityStatus}
             onChange={(e) => setPlanForm({ ...planForm, availabilityStatus: e.target.value })}
           >
-            <option value="available">Disponible (pas épuisé)</option>
-            <option value="unavailable">Indisponible (masqué à l'achat)</option>
+            <option value="available">{t("Disponible (pas épuisé)", "Available (not sold out)")}</option>
+            <option value="unavailable">{t("Indisponible (masqué à l'achat)", "Unavailable (hidden from buy page)")}</option>
           </select>
           <label>
             <input
@@ -6561,20 +6623,23 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               checked={planForm.isPublished}
               onChange={(e) => setPlanForm({ ...planForm, isPublished: e.target.checked })}
             />{" "}
-            Afficher sur la page d'achat Wi‑Fi publique
+            {t("Afficher sur la page d'achat Wi‑Fi publique", "Show on public Wi‑Fi purchase page")}
           </label>
           <input
-            placeholder="URL après paiement (facultatif, sinon défaut FAI ou Google)"
+            placeholder={t(
+              "URL après paiement (facultatif, sinon défaut FAI ou Google)",
+              "After-pay redirect URL (optional, else ISP default or Google)"
+            )}
             value={planForm.successRedirectUrl}
             onChange={(e) => setPlanForm({ ...planForm, successRedirectUrl: e.target.value })}
           />
           <button type="submit" disabled={!selectedIspId}>
-            Enregistrer la formule
+            {t("Enregistrer la formule", "Save plan")}
           </button>
         </form>
 
         <form className="panel" onSubmit={onSavePlanPatch}>
-          <h2>Modifier une formule</h2>
+          <h2>{t("Modifier une formule", "Edit plan")}</h2>
           <select
             value={planEditForm.planId}
             onChange={(e) => {
@@ -6599,7 +6664,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               });
             }}
           >
-            <option value="">Choisir une formule à modifier…</option>
+            <option value="">{t("Choisir une formule à modifier…", "Select a plan to edit…")}</option>
             {plans.map((plan) => (
               <option key={plan.id} value={plan.id}>
                 {plan.name}
@@ -6607,29 +6672,29 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             ))}
           </select>
           <input
-            placeholder="Nom"
+            placeholder={t("Nom", "Name")}
             value={planEditForm.name}
             onChange={(e) => setPlanEditForm({ ...planEditForm, name: e.target.value })}
           />
           <input
             type="number"
-            placeholder="Prix USD"
+            placeholder={t("Prix USD", "Price USD")}
             value={planEditForm.priceUsd}
             onChange={(e) => setPlanEditForm({ ...planEditForm, priceUsd: e.target.value })}
           />
           <input
             type="number"
-            placeholder="Durée (jours)"
+            placeholder={t("Durée (jours)", "Duration (days)")}
             value={planEditForm.durationDays}
             onChange={(e) => setPlanEditForm({ ...planEditForm, durationDays: e.target.value })}
           />
           <input
-            placeholder="Libellé débit"
+            placeholder={t("Libellé débit", "Speed label")}
             value={planEditForm.speedLabel}
             onChange={(e) => setPlanEditForm({ ...planEditForm, speedLabel: e.target.value })}
           />
           <input
-            placeholder="Limite de débit"
+            placeholder={t("Limite de débit", "Rate limit")}
             value={planEditForm.rateLimit}
             onChange={(e) => setPlanEditForm({ ...planEditForm, rateLimit: e.target.value })}
           />
@@ -6638,12 +6703,12 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             onChange={(e) => setPlanEditForm({ ...planEditForm, defaultAccessType: e.target.value })}
           >
             <option value="pppoe">PPPoE</option>
-            <option value="hotspot">Hotspot</option>
+            <option value="hotspot">{t("Hotspot", "Hotspot")}</option>
           </select>
           <input
             type="number"
             min={1}
-            placeholder="Appareils max"
+            placeholder={t("Appareils max", "Max devices")}
             value={planEditForm.maxDevices}
             onChange={(e) => setPlanEditForm({ ...planEditForm, maxDevices: e.target.value })}
           />
@@ -6651,8 +6716,8 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             value={planEditForm.availabilityStatus}
             onChange={(e) => setPlanEditForm({ ...planEditForm, availabilityStatus: e.target.value })}
           >
-            <option value="available">Disponible</option>
-            <option value="unavailable">Indisponible</option>
+            <option value="available">{t("Disponible", "Available")}</option>
+            <option value="unavailable">{t("Indisponible", "Unavailable")}</option>
           </select>
           <label>
             <input
@@ -6660,15 +6725,15 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               checked={planEditForm.isPublished}
               onChange={(e) => setPlanEditForm({ ...planEditForm, isPublished: e.target.checked })}
             />{" "}
-            Publié sur la page Wi‑Fi
+            {t("Publié sur la page Wi‑Fi", "Published on Wi‑Fi page")}
           </label>
           <input
-            placeholder="URL après paiement"
+            placeholder={t("URL après paiement", "After-pay redirect URL")}
             value={planEditForm.successRedirectUrl}
             onChange={(e) => setPlanEditForm({ ...planEditForm, successRedirectUrl: e.target.value })}
           />
           <button type="submit" disabled={!selectedIspId || !planEditForm.planId}>
-            Enregistrer les modifications
+            {t("Enregistrer les modifications", "Save changes")}
           </button>
         </form>
 
@@ -6686,12 +6751,12 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         ) : null}
 
         <form className="panel" onSubmit={onCreateSubscription}>
-          <h2>Créer un abonnement</h2>
+          <h2>{t("Créer un abonnement", "Create subscription")}</h2>
           <select
             value={subForm.customerId}
             onChange={(e) => setSubForm({ ...subForm, customerId: e.target.value })}
           >
-            <option value="">Choisir un client</option>
+            <option value="">{t("Choisir un client", "Select a customer")}</option>
             {customers.map((customer) => (
               <option key={customer.id} value={customer.id}>
                 {customer.fullName}
@@ -6702,7 +6767,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             value={subForm.planId}
             onChange={(e) => setSubForm({ ...subForm, planId: e.target.value })}
           >
-            <option value="">Choisir une formule</option>
+            <option value="">{t("Choisir une formule", "Select a plan")}</option>
             {plans.map((plan) => (
               <option key={plan.id} value={plan.id}>
                 {plan.name}
@@ -6714,10 +6779,10 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             onChange={(e) => setSubForm({ ...subForm, accessType: e.target.value })}
           >
             <option value="pppoe">PPPoE</option>
-            <option value="hotspot">Hotspot</option>
+            <option value="hotspot">{t("Hotspot", "Hotspot")}</option>
           </select>
           <button type="submit" disabled={!selectedIspId}>
-            Activer l'abonnement
+            {t("Activer l'abonnement", "Activate subscription")}
           </button>
         </form>
           </>

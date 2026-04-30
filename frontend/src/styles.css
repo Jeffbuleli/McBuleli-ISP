@@ -1398,6 +1398,10 @@ a:hover {
   gap: 8px;
 }
 
+.mb-topbar__lang {
+  flex-shrink: 0;
+}
+
 .mb-topbar__center {
   min-width: 0;
 }
