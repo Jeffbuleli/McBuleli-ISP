@@ -808,6 +808,35 @@ function App() {
     return { pageRows, total: list.length };
   }, [expenses, expenseTable.page, expenseTable.pageSize, expenseTable.q, expenseTable.sort, expenseTable.status]);
 
+  const withdrawalTableView = useMemo(() => {
+    const q = String(withdrawalTable.q || "").trim().toLowerCase();
+    let list = Array.isArray(withdrawals) ? withdrawals : [];
+    if (q) {
+      list = list.filter((w) => {
+        const hay = `${w?.amountUsd || ""} ${w?.currency || ""} ${w?.phoneNumber || ""} ${w?.provider || ""} ${w?.status || ""} ${w?.failureMessage || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = withdrawalTable.sort?.key;
+    const sDir = withdrawalTable.sort?.dir === "asc" ? 1 : -1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(withdrawalTable.pageSize) || 10;
+    const page = Math.max(1, Number(withdrawalTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [withdrawals, withdrawalTable.page, withdrawalTable.pageSize, withdrawalTable.q, withdrawalTable.sort]);
+
   const fetchTeamChatUnread = useCallback(async () => {
     if (!user) return;
     const cid = tenantContext?.ispId || selectedIspId || user.ispId || isps[0]?.id;
@@ -1021,6 +1050,12 @@ function App() {
   const [saasDepositResult, setSaasDepositResult] = useState(null);
   const [pawapayNetworks, setPawapayNetworks] = useState(DEFAULT_PAWAPAY_NETWORKS);
   const [withdrawals, setWithdrawals] = useState([]);
+  const [withdrawalTable, setWithdrawalTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "createdAt", dir: "desc" }
+  });
   const [withdrawalForm, setWithdrawalForm] = useState({
     amountUsd: "",
     currency: "USD",
@@ -5205,13 +5240,41 @@ function App() {
               {t("Valider le retrait", "Submit withdrawal")}
             </button>
           </form>
-          {withdrawals.slice(0, 8).map((w) => (
-            <p key={w.id}>
-              {new Date(w.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR")} — {w.amountUsd} {w.currency}{" "}
-              {t("vers", "to")} {w.phoneNumber} ({w.provider}) — {withdrawalStatusLabel(w.status, isEn)}
-              {w.failureMessage ? ` — ${w.failureMessage}` : ""}
-            </p>
-          ))}
+          <DataTable
+            title={t("Historique des retraits", "Withdrawal history")}
+            rows={withdrawalTableView.pageRows}
+            columns={[
+              {
+                key: "createdAt",
+                header: t("Date", "Date"),
+                sortKey: "createdAt",
+                cell: (w) => (w.createdAt ? new Date(w.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "—")
+              },
+              {
+                key: "amount",
+                header: t("Montant", "Amount"),
+                sortKey: "amountUsd",
+                cell: (w) => `${w.amountUsd ?? "—"} ${w.currency || ""}`.trim()
+              },
+              { key: "phoneNumber", header: t("Destination", "Destination"), sortKey: "phoneNumber", cell: (w) => w.phoneNumber || "—" },
+              { key: "provider", header: t("Réseau", "Network"), sortKey: "provider", cell: (w) => w.provider || "—" },
+              {
+                key: "status",
+                header: t("Statut", "Status"),
+                sortKey: "status",
+                cell: (w) => `${withdrawalStatusLabel(w.status, isEn)}${w.failureMessage ? ` — ${w.failureMessage}` : ""}`
+              }
+            ]}
+            searchValue={withdrawalTable.q}
+            onSearchValueChange={(q) => setWithdrawalTable((s) => ({ ...s, q, page: 1 }))}
+            page={withdrawalTable.page}
+            pageSize={withdrawalTable.pageSize}
+            totalRows={withdrawalTableView.total}
+            onPageChange={(page) => setWithdrawalTable((s) => ({ ...s, page }))}
+            onPageSizeChange={(pageSize) => setWithdrawalTable((s) => ({ ...s, pageSize, page: 1 }))}
+            sort={withdrawalTable.sort}
+            onSortChange={(sort) => setWithdrawalTable((s) => ({ ...s, sort }))}
+          />
         </section>
       )}
       </DashboardScreenGate>
