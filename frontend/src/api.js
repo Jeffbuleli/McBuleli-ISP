@@ -1,4 +1,6 @@
 /** In dev, Vite proxies `/api` to the backend so any hostname works. Production same-origin or set VITE_API_URL. */
+import { defaultHttpStatusMessage, friendlyTransientError } from "./httpErrorCopy.js";
+import { getStoredUiLang } from "./uiLangSync.js";
 function defaultBrowserApiUrl() {
   if (typeof window === "undefined") return "/api";
   if (import.meta.env.DEV) return "/api";
@@ -14,17 +16,93 @@ function defaultBrowserApiUrl() {
   return "/api";
 }
 
-export const API_URL = import.meta.env.VITE_API_URL || defaultBrowserApiUrl();
+/**
+ * Prefer same-origin `/api` on HTTPS production hosts so Vercel/nginx can proxy to Render.
+ * Calling Render directly from the browser often fails (CORS, ad blockers, cold start) even though the API is up.
+ * Set `VITE_API_URL` only for a dedicated API hostname you control (and configure CORS_ORIGINS on the backend).
+ */
+function resolveApiBaseUrl() {
+  const fromEnv = import.meta.env.VITE_API_URL;
+  const trimmed = fromEnv != null && String(fromEnv).trim() ? String(fromEnv).trim().replace(/\/$/, "") : "";
 
-/** Resolve hosted logo paths for `<img src>` when API is on another origin (set VITE_PUBLIC_API_ORIGIN). */
+  if (typeof window === "undefined") {
+    return trimmed || "/api";
+  }
+  if (import.meta.env.DEV) {
+    return trimmed || "/api";
+  }
+
+  const host = window.location.hostname;
+  const isPrivateIpv4 =
+    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
+    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(host);
+  const isLocalLike = host.endsWith(".local") || host.endsWith(".lan");
+  const isLocal =
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "[::1]" ||
+    isPrivateIpv4 ||
+    isLocalLike;
+
+  if (!isLocal && window.location.protocol === "https:") {
+    if (!trimmed) return "/api";
+    if (trimmed.includes("onrender.com")) return "/api";
+    try {
+      const apiOrigin = new URL(trimmed.includes("/api") ? trimmed : `${trimmed}/api`).origin;
+      if (apiOrigin === window.location.origin) return "/api";
+    } catch {
+      /* ignore bad VITE_API_URL */
+    }
+  }
+
+  return trimmed || defaultBrowserApiUrl();
+}
+
+export const API_URL = resolveApiBaseUrl();
+
+/**
+ * Build absolute URL for paths like `/api/public/...` when the UI is on Vercel and the API on Render.
+ * Prefer VITE_PUBLIC_API_ORIGIN (no /api suffix). Otherwise derive origin from VITE_API_URL even when
+ * API_URL was normalized to same-origin `/api` for JSON fetch.
+ */
+function absolutePublicAssetUrl(pathStartingWithSlash) {
+  const o = import.meta.env.VITE_PUBLIC_API_ORIGIN;
+  if (o) return `${String(o).replace(/\/$/, "")}${pathStartingWithSlash}`;
+  const raw = import.meta.env.VITE_API_URL;
+  if (!raw) return null;
+  const t = String(raw).trim();
+  if (!/^https?:\/\//i.test(t)) return null;
+  try {
+    const withApi = /\/api\/?$/i.test(t) ? t.replace(/\/$/, "") : `${t.replace(/\/$/, "")}/api`;
+    const origin = new URL(withApi).origin;
+    return `${origin}${pathStartingWithSlash}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Resolve hosted logo / banner paths for `<img src>` when API is on another host (Vercel + Render). */
 export function publicAssetUrl(pathOrUrl) {
   if (!pathOrUrl) return "";
   const s = String(pathOrUrl).trim();
   if (s.startsWith("http://") || s.startsWith("https://") || s.startsWith("data:")) return s;
   if (s.startsWith("/")) {
     if (import.meta.env.DEV) return s;
-    const o = import.meta.env.VITE_PUBLIC_API_ORIGIN;
-    if (o) return `${String(o).replace(/\/$/, "")}${s}`;
+    const abs = absolutePublicAssetUrl(s);
+    if (abs) return abs;
+    // Frontend on Vercel with same-origin `/api` but no proxy: build absolute URL from full VITE_API_URL if set.
+    const raw = import.meta.env.VITE_API_URL != null ? String(import.meta.env.VITE_API_URL).trim() : "";
+    if (/^https?:\/\//i.test(raw)) {
+      try {
+        const noTrail = raw.replace(/\/$/, "");
+        const base = /\/api\/?$/i.test(noTrail) ? noTrail.slice(0, -4).replace(/\/$/, "") : noTrail;
+        const origin = new URL(base).origin;
+        return `${origin}${s}`;
+      } catch {
+        /* ignore */
+      }
+    }
   }
   return s;
 }
@@ -34,6 +112,12 @@ export function setAuthToken(token) {
   authToken = token || "";
   if (authToken) localStorage.setItem("token", authToken);
   else localStorage.removeItem("token");
+}
+
+/** Réaligne le jeton en mémoire sur localStorage (onglets / restauration session mobile). */
+export function syncAuthTokenFromStorage() {
+  if (typeof window === "undefined") return;
+  authToken = localStorage.getItem("token") || "";
 }
 
 function withIsp(path, ispId) {
@@ -59,11 +143,14 @@ async function request(path, options) {
   } catch (err) {
     const reason = String(err?.message || "").toLowerCase();
     if (reason.includes("failed to fetch") || reason.includes("networkerror")) {
+      const isEn = getStoredUiLang() === "en";
       throw new Error(
-        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+        isEn
+          ? "Can't reach the server. Check your connection, then try again."
+          : "Impossible de joindre le serveur. Vérifiez votre connexion puis réessayez."
       );
     }
-    throw new Error(err?.message || "Erreur réseau lors de l'appel API.");
+    throw new Error(err?.message || (getStoredUiLang() === "en" ? "Network error." : "Erreur réseau."));
   }
 
   if (!response.ok) {
@@ -89,11 +176,14 @@ export async function publicRequest(path, options = {}) {
   } catch (err) {
     const reason = String(err?.message || "").toLowerCase();
     if (reason.includes("failed to fetch") || reason.includes("networkerror")) {
+      const isEn = getStoredUiLang() === "en";
       throw new Error(
-        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+        isEn
+          ? "Can't reach the server. Check your connection, then try again."
+          : "Impossible de joindre le serveur. Vérifiez votre connexion puis réessayez."
       );
     }
-    throw new Error(err?.message || "Erreur réseau lors de l'appel API.");
+    throw new Error(err?.message || (getStoredUiLang() === "en" ? "Network error." : "Erreur réseau."));
   }
   if (!response.ok) {
     const error = await extractErrorPayload(response);
@@ -103,12 +193,10 @@ export async function publicRequest(path, options = {}) {
 }
 
 function buildApiErrorMessage(status, errorPayload) {
-  const msg = String(errorPayload?.message || "").trim();
-  if (msg) return msg;
-  if (status === 500) {
-    return "Erreur serveur (500). Vérifiez la configuration backend (DATABASE_URL, JWT_SECRET, NETWORK_NODE_SECRET_KEY) et les logs Render.";
-  }
-  return `Échec de la requête (${status})`;
+  const isEn = getStoredUiLang() === "en";
+  const raw = String(errorPayload?.message || "").trim();
+  if (!raw) return defaultHttpStatusMessage(status, isEn);
+  return friendlyTransientError(raw, isEn);
 }
 
 async function readJsonOrApiMisroute(response) {
@@ -119,8 +207,11 @@ async function readJsonOrApiMisroute(response) {
     const body = await responseCopy.text().catch(() => "");
     const sample = String(body || "").trim().split("\n")[0].slice(0, 120);
     if (/^\s*<!doctype html>/i.test(String(body || ""))) {
+      const isEn = getStoredUiLang() === "en";
       throw new Error(
-        "Réponse HTML reçue au lieu d'une API JSON. Vérifiez que le backend est lancé et que l'URL API pointe vers /api."
+        isEn
+          ? "We received a web page instead of data — check /api routing or refresh."
+          : "La réponse attendue était du JSON, pas une page HTML. Vérifiez le proxy /api."
       );
     }
     throw new Error(sample || "Réponse invalide de l'API.");
@@ -137,6 +228,14 @@ async function extractErrorPayload(response) {
   const text = await response.text().catch(() => "");
   const clean = String(text || "").trim();
   if (!clean) return {};
+  if (/^\s*<!doctype html>/i.test(clean)) {
+    const isEn = getStoredUiLang() === "en";
+    return {
+      message: isEn
+        ? "That endpoint returned a web page, not JSON. Try again shortly."
+        : "Cette adresse renvoie une page web au lieu des données prévues. Réessayez."
+    };
+  }
   const firstLine = clean.split("\n")[0].trim();
   return { message: firstLine.slice(0, 200) };
 }
@@ -157,8 +256,11 @@ async function authFetchBlob(path) {
   try {
     response = await fetch(`${API_URL}${path}`, { headers });
   } catch (err) {
+    const isEn = getStoredUiLang() === "en";
     throw new Error(
-      `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      isEn
+        ? "Can't reach the server. Check your connection, then try again."
+        : "Impossible de joindre le serveur. Vérifiez votre connexion puis réessayez."
     );
   }
   if (!response.ok) {
@@ -170,8 +272,20 @@ async function authFetchBlob(path) {
 
 export const api = {
   getPublicPlatformPackages: () => publicRequest("/public/platform-packages"),
+  getPublicHomeMarketing: () => publicRequest("/public/home-marketing"),
+  getPublicAuthCopy: () => publicRequest("/public/auth-copy"),
   signupTenant: (payload) =>
     publicRequest("/public/signup", { method: "POST", body: JSON.stringify(payload) }),
+  forgotPassword: (email) =>
+    publicRequest("/public/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email })
+    }),
+  resetPasswordWithToken: (token, newPassword) =>
+    publicRequest("/public/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, newPassword })
+    }),
   subscriberLogin: (payload) =>
     publicRequest("/subscriber/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   subscriberSetupPassword: (payload) =>
@@ -182,7 +296,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  verifyLoginMfa: (payload) =>
+    publicRequest("/auth/mfa/verify-login", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   me: () => request("/auth/me"),
+  setupTotpMfa: () =>
+    request("/auth/mfa/totp/setup", {
+      method: "POST",
+      body: JSON.stringify({})
+    }),
+  startTotpSetup: () =>
+    request("/auth/mfa/totp/setup", {
+      method: "POST",
+      body: JSON.stringify({})
+    }),
+  enableTotpMfa: (code) =>
+    request("/auth/mfa/totp/enable", {
+      method: "POST",
+      body: JSON.stringify({ code })
+    }),
+  enableTotp: (payload) =>
+    request("/auth/mfa/totp/enable", {
+      method: "POST",
+      body: JSON.stringify({ code: payload?.code ?? payload })
+    }),
   changePassword: (payload) =>
     request("/auth/change-password", {
       method: "POST",
@@ -194,7 +333,235 @@ export const api = {
       body: JSON.stringify(payload)
     }),
   getIsps: () => request("/isps"),
+  getSystemOwnerOverview: () => request("/system-owner/overview"),
+  getSystemOwnerAuthCopy: () => request("/system-owner/auth-copy"),
+  patchSystemOwnerAuthCopy: (payload) =>
+    request("/system-owner/auth-copy", { method: "PATCH", body: JSON.stringify(payload) }),
+  getSystemOwnerDashboardBanners: () => request("/system-owner/dashboard-banners"),
+  uploadSystemOwnerDashboardBanner: async (slot, file) => {
+    const form = new FormData();
+    form.append("banner", file);
+    const headers = {};
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    let response;
+    try {
+      response = await fetch(`${API_URL}/system-owner/dashboard-banners/${slot}/image`, {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
+    if (!response.ok) {
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
+    }
+    return response.json();
+  },
+  patchSystemOwnerDashboardBanner: (slot, body) =>
+    request(`/system-owner/dashboard-banners/${slot}`, {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }),
+  deleteSystemOwnerDashboardBannerImage: (slot) =>
+    request(`/system-owner/dashboard-banners/${slot}/image`, {
+      method: "DELETE"
+    }),
+  getSystemOwnerHomePromos: () => request("/system-owner/home-promos"),
+  patchSystemOwnerHomePromo: (slot, body) =>
+    request(`/system-owner/home-promos/${slot}`, {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }),
+  uploadSystemOwnerHomePromoImage: async (slot, file) => {
+    const form = new FormData();
+    form.append("banner", file);
+    const headers = {};
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    let response;
+    try {
+      response = await fetch(`${API_URL}/system-owner/home-promos/${slot}/image`, {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
+    if (!response.ok) {
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
+    }
+    return response.json();
+  },
+  deleteSystemOwnerHomePromoImage: (slot) =>
+    request(`/system-owner/home-promos/${slot}/image`, {
+      method: "DELETE"
+    }),
+  getSystemOwnerFounderShowcase: () => request("/system-owner/founder-showcase"),
+  patchSystemOwnerFounderShowcase: (body) =>
+    request("/system-owner/founder-showcase", {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }),
+  uploadSystemOwnerFounderShowcaseImage: async (file, caption) => {
+    const form = new FormData();
+    form.append("banner", file);
+    if (caption !== undefined) {
+      form.append("caption", caption == null ? "" : String(caption));
+    }
+    const headers = {};
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    let response;
+    try {
+      response = await fetch(`${API_URL}/system-owner/founder-showcase/image`, {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
+    if (!response.ok) {
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
+    }
+    return response.json();
+  },
+  deleteSystemOwnerFounderShowcaseImage: () =>
+    request("/system-owner/founder-showcase/image", {
+      method: "DELETE"
+    }),
+  getSystemOwnerFooterBlocks: () => request("/system-owner/footer-blocks"),
+  createSystemOwnerFooterBlock: (body) =>
+    request("/system-owner/footer-blocks", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+  patchSystemOwnerFooterBlock: (id, body) =>
+    request(`/system-owner/footer-blocks/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }),
+  deleteSystemOwnerFooterBlock: (id) =>
+    request(`/system-owner/footer-blocks/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    }),
+  uploadSystemOwnerFooterBlockImage: async (id, file) => {
+    const form = new FormData();
+    form.append("banner", file);
+    const headers = {};
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    let response;
+    try {
+      response = await fetch(`${API_URL}/system-owner/footer-blocks/${encodeURIComponent(id)}/image`, {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
+    if (!response.ok) {
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
+    }
+    return response.json();
+  },
+  deleteSystemOwnerFooterBlockImage: (id) =>
+    request(`/system-owner/footer-blocks/${encodeURIComponent(id)}/image`, {
+      method: "DELETE"
+    }),
+  getSystemOwnerFaqAds: () => request("/system-owner/faq-ads"),
+  createSystemOwnerFaqAd: (body) =>
+    request("/system-owner/faq-ads", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+  patchSystemOwnerFaqAd: (id, body) =>
+    request(`/system-owner/faq-ads/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }),
+  deleteSystemOwnerFaqAd: (id) =>
+    request(`/system-owner/faq-ads/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    }),
+  uploadSystemOwnerFaqAdImage: async (id, file) => {
+    const form = new FormData();
+    form.append("banner", file);
+    const headers = {};
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    let response;
+    try {
+      response = await fetch(`${API_URL}/system-owner/faq-ads/${encodeURIComponent(id)}/image`, {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
+    if (!response.ok) {
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
+    }
+    return response.json();
+  },
+  deleteSystemOwnerFaqAdImage: (id) =>
+    request(`/system-owner/faq-ads/${encodeURIComponent(id)}/image`, {
+      method: "DELETE"
+    }),
   getBranding: (ispId) => request(withIsp("/branding", ispId)),
+  getAnnouncements: (ispId) => request(withIsp("/announcements", ispId)),
+  getAnnouncementsManage: (ispId) => request(withIsp("/announcements?scope=manage", ispId)),
+  createAnnouncement: (ispId, payload) =>
+    request(withIsp("/announcements", ispId), {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  patchAnnouncement: (ispId, id, payload) =>
+    request(withIsp(`/announcements/${encodeURIComponent(id)}`, ispId), {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+  deleteAnnouncement: (ispId, id) =>
+    request(withIsp(`/announcements/${encodeURIComponent(id)}`, ispId), {
+      method: "DELETE"
+    }),
+  getTeamChatUnread: (ispId) => request(withIsp("/team-chat/unread", ispId)),
+  getTeamChatMembers: (ispId) => request(withIsp("/team-chat/members", ispId)),
+  getTeamChatMessages: (ispId, { limit = 50, before } = {}) => {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (before) q.set("before", String(before));
+    return request(withIsp(`/team-chat/messages?${q}`, ispId));
+  },
+  postTeamChatMessage: (ispId, payload) =>
+    request(withIsp("/team-chat/messages", ispId), {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  postTeamChatRead: (ispId) =>
+    request(withIsp("/team-chat/read", ispId), {
+      method: "POST",
+      body: JSON.stringify({})
+    }),
+  patchChatProfile: (payload) =>
+    request("/auth/chat-profile", {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
   updateBranding: (ispId, payload) =>
     request(withIsp("/branding", ispId), {
       method: "POST",
@@ -223,6 +590,33 @@ export const api = {
     }
     return response.json();
   },
+  uploadBrandingWifiPortalBanner: async (ispId, file) => {
+    const form = new FormData();
+    form.append("banner", file);
+    const headers = {};
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    let response;
+    try {
+      response = await fetch(`${API_URL}${withIsp("/branding/wifi-portal-banner", ispId)}`, {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
+    if (!response.ok) {
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
+    }
+    return response.json();
+  },
+  deleteBrandingWifiPortalBanner: (ispId) =>
+    request(withIsp("/branding/wifi-portal-banner", ispId), {
+      method: "DELETE"
+    }),
   getNetworkStats: (ispId, from, to) =>
     request(
       withIsp(
@@ -272,6 +666,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ...payload, ispId })
     }),
+  patchTeamUser: (ispId, userId, payload) =>
+    request(withIsp(`/users/${encodeURIComponent(userId)}`, ispId), {
+      method: "PATCH",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
   resetUserPassword: (ispId, userId, newPassword) =>
     request(withIsp(`/users/${userId}/reset-password`, ispId), {
       method: "POST",
@@ -284,6 +683,16 @@ export const api = {
     }),
   reactivateUser: (ispId, userId) =>
     request(withIsp(`/users/${userId}/reactivate`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ispId })
+    }),
+  suspendUserGlobally: (ispId, userId) =>
+    request(withIsp(`/users/${userId}/suspend-globally`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ispId })
+    }),
+  reactivateUserGlobally: (ispId, userId) =>
+    request(withIsp(`/users/${userId}/reactivate-globally`, ispId), {
       method: "POST",
       body: JSON.stringify({ ispId })
     }),
@@ -361,6 +770,26 @@ export const api = {
     }),
   deleteExpense: (ispId, expenseId) =>
     request(withIsp(`/expenses/${encodeURIComponent(expenseId)}`, ispId), {
+      method: "DELETE"
+    }),
+  approveExpense: (ispId, expenseId) =>
+    request(withIsp(`/expenses/${encodeURIComponent(expenseId)}/approve`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ispId })
+    }),
+  rejectExpense: (ispId, expenseId, payload = {}) =>
+    request(withIsp(`/expenses/${encodeURIComponent(expenseId)}/reject`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
+  getAccountingPeriodClosures: (ispId) => request(withIsp("/accounting/period-closures", ispId)),
+  createAccountingPeriodClosure: (ispId, payload) =>
+    request(withIsp("/accounting/period-closures", ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
+  deleteAccountingPeriodClosure: (ispId, closureId) =>
+    request(withIsp(`/accounting/period-closures/${encodeURIComponent(closureId)}`, ispId), {
       method: "DELETE"
     }),
   exportVouchers: (ispId) => request(withIsp("/vouchers/export", ispId)),
@@ -488,6 +917,12 @@ export const api = {
   getPlans: (ispId) => request(withIsp("/plans", ispId)),
   getSubscriptions: (ispId) => request(withIsp("/subscriptions", ispId)),
   getInvoices: (ispId) => request(withIsp("/invoices", ispId)),
+  downloadInvoiceProformaPdf: async (ispId, invoiceId) => {
+    const blob = await authFetchBlob(
+      withIsp(`/invoices/${encodeURIComponent(invoiceId)}/proforma-pdf`, ispId)
+    );
+    triggerBrowserDownload(blob, `proforma-${String(invoiceId).slice(0, 8)}.pdf`);
+  },
   createCustomer: (ispId, payload) =>
     request(withIsp("/customers", ispId), {
       method: "POST",
@@ -534,6 +969,7 @@ export const api = {
       body: JSON.stringify({ ...payload, ispId })
     }),
   getPlatformBillingStatus: (ispId) => request(withIsp("/platform/billing/status", ispId)),
+  getPawapayNetworks: () => publicRequest("/public/mobile-money-networks"),
   initiatePlatformDeposit: (ispId, payload) =>
     request(withIsp("/platform/billing/initiate-deposit", ispId), {
       method: "POST",
@@ -541,9 +977,10 @@ export const api = {
     }),
   getPlatformDepositStatus: (ispId, depositId) =>
     request(withIsp(`/platform/billing/deposit-status/${encodeURIComponent(depositId)}`, ispId)),
-  upgradePlatformPlan: (ispId, packageId) =>
-    request(withIsp("/platform/billing/upgrade-plan", ispId), {
+  getWithdrawals: (ispId) => request(withIsp("/withdrawals", ispId)),
+  createWithdrawal: (ispId, payload) =>
+    request(withIsp("/withdrawals", ispId), {
       method: "POST",
-      body: JSON.stringify({ packageId, ispId })
+      body: JSON.stringify({ ...payload, ispId })
     })
 };

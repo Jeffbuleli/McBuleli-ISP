@@ -1,0 +1,135 @@
+/* 
+ * McBuleli Design System v2
+ * Unified theme + polish from 639f633 + new architecture
+ * Dark mode optimized for African low-bandwidth context
+ */
+
+:root {
+  /* PRIMARY COLORS */
+  --color-primary: #10b981; /* Green */
+  --color-primary-dark: #059669;
+  --color-primary-light: #34d399;
+  --color-primary-pale: rgba(16, 185, 129, 0.08);
+  
+  /* SECONDARY COLORS */
+  --color-secondary: #5d4037; /* Brown */
+  --color-secondary-dark: #4e342e;
+  --color-secondary-light: #795548;
+  
+  /* NEUTRAL PALETTE */
+  --color-bg-primary: #0d0d0f;
+  --color-bg-secondary: #1a1a1d;
+  --color-bg-tertiary: #242427;
+  --color-bg-elevated: #2d2d31;
+  
+  --color-text-primary: #f4f6f9;
+  --color-text-secondary: #c5c7cb;
+  --color-text-tertiary: #8b8d91;
+  --color-text-muted: rgba(255, 255, 255, 0.42);
+  
+  /* SEMANTIC COLORS */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+  
+  /* BORDERS & SHADOWS */
+  --color-border-light: rgba(255, 255, 255, 0.08);
+  --color-border-medium: rgba(255, 255, 255, 0.12);
+  --color-border-strong: rgba(255, 255, 255, 0.16);
+  
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.40);
+  --shadow-xl: 0 20px 52px rgba(0, 0, 0, 0.62);
+  --shadow-inset: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+  
+  /* SPACING */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+  
+  /* RADIUS */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 999px;
+  
+  /* TRANSITIONS */
+  --transition-fast: 0.12s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.3s ease;
+  
+  /* TYPOGRAPHY */
+  --font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Fira Code", monospace;
+  
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-base: 14px;
+  --font-size-md: 15px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 20px;
+  --font-size-3xl: 24px;
+  
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.4;
+  --line-height-relaxed: 1.6;
+  
+  /* Z-INDEX LAYERS */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-popover: 300;
+  --z-modal: 400;
+  --z-tooltip: 500;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-family);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  line-height: var(--line-height-normal);
+  overflow-x: hidden;
+}
+
+/* UTILITY CLASSES */
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* FOCUS STATES */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}

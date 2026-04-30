@@ -3,7 +3,7 @@ import app from "./app.js";
 import { initDb, query } from "./db.js";
 import { ensureBrandingUploadDir } from "./uploadsConfig.js";
 import { processNotificationOutboxBatch } from "./notifications.js";
-import { processOverdueInvoices, processRenewalInvoices } from "./billingJobs.js";
+import { processExpiredSubscriptions, processOverdueInvoices, processRenewalInvoices } from "./billingJobs.js";
 import { assertNetworkNodeSecretKeyForProduction } from "./secrets.js";
 import { isS3BrandingConfigured } from "./brandingLogoStorage.js";
 
@@ -53,6 +53,7 @@ async function processNotificationOutbox() {
 
 async function runBillingOverdueJob() {
   await processOverdueInvoices();
+  await processExpiredSubscriptions();
 }
 
 async function runBillingRenewalJob() {

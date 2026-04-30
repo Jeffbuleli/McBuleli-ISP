@@ -83,8 +83,24 @@ export async function processPawapayCallback(body) {
   }
 
   if (kind === "payout") {
+    const payoutId = String(body.payoutId);
+    if (status === "COMPLETED") {
+      await query(
+        `UPDATE isp_withdrawal_requests
+         SET status = 'completed', completed_at = NOW(), failure_message = NULL
+         WHERE payout_id = $1::uuid AND status = 'processing'`,
+        [payoutId]
+      );
+    } else if (status === "FAILED") {
+      await query(
+        `UPDATE isp_withdrawal_requests
+         SET status = 'failed', completed_at = NOW(), failure_message = $2
+         WHERE payout_id = $1::uuid`,
+        [payoutId, body?.failureReason?.failureMessage || body?.message || "Pawapay payout failed"]
+      );
+    }
     await logPawapayCallback({ action: "pawapay.callback.payout", pawapayId: body.payoutId, body });
-    return { kind, status, acknowledged: true, note: "Payout logged; extend with wallet / ISP payout reconciliation when needed." };
+    return { kind, status, acknowledged: true, note: "Payout logged and withdrawal status reconciled when payoutId matches." };
   }
 
   if (kind === "refund") {
@@ -108,6 +124,13 @@ export function getPawapayCallbackDocumentation() {
     fullUrl: fullUrl || "(set PUBLIC_API_BASE_URL in backend .env to show the full URL, e.g. https://api.yourdomain.com)",
     dashboardHint:
       "In the Pawapay test/production dashboard, set the callback URL for deposits, payouts, and refunds to the same POST URL above.",
+    securityNotes: [
+      "Never put PAWAPAY_API_TOKEN, JWT_SECRET, or user passwords in any browser link or in the Pawapay callback URL field. Those stay only in server environment variables (e.g. Render).",
+      "The callback URL must be only https://your-api-host/api/webhooks/pawapay — do not append ?secret= or other sensitive query parameters.",
+      "If you set PAWAPAY_CALLBACK_SECRET, this app checks the HTTP header X-Pawapay-Callback-Secret (not the URL). Pawapay may not send that header; inject it at a reverse proxy if you use this option.",
+      "For stronger assurance that callbacks are really from Pawapay, enable Pawapay signed callbacks (RFC 9421 / Content-Digest + Signature headers per docs.pawapay.io) — verification can be added server-side later.",
+      "End users will always see amount and Mobile Money steps on their phone; that is normal for payment UX and is not the same as exposing your merchant API credentials."
+    ],
     optionalHeaders: {
       "Content-Type": "application/json",
       "X-Pawapay-Callback-Secret":
@@ -127,7 +150,8 @@ export function getPawapayCallbackDocumentation() {
     behavior: {
       deposit:
         "COMPLETED extends McBuleli workspace billing when depositId matches platform_saas_deposit_sessions; FAILED marks session failed.",
-      payoutAndRefund: "Recorded in audit_logs for now; add business logic (wallet ledger, ISP payouts) in one place later."
+      payoutAndRefund:
+        "Payout callbacks reconcile isp_withdrawal_requests when payoutId matches; refunds are recorded in audit_logs."
     }
   };
 }

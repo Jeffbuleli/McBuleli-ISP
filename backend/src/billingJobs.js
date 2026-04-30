@@ -1,5 +1,6 @@
 import { query } from "./db.js";
 import { provisionSubscriptionAccess } from "./networkProvisioning.js";
+import { billingJobLog } from "./billingLogger.js";
 
 function renewalWindowDays() {
   const d = Number(process.env.BILLING_RENEWAL_WINDOW_DAYS || 7);
@@ -8,6 +9,11 @@ function renewalWindowDays() {
 
 function graceIntervalHours() {
   const h = Number(process.env.BILLING_OVERDUE_GRACE_HOURS || 0);
+  return Number.isFinite(h) && h >= 0 ? Math.floor(h) : 0;
+}
+
+function expiryGraceIntervalHours() {
+  const h = Number(process.env.BILLING_EXPIRY_GRACE_HOURS ?? process.env.BILLING_OVERDUE_GRACE_HOURS ?? 0);
   return Number.isFinite(h) && h >= 0 ? Math.floor(h) : 0;
 }
 
@@ -70,20 +76,24 @@ export async function processOverdueInvoices() {
     invoicesMarkedOverdue += upd.rows.length;
   }
 
-  return {
+  const summary = {
     graceHours: graceH,
     overdueInvoiceCandidates: overdueInvoices.rows.length,
     subscriptionsSuspended,
     invoicesMarkedOverdue
   };
+  if (subscriptionsSuspended || invoicesMarkedOverdue) {
+    billingJobLog("overdue_invoices", summary);
+  }
+  return summary;
 }
 
 /**
  * After a subscription invoice is paid, extend service end date by the plan duration
  * (from the later of current end date or now).
  */
-export async function extendSubscriptionAfterPayment(ispId, subscriptionId) {
-  await query(
+export async function extendSubscriptionAfterPayment(ispId, subscriptionId, exec = query) {
+  await exec(
     `UPDATE subscriptions s
      SET status = 'active',
          end_date = GREATEST(s.end_date, CURRENT_TIMESTAMP) + make_interval(days => p.duration_days)
@@ -181,10 +191,49 @@ export async function processRenewalInvoices() {
     }
   }
 
-  return {
+  const summary = {
     renewalWindowDays: windowD,
     candidatesScanned: candidates.rows.length,
     invoicesCreated,
     notificationsQueued
   };
+  if (invoicesCreated || notificationsQueued) {
+    billingJobLog("renewal_invoices", summary);
+  }
+  return summary;
+}
+
+/**
+ * Suspend network access for subscriptions that are still "active" in DB but past end_date
+ * (e.g. renewal invoice was never created, or manual DB edits). Complements overdue-invoice suspension.
+ */
+export async function processExpiredSubscriptions() {
+  const graceH = expiryGraceIntervalHours();
+  const expired = await query(
+    `SELECT id, isp_id
+     FROM subscriptions
+     WHERE status = 'active'
+       AND end_date + make_interval(hours => $1::int) < CURRENT_TIMESTAMP`,
+    [graceH]
+  );
+
+  let suspended = 0;
+  for (const row of expired.rows) {
+    await query("UPDATE subscriptions SET status = 'suspended' WHERE id = $1 AND isp_id = $2", [
+      row.id,
+      row.isp_id
+    ]);
+    await provisionSubscriptionAccess({
+      ispId: row.isp_id,
+      subscriptionId: row.id,
+      action: "suspend"
+    });
+    suspended += 1;
+  }
+
+  const summary = { graceHours: graceH, expiredCandidates: expired.rows.length, subscriptionsSuspended: suspended };
+  if (suspended) {
+    billingJobLog("subscription_expiry", summary);
+  }
+  return summary;
 }

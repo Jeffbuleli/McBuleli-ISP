@@ -1,5 +1,115 @@
-import { useEffect, useRef, useState } from "react";
-import { api, publicAssetUrl, setAuthToken } from "./api";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
+import PublicHomePromos from "./PublicHomePromos.jsx";
+import TeamChatPanel from "./TeamChatPanel.jsx";
+import DashboardSideNav from "./DashboardSideNav.jsx";
+import DashboardMobileSheetMenu from "./DashboardMobileSheetMenu.jsx";
+import DashboardScreenGate from "./DashboardScreenGate.jsx";
+import DashboardTopBar from "./DashboardTopBar.jsx";
+import DashboardStickyBanner from "./DashboardStickyBanner.jsx";
+import { DataTable } from "./ui/DataTable.jsx";
+import { useDashboardMobilePath } from "./useDashboardMobilePath.js";
+import { buildDashboardNavCategories } from "./dashboardNavCategories.js";
+import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
+import PlatformHomeMarketingPanel from "./PlatformHomeMarketingPanel.jsx";
+import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
+import PoweredByMcBuleli from "./PoweredByMcBuleli.jsx";
+import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
+import { mcbuleliLogoUrl } from "./brandAssets.js";
+import GuestWifiShare from "./GuestWifiShare.jsx";
+import { formatStaffRole } from "./staffRoleLabels.js";
+import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
+import { clearPwaTeamChatBadge, onTeamChatUnreadTick } from "./teamChatAlerts.js";
+import { UI_LANG_SYNC_EVENT, getStoredUiLang } from "./uiLangSync.js";
+import {
+  IconArrowLeft,
+  IconHome,
+  IconMail,
+  IconPhone
+} from "./icons.jsx";
+
+const DashboardHistograms = lazy(() => import("./DashboardHistograms.jsx"));
+
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia(query).matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(query);
+    const fn = () => setMatches(mq.matches);
+    fn();
+    mq.addEventListener("change", fn);
+    return () => mq.removeEventListener("change", fn);
+  }, [query]);
+  return matches;
+}
+
+function userInitials(fullName) {
+  const parts = String(fullName || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function readDashboardNavCompact() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem("dashboard_nav_compact") === "1";
+}
+
+function isPlatformSuperRole(role) {
+  return role === "super_admin" || role === "system_owner";
+}
+
+function workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) {
+  const fromSession = user?.workspaceDisplayName != null ? String(user.workspaceDisplayName).trim() : "";
+  if (fromSession && fromSession !== "AA") return fromSession;
+  const fromBrand = branding?.displayName != null ? String(branding.displayName).trim() : "";
+  if (fromBrand && fromBrand !== "AA") return fromBrand;
+  const sid = selectedIspId || tenantContext?.ispId;
+  const isp = sid && Array.isArray(isps) ? isps.find((i) => i.id === sid) : null;
+  if (isp?.name) return String(isp.name).trim();
+  const tc = tenantContext?.displayName != null ? String(tenantContext.displayName).trim() : "";
+  if (tc && tc !== "AA") return tc;
+  return "";
+}
+
+function tidSubmissionStatusLabel(status, isEn) {
+  const s = String(status || "").toLowerCase();
+  const m = {
+    pending: { fr: "en attente", en: "pending" },
+    approved: { fr: "approuvé", en: "approved" },
+    rejected: { fr: "rejeté", en: "rejected" },
+    cancelled: { fr: "annulé", en: "cancelled" },
+    expired: { fr: "expiré", en: "expired" }
+  };
+  const row = m[s];
+  return row ? (isEn ? row.en : row.fr) : status || "—";
+}
+
+function invoiceStatusShort(status, isEn) {
+  const s = String(status || "").toLowerCase();
+  const m = {
+    unpaid: { fr: "impayée", en: "unpaid" },
+    overdue: { fr: "en retard", en: "overdue" },
+    paid: { fr: "payée", en: "paid" }
+  };
+  const row = m[s];
+  return row ? (isEn ? row.en : row.fr) : status || "—";
+}
+
+/** Lien tel: à partir du numéro saisi dans l’image de marque (conserve + et chiffres). */
+function telHrefFromBrandingPhone(phone) {
+  const s = String(phone || "").trim();
+  if (!s) return null;
+  const cleaned = s.replace(/[^\d+]/g, "");
+  if (!cleaned) return null;
+  return `tel:${cleaned}`;
+}
 
 /** Replace placeholder tenant names (e.g. "AA") with McBuleli for public-facing titles. */
 function resolvePublicBrandName(displayName) {
@@ -8,10 +118,30 @@ function resolvePublicBrandName(displayName) {
   return displayName;
 }
 
-function getStoredUiLang() {
-  if (typeof window === "undefined") return "fr";
-  const saved = window.localStorage.getItem("ui_lang");
-  return saved === "en" ? "en" : "fr";
+/** Preview URL for system_owner banner cards (data URL, legacy URL, or public slot route). */
+function platformBannerThumbSrc(slot) {
+  if (!slot) return "";
+  const primary = slot.imageUrl != null ? String(slot.imageUrl).trim() : "";
+  if (primary) return publicAssetUrl(primary);
+  if (slot.slotIndex != null) return publicAssetUrl(`/api/public/platform-banner/${slot.slotIndex}`);
+  return "";
+}
+
+function platformBannerHasStoredImage(slot) {
+  if (!slot) return false;
+  if (slot.hasImage === true) return true;
+  const u = slot.imageUrl != null ? String(slot.imageUrl).trim() : "";
+  return Boolean(u);
+}
+
+const DEFAULT_PAWAPAY_NETWORKS = [
+  { key: "orange", label: "Orange Money" },
+  { key: "airtel", label: "Airtel Money" },
+  { key: "mpesa", label: "M-Pesa (Vodacom)" }
+];
+
+function usablePawapayNetworks(networks) {
+  return Array.isArray(networks) && networks.length ? networks : DEFAULT_PAWAPAY_NETWORKS;
 }
 
 const EN_TEXT_MAP = {
@@ -293,20 +423,115 @@ function CsvImportResultBlock({ createdCount, skipped, errors, maxRows = 40, onD
 }
 
 const EXPENSE_CATEGORY_OPTIONS = [
-  { value: "field_agent_fixed", label: "Agent terrain — paiement fixe" },
-  { value: "field_agent_percentage", label: "Agent terrain — pourcentage / commission" },
-  { value: "equipment", label: "Équipement" },
-  { value: "operations", label: "Exploitation" },
-  { value: "marketing", label: "Marketing" },
-  { value: "utilities", label: "Charges & services" },
-  { value: "transport", label: "Transport" },
-  { value: "salaries", label: "Salaires" },
-  { value: "taxes", label: "Impôts & taxes" },
-  { value: "other", label: "Autre" }
+  { value: "field_agent_fixed", labelFr: "Agent terrain — paiement fixe", labelEn: "Field agent — fixed payment" },
+  {
+    value: "field_agent_percentage",
+    labelFr: "Agent terrain — pourcentage / commission",
+    labelEn: "Field agent — percentage / commission"
+  },
+  { value: "equipment", labelFr: "Équipement", labelEn: "Equipment" },
+  { value: "operations", labelFr: "Exploitation", labelEn: "Operations" },
+  { value: "marketing", labelFr: "Marketing", labelEn: "Marketing" },
+  { value: "utilities", labelFr: "Charges & services", labelEn: "Utilities & services" },
+  { value: "transport", labelFr: "Transport", labelEn: "Transport" },
+  { value: "salaries", labelFr: "Salaires", labelEn: "Payroll" },
+  { value: "taxes", labelFr: "Impôts & taxes", labelEn: "Taxes" },
+  { value: "other", labelFr: "Autre", labelEn: "Other" }
 ];
 
-function expenseCategoryLabel(value) {
-  return EXPENSE_CATEGORY_OPTIONS.find((o) => o.value === value)?.label || value;
+function expenseCategoryLabel(value, isEn) {
+  const o = EXPENSE_CATEGORY_OPTIONS.find((x) => x.value === value);
+  if (!o) return value;
+  return isEn ? o.labelEn : o.labelFr;
+}
+
+function expenseApprovalStatusLabel(status, isEn) {
+  const s = String(status || "");
+  if (s === "approved") return isEn ? "Approved" : "Approuvée";
+  if (s === "rejected") return isEn ? "Rejected" : "Rejetée";
+  return isEn ? "Pending" : "En attente";
+}
+
+function withdrawalStatusLabel(status, isEn) {
+  const s = String(status || "").toLowerCase();
+  if (s === "completed" || s === "success" || s === "paid") return isEn ? "Completed" : "Terminé";
+  if (s === "pending" || s === "processing") return isEn ? "Pending" : "En attente";
+  if (s === "failed" || s === "cancelled" || s === "canceled") return isEn ? "Failed" : "Échoué";
+  return status || "—";
+}
+
+// Legacy tenants pagination replaced by DataTable pagination.
+
+function humanizeProvisioningEvent(ev, isEn) {
+  const d = ev.details && typeof ev.details === "object" ? ev.details : {};
+  const reason = d.reason || d.message;
+  if (ev.status === "skipped") {
+    if (reason === "No active network node configured") {
+      return isEn
+        ? "No active MikroTik node is set as default: the step was skipped. Save an active default node, then run synchronization again (activate / suspend)."
+        : "Aucun nœud MikroTik actif n'est défini comme défaut : l'étape a été ignorée. Enregistrez un nœud actif puis relancez une synchronisation (activer / suspendre).";
+    }
+    return reason
+      ? isEn
+        ? `Step skipped: ${reason}`
+        : `Étape ignorée : ${reason}`
+      : isEn
+        ? "Step skipped (no change applied on the router)."
+        : "Étape ignorée (aucun changement appliqué sur le routeur).";
+  }
+  if (ev.status === "failed") {
+    return reason
+      ? isEn
+        ? `Failed: ${reason}`
+        : `Échec : ${reason}`
+      : isEn
+        ? "Failed to reach the router REST API (check host, port, TLS and credentials)."
+        : "Échec de communication avec l'API REST du routeur (vérifiez l'hôte, le port, TLS et les identifiants).";
+  }
+  if (ev.status === "success") {
+    const node = d.node || "";
+    if (node) {
+      return isEn
+        ? `Applied on node "${node}" (${d.mode || "updated"}).`
+        : `Appliqué sur le nœud « ${node} » (${d.mode || "mis à jour"}).`;
+    }
+    return isEn ? "Settings applied on the MikroTik router." : "Paramètres appliqués sur le routeur MikroTik.";
+  }
+  return "";
+}
+
+function humanizeRadiusSyncEvent(ev, isEn) {
+  const d = ev.details && typeof ev.details === "object" ? ev.details : {};
+  const reason = String(d.reason || "");
+  if (ev.status === "skipped" && reason.includes("FREERADIUS_SYNC_ENABLED")) {
+    return isEn
+      ? "FreeRADIUS sync is disabled on the server (FREERADIUS_SYNC_ENABLED≠true). RADIUS entries are not updated automatically here."
+      : "Synchronisation FreeRADIUS désactivée sur le serveur (FREERADIUS_SYNC_ENABLED≠true). Les entrées RADIUS ne sont pas mises à jour automatiquement ici.";
+  }
+  if (ev.status === "skipped") {
+    return reason
+      ? isEn
+        ? `Sync skipped: ${reason}`
+        : `Synchronisation ignorée : ${reason}`
+      : isEn
+        ? "Sync skipped."
+        : "Synchronisation ignorée.";
+  }
+  if (ev.status === "success") {
+    return isEn
+      ? "FreeRADIUS record updated (secret, profile or state)."
+      : "Entrée FreeRADIUS mise à jour (secret, profil ou état).";
+  }
+  if (ev.status === "failed") {
+    return d.message
+      ? isEn
+        ? `FreeRADIUS error: ${d.message}`
+        : `Échec FreeRADIUS : ${d.message}`
+      : isEn
+        ? "Failed while writing to FreeRADIUS tables."
+        : "Échec lors de l'écriture dans les tables FreeRADIUS.";
+  }
+  return "";
 }
 
 const LOAD_FAILURE_LABELS_FR = {
@@ -335,20 +560,46 @@ const LOAD_FAILURE_LABELS_FR = {
   vouchers: "bons",
   telemetry: "télémétrie",
   radiusAccounting: "compta RADIUS",
-  onlineSessions: "abonnés en ligne",
-  expenses: "dépenses"
+onlineSessions: "abonnés en ligne",
+expenses: "dépenses",
+accountingPeriodClosures: "clôtures comptables"
 };
 
 function App() {
   const [user, setUser] = useState(null);
   const [tenantContext, setTenantContext] = useState(null);
-  const [loginForm, setLoginForm] = useState({ email: "admin@isp.local", password: "admin123" });
+  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  const [loginWorkspaces, setLoginWorkspaces] = useState(null);
+  const [mfaLogin, setMfaLogin] = useState(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [loginAuthStep, setLoginAuthStep] = useState("signin");
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotNotice, setForgotNotice] = useState("");
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [dashboardSidebarSearch, setDashboardSidebarSearch] = useState("");
+  const [tenantTable, setTenantTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "name", dir: "asc" }
+  });
+  const [dashboardNavCompact, setDashboardNavCompact] = useState(readDashboardNavCompact);
+  const [publicAuthCopyForgot, setPublicAuthCopyForgot] = useState({ fr: "", en: "" });
+  const [resetTokenState, setResetTokenState] = useState("");
+  const [resetPasswordForm, setResetPasswordForm] = useState({ password: "", confirm: "" });
+  const [teamRowDraft, setTeamRowDraft] = useState({});
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
   const [isps, setIsps] = useState([]);
   const [selectedIspId, setSelectedIspId] = useState("");
   const [superDashboard, setSuperDashboard] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [customers, setCustomers] = useState([]);
+  const [customerTable, setCustomerTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "fullName", dir: "asc" }
+  });
   const [users, setUsers] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [notificationProviders, setNotificationProviders] = useState([]);
@@ -358,8 +609,16 @@ function App() {
   const [auditLogs, setAuditLogs] = useState([]);
   const [notificationOutbox, setNotificationOutbox] = useState([]);
   const [branding, setBranding] = useState(null);
+  const [ispAnnouncements, setIspAnnouncements] = useState([]);
+  const [ispAnnouncementsManage, setIspAnnouncementsManage] = useState([]);
   const [networkStats, setNetworkStats] = useState(null);
   const [networkNodes, setNetworkNodes] = useState([]);
+  const [networkNodeTable, setNetworkNodeTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "name", dir: "asc" }
+  });
   const [provisioningEvents, setProvisioningEvents] = useState([]);
   const [radiusSyncEvents, setRadiusSyncEvents] = useState([]);
   const [telemetrySnapshots, setTelemetrySnapshots] = useState([]);
@@ -369,7 +628,20 @@ function App() {
   const [tidSubmissions, setTidSubmissions] = useState([]);
   const [tidConflicts, setTidConflicts] = useState([]);
   const [vouchers, setVouchers] = useState([]);
+  const [voucherTable, setVoucherTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "status", dir: "asc" }
+  });
   const [expenses, setExpenses] = useState([]);
+  const [expenseTable, setExpenseTable] = useState({
+    q: "",
+    status: "all",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "createdAt", dir: "desc" }
+  });
   const [expenseSummary, setExpenseSummary] = useState(null);
   const [expenseFilter, setExpenseFilter] = useState(() => ({
     from: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
@@ -385,17 +657,293 @@ function App() {
     agentPayoutPercent: "",
     revenueBasisUsd: ""
   });
+  const [accountingPeriodClosures, setAccountingPeriodClosures] = useState([]);
+  const [periodCloseForm, setPeriodCloseForm] = useState({
+    periodStart: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
+    periodEnd: new Date().toISOString().slice(0, 10),
+    note: ""
+  });
   const [plans, setPlans] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [invoiceTable, setInvoiceTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "status", dir: "asc" }
+  });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [mobilePwaMenuOpen, setMobilePwaMenuOpen] = useState(false);
+  const [teamChatOpen, setTeamChatOpen] = useState(false);
+  const [teamChatUnread, setTeamChatUnread] = useState(0);
+  const teamChatUnreadPrevRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [uiLang, setUiLang] = useState(getStoredUiLang);
   const isEn = uiLang === "en";
   const t = (fr, en) => (isEn ? en : fr);
+  const audienceErr = useCallback(
+    (msg) => sanitizeApiErrorForAudience(String(msg ?? ""), user, isEn),
+    [user, isEn]
+  );
 
-  const [customerForm, setCustomerForm] = useState({ fullName: "", phone: "", email: "", initialPassword: "" });
+  const dashboardChatIspId = useMemo(
+    () => tenantContext?.ispId || selectedIspId || user?.ispId || isps[0]?.id || "",
+    [tenantContext?.ispId, selectedIspId, user?.ispId, isps]
+  );
+
+  const invoiceTableView = useMemo(() => {
+    const q = String(invoiceTable.q || "").trim().toLowerCase();
+    let list = Array.isArray(invoices) ? invoices : [];
+    if (q) {
+      list = list.filter((inv) => {
+        const id = String(inv?.id || "").toLowerCase();
+        const st = String(inv?.status || "").toLowerCase();
+        return id.includes(q) || st.includes(q);
+      });
+    }
+
+    const sKey = invoiceTable.sort?.key;
+    const sDir = invoiceTable.sort?.dir === "desc" ? -1 : 1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+
+    const pageSize = Number(invoiceTable.pageSize) || 10;
+    const page = Math.max(1, Number(invoiceTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [invoices, invoiceTable]);
+
+  const networkNodeTableView = useMemo(() => {
+    const q = String(networkNodeTable.q || "").trim().toLowerCase();
+    let list = Array.isArray(networkNodes) ? networkNodes : [];
+    if (q) {
+      list = list.filter((n) => {
+        const hay = `${n?.name || ""} ${n?.host || ""} ${n?.apiPort || ""} ${n?.username || ""} ${n?.isActive ? "active" : ""} ${
+          n?.isDefault ? "default" : ""
+        }`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = networkNodeTable.sort?.key;
+    const sDir = networkNodeTable.sort?.dir === "desc" ? -1 : 1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(networkNodeTable.pageSize) || 10;
+    const page = Math.max(1, Number(networkNodeTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [networkNodes, networkNodeTable.page, networkNodeTable.pageSize, networkNodeTable.q, networkNodeTable.sort]);
+
+  const voucherTableView = useMemo(() => {
+    const q = String(voucherTable.q || "").trim().toLowerCase();
+    let list = Array.isArray(vouchers) ? vouchers : [];
+    if (q) {
+      list = list.filter((v) => {
+        const hay = `${v?.code || ""} ${v?.rateLimit || ""} ${v?.durationDays || ""} ${v?.maxDevices || ""} ${v?.status || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = voucherTable.sort?.key;
+    const sDir = voucherTable.sort?.dir === "desc" ? -1 : 1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(voucherTable.pageSize) || 10;
+    const page = Math.max(1, Number(voucherTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [vouchers, voucherTable.page, voucherTable.pageSize, voucherTable.q, voucherTable.sort]);
+
+  const expenseTableView = useMemo(() => {
+    const q = String(expenseTable.q || "").trim().toLowerCase();
+    const stFilter = String(expenseTable.status || "all");
+    let list = Array.isArray(expenses) ? expenses : [];
+    if (stFilter !== "all") list = list.filter((ex) => String(ex?.status || "pending") === stFilter);
+    if (q) {
+      list = list.filter((ex) => {
+        const hay = `${ex?.description || ""} ${ex?.category || ""} ${ex?.fieldAgentName || ""} ${ex?.createdByName || ""} ${ex?.approvedByName || ""} ${ex?.rejectedByName || ""} ${
+          ex?.rejectionNote || ""
+        } ${ex?.periodStart || ""} ${ex?.periodEnd || ""} ${ex?.amountUsd || ""} ${ex?.status || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = expenseTable.sort?.key;
+    const sDir = expenseTable.sort?.dir === "asc" ? 1 : -1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(expenseTable.pageSize) || 10;
+    const page = Math.max(1, Number(expenseTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [expenses, expenseTable.page, expenseTable.pageSize, expenseTable.q, expenseTable.sort, expenseTable.status]);
+
+  const withdrawalTableView = useMemo(() => {
+    const q = String(withdrawalTable.q || "").trim().toLowerCase();
+    let list = Array.isArray(withdrawals) ? withdrawals : [];
+    if (q) {
+      list = list.filter((w) => {
+        const hay = `${w?.amountUsd || ""} ${w?.currency || ""} ${w?.phoneNumber || ""} ${w?.provider || ""} ${w?.status || ""} ${w?.failureMessage || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = withdrawalTable.sort?.key;
+    const sDir = withdrawalTable.sort?.dir === "asc" ? 1 : -1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(withdrawalTable.pageSize) || 10;
+    const page = Math.max(1, Number(withdrawalTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [withdrawals, withdrawalTable.page, withdrawalTable.pageSize, withdrawalTable.q, withdrawalTable.sort]);
+
+  const customerTableView = useMemo(() => {
+    const q = String(customerTable.q || "").trim().toLowerCase();
+    let list = Array.isArray(customers) ? customers : [];
+    if (q) {
+      list = list.filter((c) => {
+        const hay = `${c?.fullName || ""} ${c?.phone || ""} ${c?.email || ""} ${c?.fieldAgentName || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = customerTable.sort?.key;
+    const sDir = customerTable.sort?.dir === "desc" ? -1 : 1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(customerTable.pageSize) || 10;
+    const page = Math.max(1, Number(customerTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [customers, customerTable.page, customerTable.pageSize, customerTable.q, customerTable.sort]);
+
+  const fetchTeamChatUnread = useCallback(async () => {
+    if (!user) return;
+    const cid = tenantContext?.ispId || selectedIspId || user.ispId || isps[0]?.id;
+    if (!cid) return;
+    try {
+      const r = await api.getTeamChatUnread(cid);
+      setTeamChatUnread(typeof r.count === "number" ? r.count : 0);
+    } catch (_e) {
+      /* low priority */
+    }
+  }, [user, tenantContext?.ispId, selectedIspId, isps]);
+
+  useEffect(() => {
+    teamChatUnreadPrevRef.current = null;
+  }, [dashboardChatIspId]);
+
+  useEffect(() => {
+    if (!user) {
+      clearPwaTeamChatBadge();
+      teamChatUnreadPrevRef.current = null;
+      return;
+    }
+    if (!dashboardChatIspId) return;
+    const n =
+      typeof teamChatUnread === "number" && Number.isFinite(teamChatUnread) ? Math.max(0, teamChatUnread) : 0;
+    onTeamChatUnreadTick({
+      nextCount: n,
+      prevUnreadRef: teamChatUnreadPrevRef,
+      teamChatPanelOpen: teamChatOpen,
+      notificationStrings: {
+        title: isEn ? "Team chat" : "Discussion équipe",
+        body:
+          n <= 1
+            ? isEn
+              ? "New team message."
+              : "Nouveau message équipe."
+            : isEn
+              ? `${n} unread team messages.`
+              : `${n} nouveaux messages équipe.`
+      }
+    });
+  }, [user, dashboardChatIspId, teamChatUnread, teamChatOpen, isEn]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    void fetchTeamChatUnread();
+    const iv = typeof window !== "undefined" ? window.setInterval(() => void fetchTeamChatUnread(), 10000) : null;
+    return () => {
+      if (iv) window.clearInterval(iv);
+    };
+  }, [user, fetchTeamChatUnread]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    function syncChatHash() {
+      if (window.location.hash === "#team-chat") setTeamChatOpen(true);
+    }
+    syncChatHash();
+    window.addEventListener("hashchange", syncChatHash);
+    return () => window.removeEventListener("hashchange", syncChatHash);
+  }, []);
+
+  const [customerForm, setCustomerForm] = useState({
+    fullName: "",
+    phone: "",
+    email: "",
+    initialPassword: "",
+    fieldAgentId: ""
+  });
   const [planForm, setPlanForm] = useState({
     name: "",
     priceUsd: "",
@@ -472,14 +1020,32 @@ function App() {
     contactPhone: "",
     customDomain: "",
     subdomain: "",
-    wifiPortalRedirectUrl: ""
+    wifiPortalRedirectUrl: "",
+    portalFooterText: "",
+    portalClientRefPrefix: ""
   });
+  /** Local object URL for logo file picker preview (revoked when replaced or after upload). */
+  const [brandingLogoPickPreview, setBrandingLogoPickPreview] = useState(null);
+
+  useEffect(() => {
+    const url = brandingLogoPickPreview;
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [brandingLogoPickPreview]);
+
+  const [platformBannerSlots, setPlatformBannerSlots] = useState([]);
+  const [platformBannerEdits, setPlatformBannerEdits] = useState({});
+
   const [userForm, setUserForm] = useState({
     fullName: "",
     email: "",
     password: "",
     role: "billing_agent",
-    accreditationLevel: "basic"
+    accreditationLevel: "basic",
+    phone: "",
+    address: "",
+    assignedSite: ""
   });
   const [tidForm, setTidForm] = useState({
     invoiceId: "",
@@ -500,7 +1066,11 @@ function App() {
     newPassword: ""
   });
   const [portalTokenForm, setPortalTokenForm] = useState({ customerId: "", expiresDays: 30 });
-  const [customerEmailForm, setCustomerEmailForm] = useState({ customerId: "", email: "" });
+  const [customerEmailForm, setCustomerEmailForm] = useState({
+    customerId: "",
+    email: "",
+    fieldAgentId: ""
+  });
   const customerCsvInputRef = useRef(null);
   const teamCsvInputRef = useRef(null);
   const [customerImportPassword, setCustomerImportPassword] = useState("");
@@ -512,9 +1082,28 @@ function App() {
   const [saasPayForm, setSaasPayForm] = useState({
     currency: "CDF",
     phoneNumber: "",
-    provider: "MTN_MOMO_COD"
+    networkKey: "orange",
+    packageId: ""
   });
   const [saasDepositResult, setSaasDepositResult] = useState(null);
+  const [pawapayNetworks, setPawapayNetworks] = useState(DEFAULT_PAWAPAY_NETWORKS);
+  const [withdrawals, setWithdrawals] = useState([]);
+  const [withdrawalTable, setWithdrawalTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "createdAt", dir: "desc" }
+  });
+  const [withdrawalForm, setWithdrawalForm] = useState({
+    amountUsd: "",
+    currency: "USD",
+    phoneNumber: "",
+    networkKey: "orange",
+    mfaCode: ""
+  });
+  const [totpSetup, setTotpSetup] = useState(null);
+  const [totpSetupCode, setTotpSetupCode] = useState("");
+  const [totpSetupLoading, setTotpSetupLoading] = useState(false);
   const [upgradePackageId, setUpgradePackageId] = useState("");
   const [platformBillingStatus, setPlatformBillingStatus] = useState(null);
   const [networkNodeForm, setNetworkNodeForm] = useState({
@@ -534,15 +1123,64 @@ function App() {
     recipient: "",
     message: "Message de test McBuleli."
   });
+  const availablePawapayNetworks = pawapayNetworks.length ? pawapayNetworks : DEFAULT_PAWAPAY_NETWORKS;
 
-  async function refresh(selectedTenantId = selectedIspId) {
+  const dashboardLayoutStacked = useMediaQuery("(max-width: 1200px)");
+  const isMobileShell = useMediaQuery("(max-width: 899px)");
+  const { mobileScreen, navigateMobileScreen } = useDashboardMobilePath(isMobileShell);
+  const dashboardNavCompactEffective = Boolean(dashboardNavCompact && !dashboardLayoutStacked && !isMobileShell);
+
+  const openAnnouncementsManage = useCallback(() => {
+    if (isMobileShell) {
+      navigateMobileScreen("users");
+      window.requestAnimationFrame(() => {
+        window.location.hash = "isp-announcements";
+        window.setTimeout(() => {
+          try {
+            document.getElementById("isp-announcements")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          } catch (_e) {
+            /* ignore */
+          }
+        }, 220);
+      });
+    } else {
+      window.location.hash = "isp-announcements";
+    }
+  }, [isMobileShell, navigateMobileScreen]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("dashboard_nav_compact", dashboardNavCompact ? "1" : "0");
+  }, [dashboardNavCompact]);
+
+  function isStaleSessionErrorMessage(msg) {
+    const m = String(msg || "").trim().toLowerCase();
+    return m === "invalid token" || m.includes("invalid token") || m === "missing bearer token";
+  }
+
+  /** On /login bootstrap, avoid showing a red banner when the token is fine but the API is briefly down. */
+  function shouldSilentClearSessionOnLoginPath(msg) {
+    if (isStaleSessionErrorMessage(msg)) return true;
+    const m = String(msg || "");
+    if (/\(502\)|\(503\)|\(504\)/.test(m)) return true;
+    const low = m.toLowerCase();
+    if (low.includes("service indisponible") || low.includes("service unavailable")) return true;
+    if (low.includes("passerelle invalide") || low.includes("bad gateway")) return true;
+    if (low.includes("délai dépassé") || low.includes("gateway timeout")) return true;
+    if (low.includes("impossible de joindre l'api") || low.includes("failed to fetch")) return true;
+    return false;
+  }
+
+  async function refresh(selectedTenantId = selectedIspId, options = {}) {
+    const silentInvalidSession = Boolean(options.silentInvalidSession);
+    syncAuthTokenFromStorage();
     setLoading(true);
     setError("");
     try {
       const currentUser = await api.me();
       setUser(currentUser);
       const blocked =
-        currentUser.role !== "super_admin" &&
+        !isPlatformSuperRole(currentUser.role) &&
         currentUser.ispId &&
         currentUser.platformBilling &&
         currentUser.platformBilling.accessAllowed === false;
@@ -551,17 +1189,23 @@ function App() {
         setIsps([]);
         setSelectedIspId(sid);
         try {
-          const [packages, platformSubs, snap] = await Promise.all([
+          const [packages, platformSubs, snap, networks, withdrawalData] = await Promise.all([
             api.getPlatformPackages(),
             api.getPlatformSubscriptions(sid),
-            api.getPlatformBillingStatus(sid)
+            api.getPlatformBillingStatus(sid),
+            api.getPawapayNetworks(),
+            api.getWithdrawals(sid)
           ]);
           setPlatformPackages(packages);
           setPlatformSubscriptions(platformSubs);
           setPlatformBillingStatus(snap);
+          setPawapayNetworks(Array.isArray(networks) && networks.length ? networks : DEFAULT_PAWAPAY_NETWORKS);
+          setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
         } catch (_e) {
           /* billing endpoints stay reachable */
         }
+        setIspAnnouncements([]);
+        setIspAnnouncementsManage([]);
         setLoading(false);
         return;
       }
@@ -579,12 +1223,14 @@ function App() {
       ]);
       const allIsps = take([allIspsResult], 0, [], "isps");
       const packages = take([packagesResult], 0, [], "platformPackages");
+      const [networkOptionsResult] = await Promise.allSettled([api.getPawapayNetworks()]);
+      setPawapayNetworks(take([networkOptionsResult], 0, DEFAULT_PAWAPAY_NETWORKS, "pawapayNetworks"));
 
       const activeIspId =
         tenantContext?.ispId || selectedTenantId || currentUser.ispId || allIsps[0]?.id || "";
 
       let superDash;
-      if (currentUser.role === "super_admin") {
+      if (isPlatformSuperRole(currentUser.role)) {
         const [sd] = await Promise.allSettled([api.getSuperDashboard()]);
         superDash = take([sd], 0, {
           totalIsps: allIsps.length,
@@ -623,9 +1269,28 @@ function App() {
       let vchs = [];
       let telemetry = [];
       let radiusAcct = [];
-      let onlineSessionsPayload = { windowMinutes: 30, items: [] };
+let onlineSessionsPayload = { windowMinutes: 30, items: [] };
+let withdrawalData = { items: [] };
 
       if (activeIspId) {
+        if (currentUser.role === "field_agent") {
+          const settled = await Promise.allSettled([
+            api.getDashboard(activeIspId),
+            api.getCustomers(activeIspId),
+            api.getPlans(activeIspId),
+            api.getSubscriptions(activeIspId),
+            api.getInvoices(activeIspId)
+          ]);
+          dash = take(settled, 0, {}, "dashboard");
+          c = take(settled, 1, [], "customers");
+          p = take(settled, 2, [], "plans");
+          s = take(settled, 3, [], "subscriptions");
+          i = take(settled, 4, [], "invoices");
+          setExpenses([]);
+          setExpenseSummary(null);
+          setAccountingPeriodClosures([]);
+          setWithdrawals([]);
+        } else {
         const settled = await Promise.allSettled([
           api.getDashboard(activeIspId),
           api.getCustomers(activeIspId),
@@ -640,7 +1305,9 @@ function App() {
           api.getFreeRadiusSyncEvents(activeIspId),
           api.getRoleProfiles(activeIspId),
           api.getPlatformSubscriptions(activeIspId),
-          api.getAuditLogs(activeIspId),
+            currentUser.role === "system_owner" && activeIspId
+              ? api.getAuditLogs(activeIspId)
+              : Promise.resolve([]),
           api.getNotificationOutbox(activeIspId),
           api.getBranding(activeIspId),
           api.getNetworkStats(activeIspId, statsPeriod.from, statsPeriod.to),
@@ -649,8 +1316,10 @@ function App() {
           api.getVouchers(activeIspId),
           api.getTelemetrySnapshots(activeIspId),
           api.getRadiusAccountingIngest(activeIspId, 80),
-          api.getOnlineSessions(activeIspId, 80, 30),
-          api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to)
+api.getOnlineSessions(activeIspId, 80, 30),
+api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to),
+api.getAccountingPeriodClosures(activeIspId),
+api.getWithdrawals(activeIspId)
         ]);
         dash = take(settled, 0, {}, "dashboard");
         c = take(settled, 1, [], "customers");
@@ -674,13 +1343,26 @@ function App() {
         vchs = take(settled, 19, [], "vouchers");
         telemetry = take(settled, 20, [], "telemetry");
         radiusAcct = take(settled, 21, [], "radiusAccounting");
-        onlineSessionsPayload = take(settled, 22, { windowMinutes: 30, items: [] }, "onlineSessions");
-        const expData = take(settled, 23, { items: [], summary: null }, "expenses");
+onlineSessionsPayload = take(settled, 0, { windowMinutes: 30, items: [] }, "onlineSessions");
+
+const expData = take(settled, 1, { items: [], summary: null }, "expenses");
+
+const closuresList = take(settled, 2, [], "accountingPeriodClosures");
+
+withdrawalData = take(settled, 3, { cashbox: null, items: [] }, "withdrawals");
         setExpenses(Array.isArray(expData?.items) ? expData.items : []);
         setExpenseSummary(expData?.summary || null);
+        setAccountingPeriodClosures(Array.isArray(closuresList) ? closuresList : []);
+        setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
+        if (withdrawalData?.cashbox) {
+          dash = { ...dash, cashbox: withdrawalData.cashbox };
+          }
+        }
       } else {
         setExpenses([]);
         setExpenseSummary(null);
+        setAccountingPeriodClosures([]);
+        setWithdrawals([]);
       }
 
       if (loadFailures.length) {
@@ -691,6 +1373,42 @@ function App() {
           .join(", ");
         const tail = loadFailures.length > max ? ` (+${loadFailures.length - max} de plus)` : "";
         setNotice(`Certaines rubriques n'ont pas pu être chargées (${head}${tail}). Les autres données ci-dessous sont à jour.`);
+      }
+
+      let ann = [];
+      if (activeIspId) {
+        try {
+          const ar = await api.getAnnouncements(activeIspId);
+          ann = ar.items || [];
+        } catch (_e) {
+          ann = [];
+        }
+      }
+      setIspAnnouncements(ann);
+
+      const canManageAnn =
+        currentUser.role === "system_owner" ||
+        ["super_admin", "company_manager", "isp_admin"].includes(currentUser.role);
+      let annM = [];
+      if (activeIspId && canManageAnn) {
+        try {
+          const am = await api.getAnnouncementsManage(activeIspId);
+          annM = am.items || [];
+        } catch (_e) {
+          annM = [];
+        }
+      }
+      setIspAnnouncementsManage(annM);
+
+      if (activeIspId) {
+        try {
+          const ur = await api.getTeamChatUnread(activeIspId);
+          setTeamChatUnread(typeof ur.count === "number" ? ur.count : 0);
+        } catch (_e) {
+          /* optional */
+        }
+      } else {
+        setTeamChatUnread(0);
       }
 
       setIsps(allIsps);
@@ -743,11 +1461,19 @@ function App() {
           contactPhone: brand.contactPhone || "",
           customDomain: brand.customDomain || "",
           subdomain: brand.subdomain || "",
-          wifiPortalRedirectUrl: brand.wifiPortalRedirectUrl || ""
+          wifiPortalRedirectUrl: brand.wifiPortalRedirectUrl || "",
+          portalFooterText: brand.portalFooterText || "",
+          portalClientRefPrefix: brand.portalClientRefPrefix || ""
         });
       }
     } catch (err) {
-      setError(err.message);
+      if (silentInvalidSession && shouldSilentClearSessionOnLoginPath(err.message)) {
+        setAuthToken("");
+        setUser(null);
+        if (typeof window !== "undefined") localStorage.removeItem("token");
+      } else {
+      setError(audienceErr(err.message));
+      }
     } finally {
       setLoading(false);
     }
@@ -760,7 +1486,80 @@ function App() {
   }, [uiLang]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !user || !isEn) return;
+    const sync = () => {
+      const next = getStoredUiLang();
+      setUiLang((prev) => (prev !== next ? next : prev));
+    };
+    window.addEventListener("storage", sync);
+    window.addEventListener("focus", sync);
+    window.addEventListener(UI_LANG_SYNC_EVENT, sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("focus", sync);
+      window.removeEventListener(UI_LANG_SYNC_EVENT, sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (user) return;
+    if (loginAuthStep !== "forgot") return;
+    let cancelled = false;
+    api
+      .getPublicAuthCopy()
+      .then((data) => {
+        if (cancelled) return;
+        setPublicAuthCopyForgot({
+          fr: data.forgotPasswordBodyFr || "",
+          en: data.forgotPasswordBodyEn || ""
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user, loginAuthStep]);
+
+  const filteredTenants = useMemo(() => {
+    const list = superDashboard?.tenants;
+    if (!Array.isArray(list)) return [];
+    const s = String(tenantTable.q || "").trim().toLowerCase();
+    if (!s) return list;
+    return list.filter((tenant) => {
+      const admins = (tenant.adminUsers || [])
+        .map((a) => `${a.fullName || ""} ${a.email || ""}`)
+        .join(" ");
+      const hay = `${tenant.name || ""} ${tenant.location || ""} ${tenant.contactPhone || ""} ${
+        tenant.subscriptionStatus || ""
+      } ${tenant.packageName || ""} ${admins}`.toLowerCase();
+      return hay.includes(s);
+    });
+  }, [superDashboard?.tenants, tenantTable.q]);
+
+  const tenantTableView = useMemo(() => {
+    const list = Array.isArray(filteredTenants) ? filteredTenants : [];
+    const sKey = tenantTable.sort?.key;
+    const sDir = tenantTable.sort?.dir === "desc" ? -1 : 1;
+    let sorted = list;
+    if (sKey) {
+      sorted = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(tenantTable.pageSize) || 10;
+    const page = Math.max(1, Number(tenantTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = sorted.slice(start, start + pageSize);
+    return { pageRows, total: sorted.length };
+  }, [filteredTenants, tenantTable.page, tenantTable.pageSize, tenantTable.sort]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !user || !isEn || loading) return;
     const root = document.querySelector("main.container.app-shell");
     if (!root) return;
 
@@ -799,28 +1598,233 @@ function App() {
         // Ignore tenant-context bootstrap failures.
       }
       if (localStorage.getItem("token")) {
-        refresh();
+        const path = typeof window !== "undefined" ? window.location.pathname || "" : "";
+        const isLoginPath = path === "/login" || path.startsWith("/login/");
+        try {
+          await refresh(selectedIspId, { silentInvalidSession: isLoginPath });
+        } catch (_err) {
+          setAuthToken("");
+          setUser(null);
+          localStorage.removeItem("token");
+        }
       }
     }
     bootstrap();
   }, []);
 
-  async function onLogin(e) {
-    e.preventDefault();
+  useLayoutEffect(() => {
+    if (!import.meta.env.PROD) return;
+    const link = document.querySelector('link[rel="manifest"]');
+    if (!user || user.mustChangePassword) {
+      const tenantTitle = tenantContext?.matched
+        ? workspaceHeaderTitle(null, tenantContext, [], tenantContext.ispId, null)
+        : "";
+      const t = tenantTitle && tenantTitle !== "AA" ? tenantTitle : "";
+      if (t) {
+        applyWorkspacePwaManifest(t);
+      } else if (link) {
+        link.href = "/api/public/pwa-manifest";
+      }
+      return;
+    }
+    if (loading || loginWorkspaces || mfaLogin) return;
+    const title = workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user);
+    applyWorkspacePwaManifest(title);
+  }, [
+    user,
+    loading,
+    loginWorkspaces,
+    mfaLogin,
+    branding,
+    tenantContext,
+    isps,
+    selectedIspId,
+    user?.mustChangePassword,
+    user?.workspaceDisplayName,
+    tenantContext?.matched,
+    tenantContext?.ispId,
+    tenantContext?.displayName
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const path = window.location.pathname || "";
+    if (path !== "/login" && !path.startsWith("/login/")) return;
+    const token = new URLSearchParams(window.location.search).get("reset");
+    if (token && token.length >= 32) {
+      setResetTokenState(token);
+      setLoginAuthStep("reset");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user?.role !== "system_owner") {
+      setPlatformBannerSlots([]);
+      setPlatformBannerEdits({});
+      return;
+    }
+    let cancelled = false;
+    api
+      .getSystemOwnerDashboardBanners()
+      .then((data) => {
+        if (!cancelled) setPlatformBannerSlots(data.slots || []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role, user?.id]);
+
+  useEffect(() => {
+    const next = {};
+    for (const u of users) {
+      next[u.id] = {
+        role: u.role,
+        phone: u.phone || "",
+        address: u.address || "",
+        assignedSite: u.assignedSite || "",
+        accreditationLevel: u.accreditationLevel || "basic"
+      };
+    }
+    setTeamRowDraft(next);
+  }, [users]);
+
+  useEffect(() => {
+    const next = {};
+    for (const s of platformBannerSlots) {
+      next[s.slotIndex] = {
+        linkUrl: s.linkUrl ?? "",
+        altText: s.altText ?? "",
+        isActive: s.isActive !== false
+      };
+    }
+    setPlatformBannerEdits(next);
+  }, [platformBannerSlots]);
+
+  async function completeLoginWithWorkspace(ispId) {
     setError("");
     try {
-      const payload = await api.login(loginForm);
+      const payload = await api.login({ ...loginForm, ispId });
+      setLoginWorkspaces(null);
+      if (payload.mfaRequired) {
+        setMfaLogin(payload);
+        setMfaCode("");
+        setNotice(payload.message || "Code MFA requis.");
+        return;
+      }
       setAuthToken(payload.token);
       setUser(payload.user);
       refresh(payload.user.ispId || "");
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
+    }
+  }
+
+  async function onForgotPassword(e) {
+    e.preventDefault();
+    setForgotBusy(true);
+    setError("");
+    setForgotNotice("");
+    try {
+      await api.forgotPassword(forgotEmail.trim());
+      setForgotNotice(
+        isEn
+          ? "If this email is registered, you will receive a link within a few minutes (check spam). It expires in one hour."
+          : "Si cette adresse est enregistrée, vous recevrez un lien sous peu (vérifiez les courriers indésirables). Il expire dans une heure."
+      );
+    } catch (err) {
+      setError(audienceErr(err.message));
+    } finally {
+      setForgotBusy(false);
+    }
+  }
+
+  async function onResetPasswordSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    const pwd = resetPasswordForm.password;
+    if (pwd.length < 6) {
+      setError(isEn ? "Password must be at least 6 characters." : "Le mot de passe doit faire au moins 6 caractères.");
+      return;
+    }
+    if (pwd !== resetPasswordForm.confirm) {
+      setError(isEn ? "Passwords do not match." : "Les mots de passe ne correspondent pas.");
+      return;
+    }
+    try {
+      await api.resetPasswordWithToken(resetTokenState, pwd);
+      setNotice(
+        isEn ? "Password updated. You can sign in below." : "Mot de passe mis à jour. Vous pouvez vous connecter ci-dessous."
+      );
+      setResetPasswordForm({ password: "", confirm: "" });
+      setLoginAuthStep("signin");
+      setResetTokenState("");
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, "", "/login");
+      }
+    } catch (err) {
+      setError(audienceErr(err.message));
+    }
+  }
+
+  async function onLogin(e) {
+    e.preventDefault();
+    setError("");
+    setLoginWorkspaces(null);
+    try {
+      const payload = await api.login(loginForm);
+      if (payload.needWorkspaceChoice && Array.isArray(payload.workspaces)) {
+        setLoginWorkspaces(payload.workspaces);
+        return;
+      }
+      if (payload.mfaRequired) {
+        setMfaLogin(payload);
+        setMfaCode("");
+        setNotice(payload.message || "Code MFA requis.");
+        return;
+      }
+      setAuthToken(payload.token);
+      setUser(payload.user);
+      refresh(payload.user.ispId || "");
+    } catch (err) {
+      setError(audienceErr(err.message));
+    }
+  }
+
+  async function onVerifyLoginMfa(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = await api.verifyLoginMfa({
+        challengeId: mfaLogin?.challengeId,
+        code: mfaCode
+      });
+      setAuthToken(payload.token);
+      setUser(payload.user);
+      setMfaLogin(null);
+      setMfaCode("");
+      setNotice("");
+      refresh(payload.user.ispId || "");
+    } catch (err) {
+      setError(audienceErr(err.message || "Code MFA invalide."));
     }
   }
 
   function onLogout() {
     setAuthToken("");
+    setLoginForm({ email: "", password: "" });
+    setForgotEmail("");
+    setForgotNotice("");
+    setForgotBusy(false);
+    setResetTokenState("");
+    setLoginAuthStep("signin");
+    setError("");
+    setNotice("");
     setUser(null);
+    setMfaLogin(null);
+    setMfaCode("");
+    setLoginWorkspaces(null);
     setIsps([]);
     setSelectedIspId("");
     setSuperDashboard(null);
@@ -848,9 +1852,77 @@ function App() {
     setVouchers([]);
     setExpenses([]);
     setExpenseSummary(null);
+    setWithdrawals([]);
+    setWithdrawalMfa(null);
+    setMfaLogin(null);
+    setMfaCode("");
     setPlans([]);
     setSubscriptions([]);
     setInvoices([]);
+    setPlatformBannerSlots([]);
+    setPlatformBannerEdits({});
+    setIspAnnouncements([]);
+    setIspAnnouncementsManage([]);
+  }
+
+  async function reloadPlatformBannerSlots() {
+    if (user?.role !== "system_owner") return;
+    try {
+      const data = await api.getSystemOwnerDashboardBanners();
+      setPlatformBannerSlots(data.slots || []);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function onPlatformBannerUpload(slotIndex, e) {
+    const input = e.target;
+    const f = input.files?.[0];
+    if (!f) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.uploadSystemOwnerDashboardBanner(slotIndex, f);
+      input.value = "";
+      await reloadPlatformBannerSlots();
+      await refresh();
+      setNotice(t("Bannière enregistrée.", "Banner saved."));
+    } catch (err) {
+      setError(audienceErr(err.message));
+    }
+  }
+
+  async function onPlatformBannerSaveMeta(slotIndex) {
+    const ed = platformBannerEdits[slotIndex];
+    if (!ed) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.patchSystemOwnerDashboardBanner(slotIndex, {
+        linkUrl: ed.linkUrl.trim() || null,
+        altText: ed.altText.trim() || null,
+        isActive: ed.isActive
+      });
+      await reloadPlatformBannerSlots();
+      await refresh();
+      setNotice(t("Paramètres de bannière enregistrés.", "Banner settings saved."));
+    } catch (err) {
+      setError(audienceErr(err.message));
+    }
+  }
+
+  async function onPlatformBannerDeleteImage(slotIndex) {
+    if (!window.confirm(t("Supprimer l'image de cette bannière ?", "Remove this banner image?"))) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.deleteSystemOwnerDashboardBannerImage(slotIndex);
+      await reloadPlatformBannerSlots();
+      await refresh();
+      setNotice(t("Image supprimée.", "Image removed."));
+    } catch (err) {
+      setError(audienceErr(err.message));
+    }
   }
 
   async function onCreateIsp(e) {
@@ -881,17 +1953,21 @@ function App() {
       return;
     }
     try {
-      await api.createCustomer(selectedIspId, {
+      const body = {
         fullName,
         phone,
         email: email || undefined,
         initialPassword: initialPassword || undefined
-      });
-      setCustomerForm({ fullName: "", phone: "", email: "", initialPassword: "" });
+      };
+      if (customerForm.fieldAgentId) {
+        body.fieldAgentId = customerForm.fieldAgentId;
+      }
+      await api.createCustomer(selectedIspId, body);
+      setCustomerForm({ fullName: "", phone: "", email: "", initialPassword: "", fieldAgentId: "" });
       setNotice("Client enregistré.");
       refresh();
     } catch (err) {
-      setError(err.message || "Impossible d'enregistrer le client.");
+      setError(audienceErr(err.message || "Impossible d'enregistrer le client."));
     }
   }
 
@@ -950,10 +2026,10 @@ function App() {
         agentPayoutPercent: "",
         revenueBasisUsd: ""
       }));
-      setNotice("Dépense enregistrée.");
+      setNotice("Dépense soumise — elle apparaît en « En attente » jusqu'à approbation par un autre administrateur (ou par vous-même si vous êtes seul validateur sur cet espace).");
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible d'enregistrer la dépense.");
+      setError(audienceErr(err.message || "Impossible d'enregistrer la dépense."));
     }
   }
 
@@ -967,7 +2043,75 @@ function App() {
       setNotice("Dépense supprimée.");
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible de supprimer la dépense.");
+      setError(audienceErr(err.message || "Impossible de supprimer la dépense."));
+    }
+  }
+
+  async function onApproveExpense(expenseId) {
+    if (!selectedIspId || !expenseId) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.approveExpense(selectedIspId, expenseId);
+      setNotice("Dépense approuvée — elle est prise en compte dans les totaux validés.");
+      await refresh();
+    } catch (err) {
+      setError(audienceErr(err.message || "Impossible d'approuver cette dépense."));
+    }
+  }
+
+  async function onRejectExpense(expenseId) {
+    if (!selectedIspId || !expenseId) return;
+    const note = window.prompt("Motif du rejet (facultatif) :");
+    if (note === null) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.rejectExpense(selectedIspId, expenseId, { rejectionNote: note });
+      setNotice("Dépense rejetée — vous pouvez la supprimer ou la soumettre à nouveau après correction.");
+      await refresh();
+    } catch (err) {
+      setError(audienceErr(err.message || "Impossible de rejeter cette dépense."));
+    }
+  }
+
+  async function onCloseAccountingPeriod(e) {
+    e.preventDefault();
+    if (!selectedIspId) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.createAccountingPeriodClosure(selectedIspId, {
+        periodStart: periodCloseForm.periodStart,
+        periodEnd: periodCloseForm.periodEnd,
+        note: periodCloseForm.note
+      });
+      setNotice(
+        "Période clôturée — les dépenses qui chevauchent ces dates ne pourront plus être créées, modifiées ou supprimées jusqu'à réouverture."
+      );
+      await refresh();
+    } catch (err) {
+      setError(audienceErr(err.message || "Impossible d'enregistrer la clôture comptable."));
+    }
+  }
+
+  async function onReopenAccountingPeriod(closureId) {
+    if (!selectedIspId || !closureId) return;
+    if (
+      !window.confirm(
+        "Lever cette clôture ? Les dépenses sur la période concernée redeviennent modifiables. Cette action est tracée dans le journal d'audit."
+      )
+    ) {
+      return;
+    }
+    setError("");
+    setNotice("");
+    try {
+      await api.deleteAccountingPeriodClosure(selectedIspId, closureId);
+      setNotice("Clôture levée.");
+      await refresh();
+    } catch (err) {
+      setError(audienceErr(err.message || "Impossible de lever la clôture."));
     }
   }
 
@@ -987,7 +2131,7 @@ function App() {
       setLastPortalIssue(data);
       setNotice("Lien portail généré — copiez-le et envoyez-le au client.");
     } catch (err) {
-      setError(err.message || "Impossible de créer le lien portail.");
+      setError(audienceErr(err.message || "Impossible de créer le lien portail."));
     }
   }
 
@@ -1003,12 +2147,13 @@ function App() {
       const data = await api.initiatePlatformDeposit(selectedIspId, {
         currency: saasPayForm.currency,
         phoneNumber: saasPayForm.phoneNumber,
-        provider: saasPayForm.provider
+        networkKey: saasPayForm.networkKey,
+        packageId: saasPayForm.packageId || undefined
       });
       setSaasDepositResult(data);
       setNotice(data.message || "Dépôt initié.");
     } catch (err) {
-      setError(err.message || "Échec du démarrage du dépôt.");
+      setError(audienceErr(err.message || "Échec du démarrage du dépôt."));
     }
   }
 
@@ -1021,25 +2166,72 @@ function App() {
       setNotice("Paiement vérifié. Actualisation de l'espace…");
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible de lire le statut du dépôt.");
+      setError(audienceErr(err.message || "Impossible de lire le statut du dépôt."));
     }
   }
 
-  async function onUpgradeTrialPlan(e) {
+  async function onCreateWithdrawal(e) {
     e.preventDefault();
     setError("");
     setNotice("");
-    if (!selectedIspId || !upgradePackageId) {
-      setError("Choisissez une formule à laquelle basculer.");
+    if (!selectedIspId) {
+      setError("Sélectionnez d'abord un espace FAI.");
+      return;
+    }
+    if (!user?.mfaTotpEnabled) {
+      setError("Configurez Google Authenticator avant de demander un retrait.");
       return;
     }
     try {
-      await api.upgradePlatformPlan(selectedIspId, upgradePackageId);
-      setNotice("Formule mise à jour pour le reste de votre essai.");
+      const data = await api.createWithdrawal(selectedIspId, {
+        amountUsd: withdrawalForm.amountUsd,
+        currency: withdrawalForm.currency,
+        phoneNumber: withdrawalForm.phoneNumber,
+        networkKey: withdrawalForm.networkKey,
+        mfaCode: withdrawalForm.mfaCode
+      });
+      setNotice(data.message || "Retrait demandé.");
+      setWithdrawalForm({ ...withdrawalForm, amountUsd: "", mfaCode: "" });
       await refresh();
     } catch (err) {
-      setError(err.message || "Impossible de changer de formule.");
+      setError(audienceErr(err.message || "Impossible de créer le retrait."));
     }
+  }
+
+  async function onStartTotpSetup() {
+    setError("");
+    setNotice("");
+    setTotpSetupLoading(true);
+    try {
+      const data = await api.startTotpSetup();
+      setTotpSetup(data);
+      setTotpSetupCode("");
+      setNotice("Secret Google Authenticator généré.");
+    } catch (err) {
+      setError(audienceErr(err.message || "Impossible de démarrer la configuration MFA."));
+    } finally {
+      setTotpSetupLoading(false);
+    }
+  }
+
+  async function onEnableTotp(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    try {
+      await api.enableTotp({ code: totpSetupCode });
+      setTotpSetup(null);
+      setTotpSetupCode("");
+      setNotice("Google Authenticator activé pour les retraits.");
+      await refresh();
+    } catch (err) {
+      setError(audienceErr(err.message || "Code Google Authenticator invalide."));
+    }
+  }
+
+  function onUpgradeTrialPlan(e) {
+    e.preventDefault();
+    setError("Le changement de formule se fait maintenant par paiement Mobile Money dans le formulaire ci-dessus.");
   }
 
   async function onCreatePlan(e) {
@@ -1087,7 +2279,7 @@ function App() {
       setNotice("Formule mise à jour.");
       refresh();
     } catch (err) {
-      setError(err.message || "Impossible de mettre à jour la formule.");
+      setError(audienceErr(err.message || "Impossible de mettre à jour la formule."));
     }
   }
 
@@ -1105,24 +2297,105 @@ function App() {
 
   async function onSaveBranding(e) {
     e.preventDefault();
-    await api.updateBranding(selectedIspId, brandingForm);
-    setNotice("Image de marque enregistrée.");
+    if (!selectedIspId) return;
+    setError("");
+    setNotice("");
+    try {
+      const saved = await api.updateBranding(selectedIspId, brandingForm);
+      setBranding(saved);
+      if (saved) {
+        setBrandingForm((prev) => ({
+          ...prev,
+          displayName: saved.displayName || "",
+          logoUrl: saved.logoUrl || "",
+          primaryColor: saved.primaryColor || "#1565d8",
+          secondaryColor: saved.secondaryColor || "#162030",
+          invoiceFooter: saved.invoiceFooter || "",
+          address: saved.address || "",
+          contactEmail: saved.contactEmail || "",
+          contactPhone: saved.contactPhone || "",
+          customDomain: saved.customDomain || "",
+          subdomain: saved.subdomain || "",
+          wifiPortalRedirectUrl: saved.wifiPortalRedirectUrl || "",
+          portalFooterText: saved.portalFooterText || "",
+          portalClientRefPrefix: saved.portalClientRefPrefix || ""
+        }));
+      }
+      setNotice(t("Image de marque enregistrée.", "Branding saved."));
     refresh();
+    } catch (err) {
+      setError(audienceErr(err.message || t("Échec de l'enregistrement.", "Save failed.")));
+    }
   }
 
   async function onBrandingLogoFile(e) {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f || !selectedIspId) return;
+    const input = e.target;
+    const f = input.files?.[0];
+    if (!f) return;
+    setBrandingLogoPickPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(f);
+    });
+    if (!selectedIspId) {
+      setError(t("Choisissez d'abord un FAI dans « Espace FAI actif ».", "Select an ISP in Active ISP Workspace first."));
+      return;
+    }
     setError("");
     setNotice("");
     try {
       const row = await api.uploadBrandingLogo(selectedIspId, f);
       setBrandingForm((prev) => ({ ...prev, logoUrl: row?.logoUrl || prev.logoUrl }));
       setNotice("Logo téléversé.");
+      input.value = "";
+      setBrandingLogoPickPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
+    }
+  }
+
+  async function onBrandingWifiBannerFile(e) {
+    const input = e.target;
+    const f = input.files?.[0];
+    if (!f) return;
+    if (!selectedIspId) {
+      setError(t("Choisissez d'abord un FAI dans « Espace FAI actif ».", "Select an ISP in Active ISP Workspace first."));
+      return;
+    }
+    setError("");
+    setNotice("");
+    try {
+      const row = await api.uploadBrandingWifiPortalBanner(selectedIspId, f);
+      if (row) setBranding(row);
+      setNotice(t("Bannière Wi‑Fi invité enregistrée.", "Guest Wi‑Fi banner saved."));
+      input.value = "";
+      refresh();
+    } catch (err) {
+      setError(audienceErr(err.message));
+    }
+  }
+
+  async function onClearBrandingWifiBanner() {
+    if (!selectedIspId) return;
+    if (
+      !window.confirm(
+        t("Retirer la bannière du portail Wi‑Fi invité ?", "Remove the guest Wi‑Fi portal banner?")
+      )
+    ) {
+      return;
+    }
+    setError("");
+    setNotice("");
+    try {
+      const row = await api.deleteBrandingWifiPortalBanner(selectedIspId);
+      if (row) setBranding(row);
+      setNotice(t("Bannière Wi‑Fi retirée.", "Wi‑Fi banner removed."));
+      refresh();
+    } catch (err) {
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1134,7 +2407,7 @@ function App() {
       await api.downloadCustomersCsv(selectedIspId);
       setNotice("Téléchargement du CSV clients démarré.");
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1162,7 +2435,7 @@ function App() {
       customerCsvInputRef.current.value = "";
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1174,7 +2447,7 @@ function App() {
       await api.downloadTeamUsersCsv(selectedIspId);
       setNotice("Téléchargement du CSV équipe démarré.");
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1207,7 +2480,7 @@ function App() {
       teamCsvInputRef.current.value = "";
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1222,17 +2495,53 @@ function App() {
     refresh();
   }
 
+  async function onDownloadInvoiceProforma(invoiceId) {
+    setError("");
+    try {
+      await api.downloadInvoiceProformaPdf(selectedIspId, invoiceId);
+    } catch (err) {
+      setError(audienceErr(err.message || "Impossible de télécharger la facture proforma (PDF)."));
+    }
+  }
+
   async function onCreateUser(e) {
     e.preventDefault();
-    await api.createUser(selectedIspId, userForm);
+    const payload = { ...userForm };
+    if (!payload.password || !String(payload.password).trim()) {
+      delete payload.password;
+    }
+    await api.createUser(selectedIspId, payload);
     setUserForm({
       fullName: "",
       email: "",
       password: "",
       role: "billing_agent",
-      accreditationLevel: "basic"
+      accreditationLevel: "basic",
+      phone: "",
+      address: "",
+      assignedSite: ""
     });
     refresh();
+  }
+
+  async function onSaveTeamUser(userId) {
+    setError("");
+    setNotice("");
+    const d = teamRowDraft[userId];
+    if (!d || !selectedIspId) return;
+    try {
+      await api.patchTeamUser(selectedIspId, userId, {
+        role: d.role,
+        phone: d.phone,
+        address: d.address,
+        assignedSite: d.assignedSite,
+        accreditationLevel: d.accreditationLevel
+      });
+      setNotice(t("Membre d'équipe enregistré.", "Team member saved."));
+      refresh();
+    } catch (err) {
+      setError(audienceErr(err.message || t("Échec de la mise à jour.", "Update failed.")));
+    }
   }
 
   async function onResetPassword(userId) {
@@ -1249,7 +2558,7 @@ function App() {
       setNotice("Mot de passe réinitialisé. L'utilisateur devra le changer à la prochaine connexion.");
       refresh();
     } catch (err) {
-      setError(err.message || "Échec de la réinitialisation du mot de passe.");
+      setError(audienceErr(err.message || "Échec de la réinitialisation du mot de passe."));
     }
   }
 
@@ -1261,6 +2570,40 @@ function App() {
   async function onReactivateUser(userId) {
     await api.reactivateUser(selectedIspId, userId);
     refresh();
+  }
+
+  async function onSuspendUserGlobally(userId) {
+    const ok = window.confirm(
+      t(
+        "Suspendre ce compte PARTOUT (toutes entreprises) ? La personne ne pourra plus se connecter jusqu'à réactivation globale. Les accès par FAI devront être réactivés si besoin.",
+        "Suspend this account EVERYWHERE (all companies)? They cannot sign in until globally re-enabled. Per-ISP access may need to be re-enabled separately."
+      )
+    );
+    if (!ok) return;
+    setError("");
+    try {
+      await api.suspendUserGlobally(selectedIspId, userId);
+      setNotice(t("Compte suspendu globalement.", "Account suspended globally."));
+      refresh();
+    } catch (err) {
+      setError(audienceErr(err.message || t("Échec.", "Failed.")));
+    }
+  }
+
+  async function onReactivateUserGlobally(userId) {
+    setError("");
+    try {
+      await api.reactivateUserGlobally(selectedIspId, userId);
+      setNotice(
+        t(
+          "Compte réactivé pour la connexion. Réactivez chaque FAI si nécessaire.",
+          "Account re-enabled for sign-in. Re-enable each ISP workspace if needed."
+        )
+      );
+      refresh();
+    } catch (err) {
+      setError(audienceErr(err.message || t("Échec.", "Failed.")));
+    }
   }
 
   async function onCreateInvite(userId) {
@@ -1366,7 +2709,7 @@ function App() {
       );
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1374,14 +2717,22 @@ function App() {
     e.preventDefault();
     setError("");
     try {
-      await api.patchCustomer(selectedIspId, customerEmailForm.customerId, {
-        email: customerEmailForm.email.trim() || null
-      });
+      const patch = { email: customerEmailForm.email.trim() || null };
+      if (
+        user.role !== "field_agent" &&
+        (isPlatformSuperRole(user.role) ||
+          user.role === "company_manager" ||
+          user.role === "isp_admin" ||
+          user.role === "billing_agent")
+      ) {
+        patch.fieldAgentId = customerEmailForm.fieldAgentId || null;
+      }
+      await api.patchCustomer(selectedIspId, customerEmailForm.customerId, patch);
       setNotice("E-mail client mis à jour.");
-      setCustomerEmailForm({ customerId: "", email: "" });
+      setCustomerEmailForm({ customerId: "", email: "", fieldAgentId: "" });
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1450,19 +2801,33 @@ function App() {
       amountUsd: tidForm.amountUsd || undefined
     });
     setTidForm({ invoiceId: "", tid: "", submittedByPhone: "", amountUsd: "" });
-    setNotice("TID envoyée. En attente de vérification par l'administrateur.");
+    setNotice(
+      t(
+        "TID envoyée. En attente de vérification par l'administrateur.",
+        "TID submitted. Awaiting verification by an administrator."
+      )
+    );
     refresh();
   }
 
   async function onReviewTid(submissionId, decision) {
-    const note = window.prompt(`Note facultative pour ${decision}`, "");
+    const note = window.prompt(
+      t("Note facultative (audit) :", "Optional note (audit trail):"),
+      ""
+    );
+    if (note === null) return;
     await api.reviewTidSubmission(selectedIspId, submissionId, { decision, note: note || "" });
     refresh();
   }
 
   async function onQueueTidReminders() {
     const payload = await api.queueTidReminders(selectedIspId);
-    setNotice(`${payload.queued} rappel(s) mis en file pour ${payload.totalPending} TID en attente.`);
+    setNotice(
+      t(
+        `${payload.queued} rappel(s) mis en file pour ${payload.totalPending} TID en attente.`,
+        `${payload.queued} reminder(s) queued for ${payload.totalPending} pending TID(s).`
+      )
+    );
     refresh();
   }
 
@@ -1475,7 +2840,7 @@ function App() {
       );
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1488,7 +2853,7 @@ function App() {
       );
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1501,7 +2866,7 @@ function App() {
       );
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1515,7 +2880,7 @@ function App() {
       );
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(audienceErr(err.message));
     }
   }
 
@@ -1597,6 +2962,10 @@ function App() {
       return;
     }
     const brandTitle = resolvePublicBrandName(branding?.displayName);
+    const mcLogoPrint =
+      typeof window !== "undefined"
+        ? new URL(mcbuleliLogoUrl, window.location.origin).href
+        : mcbuleliLogoUrl;
     const html = `
       <html lang="fr">
       <head>
@@ -1608,7 +2977,7 @@ function App() {
       </head>
       <body style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;padding:16px;color:${branding?.secondaryColor || "#2d2420"};">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          ${branding?.logoUrl ? `<img src="${publicAssetUrl(branding.logoUrl)}" alt="" style="height:40px;" />` : ""}
+          <img src="${mcLogoPrint}" alt="McBuleli" style="height:40px;width:auto;object-fit:contain;" />
           <h2 style="margin:0;color:${branding?.primaryColor || "#5d4037"};">${brandTitle} — bons d'accès Wi‑Fi</h2>
         </div>
         ${printable
@@ -1643,97 +3012,267 @@ function App() {
     refresh();
   }
 
+  const tenantSurfaceLogoSrc =
+    tenantContext?.logoUrl != null && String(tenantContext.logoUrl).trim()
+      ? publicAssetUrl(tenantContext.logoUrl)
+      : mcbuleliLogoUrl;
+  const tenantSurfaceLogoAlt = resolvePublicBrandName(tenantContext?.displayName) || "McBuleli";
+
+  const pwaPromptGateOk = import.meta.env.PROD && !user?.mustChangePassword;
+  const workspaceTitleForPwa = user
+    ? workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user)
+    : workspaceHeaderTitle(null, tenantContext, [], tenantContext?.ispId, null);
+
+  const isFieldAgentForPwaNav = user?.role === "field_agent";
+  const pwaNavCategories = useMemo(
+    () => (user ? buildDashboardNavCategories(t, user, Boolean(isFieldAgentForPwaNav)) : []),
+    [t, user, isFieldAgentForPwaNav]
+  );
+
   if (!user) {
-    const loginTitle = resolvePublicBrandName(tenantContext?.displayName);
+    const forgotHintPlain = (isEn ? publicAuthCopyForgot.en : publicAuthCopyForgot.fr).trim();
     return (
-      <main className="container container--login">
-        <div className="login-layout">
-          <section className="login-poster" aria-label="Présentation">
-            <div className="login-poster-logo">McBuleli</div>
-            <p className="login-poster-lead">
-              Facturation abonnés, factures, encaissements Mobile Money, portail client et suivi réseau — une
-              seule plateforme pour votre FAI. Connectez-vous ci-contre pour gérer votre espace.
-            </p>
-          </section>
-          <div className="login-stack">
-            <header className="app-header app-header--login">
-              <div>
-                <h1>{loginTitle}</h1>
-                <p className="app-meta">
-                  {tenantContext?.displayName
-                    ? isEn
-                      ? "Sign in to your workspace."
-                      : "Connexion à votre espace opérateur."
-                    : isEn
-                      ? "McBuleli team workspace — enter your credentials below."
-                      : "Espace équipe McBuleli — saisissez vos identifiants ci-dessous."}
-                </p>
-              </div>
-              <div style={{ marginTop: 10 }}>
-                <button type="button" onClick={() => setUiLang("fr")} disabled={uiLang === "fr"}>
-                  FR
-                </button>{" "}
-                <button type="button" onClick={() => setUiLang("en")} disabled={uiLang === "en"}>
-                  EN
+      <>
+        <main className="auth-simple auth-simple--dark">
+        <div className="auth-simple-card">
+          <img
+            className="auth-simple-logo"
+            src={tenantSurfaceLogoSrc}
+            alt={tenantSurfaceLogoAlt}
+            width={80}
+            height={80}
+          />
+          <h1 className="auth-simple-title">{tenantSurfaceLogoAlt}</h1>
+          {tenantSurfaceLogoAlt !== "McBuleli" ? (
+            <PoweredByMcBuleli
+              className="auth-simple-powered-by"
+              poweredByLabel={isEn ? "Powered by" : "Propulsé par"}
+            />
+          ) : null}
+          {notice ? (
+            <div role="status" className="auth-simple-banner auth-simple-banner--info">
+              {isEn ? translateToEnglish(notice) : notice}
+            </div>
+          ) : null}
+          {error ? (
+            <div role="alert" className="auth-simple-banner auth-simple-banner--error">
+              {isEn ? translateToEnglish(error) : error}
+            </div>
+          ) : null}
+          {forgotNotice && loginAuthStep === "forgot" ? (
+            <div role="status" className="auth-simple-banner auth-simple-banner--info">
+              {forgotNotice}
+            </div>
+          ) : null}
+          {loginWorkspaces && !mfaLogin ? (
+            <div className="panel auth-simple-panel" role="dialog" aria-label={isEn ? "Choose workspace" : "Choisir l'entreprise"}>
+              <h2 className="auth-simple-panel-title">{isEn ? "Your workspace" : "Votre entreprise"}</h2>
+              <p className="app-meta">
+              {isEn
+                  ? "This account is linked to several operators. Pick one to continue."
+                  : "Ce compte est rattaché à plusieurs opérateurs. Choisissez l'espace à ouvrir."}
+              </p>
+              <ul className="auth-simple-workspace-list">
+                {loginWorkspaces.map((w) => (
+                  <li key={w.ispId}>
+                    <button
+                      type="button"
+                      className="btn-secondary auth-simple-workspace-btn"
+                      onClick={() => completeLoginWithWorkspace(w.ispId)}
+                    >
+                      <strong>{w.name}</strong>
+                      <span className="auth-simple-workspace-role">{formatStaffRole(w.role, isEn)}</span>
+                    </button>
+                  </li>
+                ))}
+            </ul>
+              <button
+                type="button"
+                className="btn-secondary-outline"
+                onClick={() => {
+                  setLoginWorkspaces(null);
+                  setError("");
+                }}
+              >
+                {isEn ? "Back" : "Retour"}
                 </button>
               </div>
-            </header>
-            {error && <p className="error">{error}</p>}
-            <form className="panel" onSubmit={onLogin}>
-              <h2>{isEn ? "Login" : "Connexion"}</h2>
-              <input
-                placeholder={isEn ? "Email address" : "Adresse e-mail"}
-                value={loginForm.email}
-                onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+          ) : null}
+            {mfaLogin ? (
+            <form className="panel auth-simple-panel" onSubmit={onVerifyLoginMfa}>
+              <h2 className="auth-simple-panel-title">{isEn ? "Security code" : "Code de sécurité"}</h2>
+              <p className="app-meta">
+                  {isEn
+                  ? "Enter the 6-digit code from your authenticator or notification."
+                  : "Saisissez le code à 6 chiffres (application ou notification)."}
+                </p>
+                {mfaLogin.devCode ? (
+                <p className="app-meta">
+                  {isEn ? "Dev code:" : "Code dev :"} <code>{mfaLogin.devCode}</code>
+                  </p>
+                ) : null}
+                <input
+                placeholder={isEn ? "6-digit code" : "Code à 6 chiffres"}
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                autoComplete="one-time-code"
               />
+              <button type="submit">{isEn ? "Continue" : "Continuer"}</button>
+              <button type="button" className="btn-secondary-outline" onClick={() => setMfaLogin(null)}>
+                {isEn ? "Cancel" : "Annuler"}
+                </button>
+              </form>
+          ) : null}
+          {!loginWorkspaces && !mfaLogin && loginAuthStep === "forgot" ? (
+            <form className="panel auth-simple-panel" onSubmit={onForgotPassword}>
+              <h2 className="auth-simple-panel-title">{isEn ? "Reset password" : "Mot de passe oublié"}</h2>
+              {forgotHintPlain ? (
+                <p className="auth-simple-forgot-hint">{forgotHintPlain}</p>
+              ) : null}
               <input
-                placeholder={isEn ? "Password" : "Mot de passe"}
-                type="password"
-                value={loginForm.password}
-                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                type="email"
+                autoComplete="email"
+                placeholder={isEn ? "Your login email" : "Votre e-mail de connexion"}
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                required
               />
-              <button type="submit">{isEn ? "Login" : "Se connecter"}</button>
-              <p>
-                <a href="/signup">{isEn ? "Create a McBuleli account" : "Créer un compte entreprise McBuleli"}</a>{" "}
-                ({isEn ? "7-day trial, Mobile Money billing" : "essai 7 jours, facturation Mobile Money"})
-              </p>
-              <p style={{ fontSize: "0.88rem", color: "var(--mb-muted)" }}>
-                {isEn ? "Demo admin:" : "Démo admin :"} admin@isp.local / admin123
-              </p>
+              <button type="submit" disabled={forgotBusy}>
+                {isEn ? "Send link" : "Envoyer le lien"}
+              </button>
+              <button
+                type="button"
+                className="auth-simple-link-btn"
+                onClick={() => {
+                  setLoginAuthStep("signin");
+                  setForgotNotice("");
+                  setError("");
+                }}
+              >
+                {isEn ? "Back to sign in" : "Retour à la connexion"}
+              </button>
             </form>
-          </div>
+          ) : null}
+          {!loginWorkspaces && !mfaLogin && loginAuthStep === "reset" ? (
+            <form className="panel auth-simple-panel" onSubmit={onResetPasswordSubmit}>
+              <h2 className="auth-simple-panel-title">{isEn ? "New password" : "Nouveau mot de passe"}</h2>
+                <p className="app-meta">
+                {isEn ? "Choose a new password for your account." : "Choisissez un nouveau mot de passe."}
+                </p>
+                <input
+                type="password"
+                autoComplete="new-password"
+                placeholder={isEn ? "New password (min. 6)" : "Nouveau mot de passe (min. 6)"}
+                value={resetPasswordForm.password}
+                onChange={(e) =>
+                  setResetPasswordForm({ ...resetPasswordForm, password: e.target.value })
+                }
+                required
+                minLength={6}
+              />
+              <input
+                type="password"
+                autoComplete="new-password"
+                placeholder={isEn ? "Confirm password" : "Confirmer le mot de passe"}
+                value={resetPasswordForm.confirm}
+                onChange={(e) =>
+                  setResetPasswordForm({ ...resetPasswordForm, confirm: e.target.value })
+                }
+                required
+                minLength={6}
+              />
+              <button type="submit">{isEn ? "Update password" : "Mettre à jour"}</button>
+            </form>
+          ) : null}
+          {!loginWorkspaces && !mfaLogin && loginAuthStep === "signin" ? (
+            <form className="panel auth-simple-panel" onSubmit={onLogin}>
+              <input
+                type="email"
+                autoComplete="username"
+                placeholder={isEn ? "Email" : "E-mail"}
+                  value={loginForm.email}
+                onChange={(e) => {
+                  setLoginWorkspaces(null);
+                  setLoginForm({ ...loginForm, email: e.target.value });
+                }}
+                required
+                />
+                <input
+                  type="password"
+                autoComplete="current-password"
+                placeholder={isEn ? "Password" : "Mot de passe"}
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                required
+              />
+              <button type="submit">{isEn ? "Sign in" : "Se connecter"}</button>
+              <button
+                type="button"
+                className="auth-simple-link-btn"
+                onClick={() => {
+                  setLoginAuthStep("forgot");
+                  setForgotEmail(loginForm.email || "");
+                  setForgotNotice("");
+                  setError("");
+                }}
+              >
+                {isEn ? "Forgot password?" : "Mot de passe oublié ?"}
+              </button>
+              <p className="auth-simple-footer-links">
+                {isEn ? "No account yet?" : "Pas encore de compte ?"}{" "}
+                <a href="/signup">{isEn ? "Create one" : "Créer un compte"}</a>
+                </p>
+              </form>
+          ) : null}
+          <a className="auth-simple-back" href="/">
+            <IconArrowLeft width={20} height={20} aria-hidden />
+            {isEn ? "Homepage" : "Accueil"}
+          </a>
         </div>
       </main>
+      <PwaInstallPrompt
+        enabled={pwaPromptGateOk}
+        workspaceLabel={workspaceTitleForPwa || tenantSurfaceLogoAlt}
+        isEn={isEn}
+      />
+      </>
     );
   }
 
   if (user.mustChangePassword) {
     return (
-      <main className="container">
-        <header className="app-header app-header--login">
-          <div>
-            <h1>McBuleli</h1>
-            <p className="app-meta">
+      <main className="auth-simple auth-simple--dark">
+        <div className="auth-simple-card">
+          <img
+            className="auth-simple-logo"
+            src={tenantSurfaceLogoSrc}
+            alt={tenantSurfaceLogoAlt}
+            width={80}
+            height={80}
+          />
+          <h1 className="auth-simple-title">{tenantSurfaceLogoAlt}</h1>
+          {tenantSurfaceLogoAlt !== "McBuleli" ? (
+            <PoweredByMcBuleli
+              className="auth-simple-powered-by"
+              poweredByLabel={isEn ? "Powered by" : "Propulsé par"}
+            />
+          ) : null}
+          <p className="auth-simple-sub">
               {t(
                 "Vous devez mettre à jour votre mot de passe avant de continuer.",
                 "You must update your password before continuing."
               )}
             </p>
-          </div>
-          <div style={{ marginTop: 10 }}>
-            <button type="button" onClick={() => setUiLang("fr")} disabled={uiLang === "fr"}>
-              FR
-            </button>{" "}
-            <button type="button" onClick={() => setUiLang("en")} disabled={uiLang === "en"}>
-              EN
-            </button>
-          </div>
-        </header>
-        {error && <p className="error">{error}</p>}
-        <form className="panel" onSubmit={onChangePassword}>
-          <h2>{t("Nouveau mot de passe", "Change password")}</h2>
+          {error ? (
+            <div role="alert" className="auth-simple-banner auth-simple-banner--error">
+              {isEn ? translateToEnglish(error) : error}
+            </div>
+          ) : null}
+          <form className="panel auth-simple-panel" onSubmit={onChangePassword}>
+            <h2 className="auth-simple-panel-title">{t("Nouveau mot de passe", "Change password")}</h2>
           <input
             type="password"
+              autoComplete="current-password"
             placeholder={t("Mot de passe actuel", "Current password")}
             value={passwordForm.currentPassword}
             onChange={(e) =>
@@ -1742,47 +3281,132 @@ function App() {
           />
           <input
             type="password"
+              autoComplete="new-password"
             placeholder={t("Nouveau mot de passe", "New password")}
             value={passwordForm.newPassword}
             onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
           />
           <button type="submit">{t("Enregistrer", "Save")}</button>
         </form>
+        </div>
       </main>
     );
   }
 
+  const workspaceBillingForDomain = platformBillingStatus || user.platformBilling;
+  const canPrivateCustomDomain = Boolean(workspaceBillingForDomain?.package?.featureFlags?.customDomain);
+  const isFieldAgent = user.role === "field_agent";
+  const fieldTeamUsers = users.filter((u) => u.role === "field_agent");
+  const dashboardTenantLogoSrc =
+    branding?.logoUrl != null && String(branding.logoUrl).trim()
+      ? publicAssetUrl(branding.logoUrl)
+      : null;
+  const showDashboardHeaderPromos = !user?.dashboardBanners?.length && !user?.dashboardBannerHtml;
+
+  const canSeeAnnouncements =
+    !isFieldAgent &&
+    (user.role === "system_owner" ||
+      user.role === "super_admin" ||
+      user.role === "company_manager" ||
+      user.role === "isp_admin");
+
+  const gateMobile = isMobileShell;
+
   return (
-    <main className="container app-shell">
-      <header className="app-header">
-        <div>
-          <h1>{resolvePublicBrandName(branding?.displayName || tenantContext?.displayName)}</h1>
-          <p className="app-meta">
-            {t("Connecté :", "Logged in as")} <strong>{user.fullName}</strong> ({user.role})
-          </p>
-        </div>
-        <div>
-          <button type="button" onClick={() => setUiLang("fr")} disabled={uiLang === "fr"}>
-            FR
-          </button>{" "}
-          <button type="button" onClick={() => setUiLang("en")} disabled={uiLang === "en"}>
-            EN
-          </button>{" "}
-        <button type="button" className="btn-logout" onClick={onLogout}>
-          {t("Déconnexion", "Logout")}
-        </button>
-        </div>
-      </header>
+    <>
+    <main className={`container app-shell app-shell--dashboard-dark${isMobileShell ? " app-shell--mobile-pwa" : ""}`}>
+      <div className="dashboard-sticky-stack">
+        <header className="mb-header">
+          <DashboardTopBar
+            t={t}
+            user={user}
+            isFieldAgent={isFieldAgent}
+            dashboardChatIspId={dashboardChatIspId}
+            teamChatUnread={teamChatUnread}
+            onToggleChat={() => setTeamChatOpen((o) => !o)}
+            onOpenSettings={() => {
+              if (typeof window !== "undefined") window.location.hash = "#workspace-settings";
+            }}
+            onGoHome={() => {
+              if (typeof window !== "undefined") window.location.href = "/?site=public";
+            }}
+            onToggleSidebar={() => {
+              if (isMobileShell) {
+                setMobilePwaMenuOpen((o) => !o);
+              } else {
+                setDashboardNavCompact((v) => !v);
+              }
+            }}
+            sidebarOpen={isMobileShell ? mobilePwaMenuOpen : !dashboardNavCompactEffective}
+            isMobileShell={isMobileShell}
+          />
+          <DashboardStickyBanner
+            t={t}
+            slides={user?.dashboardBanners}
+            html={user?.dashboardBannerHtml}
+            fallback={showDashboardHeaderPromos ? <PublicHomePromos t={t} isEn={isEn} variant="dashboard" /> : null}
+            variant={isMobileShell ? "compact" : "default"}
+          />
+        </header>
+        {dashboardChatIspId ? (
+          <TeamChatPanel
+            open={teamChatOpen}
+            onClose={() => setTeamChatOpen(false)}
+            ispId={dashboardChatIspId}
+            user={user}
+            t={t}
+            isEn={isEn}
+            isMobileShell={isMobileShell}
+            onMarkReadComplete={() => setTeamChatUnread(0)}
+            onChatProfileSaved={(p) => setUser((u) => (u ? { ...u, ...p } : u))}
+          />
+        ) : null}
+      </div>
+      <div
+        className={`dashboard-layout${
+          dashboardNavCompactEffective ? " dashboard-layout--nav-compact" : ""
+        }${isMobileShell ? " dashboard-layout--mobile" : ""}`}
+      >
+        {!isMobileShell ? (
+          <DashboardSideNav
+            t={t}
+            user={user}
+            workspaceTitle={
+              workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) || t("Espace opérateur", "Operator workspace")
+            }
+            companyLogoSrc={dashboardTenantLogoSrc || mcbuleliLogoUrl}
+            userRoleLabel={formatStaffRole(user.role, isEn)}
+            isFieldAgent={isFieldAgent}
+            compact={dashboardNavCompactEffective}
+            navCompactEffective={dashboardNavCompactEffective}
+            navCompactPreference={dashboardNavCompact}
+            onToggleNavCompact={() => setDashboardNavCompact((v) => !v)}
+            navSearch={dashboardSidebarSearch}
+            setNavSearch={setDashboardSidebarSearch}
+          />
+        ) : null}
+        <div className="dashboard-main-column">
       {loading && <p>{t("Chargement…", "Loading...")}</p>}
-      {error && <p className="error">{isEn ? translateToEnglish(error) : error}</p>}
-      {notice && <p>{isEn ? translateToEnglish(notice) : notice}</p>}
+      {error ? (
+        <div role="alert" className="auth-simple-banner auth-simple-banner--error app-dash-alert">
+          {isEn ? translateToEnglish(error) : error}
+        </div>
+      ) : null}
+      {notice ? (
+        <div role="status" className="auth-simple-banner auth-simple-banner--info app-dash-alert">
+          {isEn ? translateToEnglish(notice) : notice}
+        </div>
+      ) : null}
 
       {(() => {
-        const billing = user.role === "super_admin" ? platformBillingStatus : user.platformBilling;
+        const billing = isPlatformSuperRole(user.role) ? platformBillingStatus : user.platformBilling;
         if (!selectedIspId || !billing || billing.legacyWorkspace) return null;
+        if (user.role === "field_agent") return null;
+        if (user.role === "system_owner") return null;
         const locked = billing.accessAllowed === false;
         return (
-          <section className={`panel ${locked ? "error" : ""}`} id="mcbuleli-billing">
+          <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
+            <section className={`panel ${locked ? "error" : ""}`} id="mcbuleli-billing">
             <h2>{t("Abonnement McBuleli (Mobile Money)", "McBuleli subscription (Mobile Money)")}</h2>
             {locked ? (
               <p>
@@ -1806,12 +3430,29 @@ function App() {
                 {new Date(billing.subscription.endsAt).toLocaleString("fr-FR")}.
               </p>
             ) : null}
-            {(user.role === "super_admin" ||
+            {(isPlatformSuperRole(user.role) ||
               user.role === "company_manager" ||
               user.role === "isp_admin") && (
               <>
                 <h3>{t("Payer par Mobile Money", "Pay with Mobile Money")}</h3>
                 <form onSubmit={onInitiatePlatformDeposit}>
+                  <select
+                    value={saasPayForm.packageId}
+                    onChange={(e) => setSaasPayForm({ ...saasPayForm, packageId: e.target.value })}
+                  >
+                    <option value="">
+                      {billing.package
+                        ? `${billing.package.name} (${billing.monthlyPriceUsd} $ / mois)`
+                        : t("Formule actuelle", "Current plan")}
+                    </option>
+                    {platformPackages
+                      .filter((p) => ["essential", "pro", "business"].includes(p.code))
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.monthlyPriceUsd}&nbsp;$ / mois)
+                        </option>
+                      ))}
+                  </select>
                   <select
                     value={saasPayForm.currency}
                     onChange={(e) => setSaasPayForm({ ...saasPayForm, currency: e.target.value })}
@@ -1824,11 +3465,16 @@ function App() {
                     value={saasPayForm.phoneNumber}
                     onChange={(e) => setSaasPayForm({ ...saasPayForm, phoneNumber: e.target.value })}
                   />
-                  <input
-                    placeholder={t("Code fournisseur Mobile Money", "Mobile Money provider code")}
-                    value={saasPayForm.provider}
-                    onChange={(e) => setSaasPayForm({ ...saasPayForm, provider: e.target.value })}
-                  />
+                  <select
+                    value={saasPayForm.networkKey}
+                    onChange={(e) => setSaasPayForm({ ...saasPayForm, networkKey: e.target.value })}
+                  >
+                    {availablePawapayNetworks.map((network) => (
+                      <option key={network.key} value={network.key}>
+                        {network.label}
+                      </option>
+                    ))}
+                  </select>
                   <button type="submit" disabled={!selectedIspId}>
                     {t("Payer l'abonnement mensuel", "Pay monthly subscription")}
                   </button>
@@ -1843,73 +3489,298 @@ function App() {
                 ) : null}
               </>
             )}
-            {billing.subscription?.status === "trialing" &&
-              (user.role === "super_admin" ||
-                user.role === "company_manager" ||
-                user.role === "isp_admin") && (
-                <form onSubmit={onUpgradeTrialPlan}>
-                  <h3>{t("Changer de formule pendant l'essai", "Change plan during trial")}</h3>
-                  <select value={upgradePackageId} onChange={(e) => setUpgradePackageId(e.target.value)}>
-                    <option value="">{t("Choisir une formule", "Select plan")}</option>
-                    {platformPackages
-                      .filter((p) => ["essential", "pro", "business"].includes(p.code))
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.monthlyPriceUsd}&nbsp;$ / mois)
-                        </option>
-                      ))}
-                  </select>
-                  <button type="submit" disabled={!selectedIspId || !upgradePackageId}>
-                    {t("Mettre à jour la formule d'essai", "Update trial plan")}
-                  </button>
-                </form>
-              )}
+            {billing.subscription?.status === "trialing" ? (
+              <p style={{ fontSize: "0.9rem", color: "var(--mb-muted)" }}>
+                {t(
+                  "Pour changer de formule, choisissez le nouveau plan dans le formulaire de paiement Mobile Money. La formule sera appliquée seulement après confirmation Pawapay.",
+                  "To change plan, select the new tier in the Mobile Money payment form. The tier is applied only after Pawapay confirms payment."
+                )}
+              </p>
+            ) : null}
           </section>
+          </DashboardScreenGate>
         );
       })()}
 
-      <section className="grid metrics">
-        <Card title={t("FAI", "ISPs")} value={superDashboard?.totalIsps ?? 0} />
-        <Card title={t("Clients (tous FAI)", "All Customers")} value={superDashboard?.totalCustomers ?? 0} />
-        <Card
-          title={t("Abonnements actifs (tous)", "All Active Subscriptions")}
-          value={superDashboard?.totalActiveSubscriptions ?? 0}
-        />
-        <Card title={t("Chiffre d'affaires global (USD)", "Global Revenue (USD)")} value={superDashboard?.totalRevenueUsd ?? 0} />
-      </section>
+      {!isFieldAgent ? (
+        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="dashboard">
+          <>
+            <section className="grid metrics dashboard-section-anchor" id="dashboard-overview">
+              <Card title={t("FAI", "ISPs")} value={superDashboard?.totalIsps ?? 0} />
+              <Card title={t("Clients (tous FAI)", "All Customers")} value={superDashboard?.totalCustomers ?? 0} />
+              <Card
+                title={t("Abonnements actifs (tous)", "All Active Subscriptions")}
+                value={superDashboard?.totalActiveSubscriptions ?? 0}
+              />
+              <Card
+                title={t("Chiffre d'affaires global (USD)", "Global Revenue (USD)")}
+                value={superDashboard?.totalRevenueUsd ?? 0}
+              />
+            </section>
 
-      <section className="grid metrics">
-        <Card title={t("Utilisateurs hotspot", "Hotspot Users")} value={networkStats?.hotspotUsers ?? 0} />
-        <Card title={t("Utilisateurs PPPoE", "PPPoE Users")} value={networkStats?.pppoeUsers ?? 0} />
-        <Card title={t("Appareils connectés", "Connected Devices")} value={networkStats?.connectedDevices ?? 0} />
-        <Card title={t("Bande passante (Go)", "Bandwidth (GB)")} value={networkStats?.bandwidthTotalGb ?? 0} />
-        <Card title={t("Encaissements sur la période (USD)", "Revenue In Period (USD)")} value={networkStats?.revenueCollectedUsd ?? 0} />
-      </section>
+            {!loading && selectedIspId ? (
+              <Suspense
+                fallback={
+                  <p className="app-meta dashboard-suspense-fallback">
+                    {t("Préparation des graphiques…", "Preparing charts…")}
+                  </p>
+                }
+              >
+                <DashboardHistograms
+                  t={t}
+                  isEn={isEn}
+                  globalSummary={user.role === "system_owner" ? superDashboard : null}
+                  tenantDashboard={dashboard}
+                  networkStats={networkStats}
+                  users={users}
+                  invoices={invoices}
+                  telemetrySnapshots={telemetrySnapshots}
+                />
+              </Suspense>
+            ) : null}
 
-      <section className="panel">
-        <h2>{t("Période des statistiques", "Statistics Period")}</h2>
-        <form onSubmit={onRefreshStats}>
-          <input
-            type="date"
-            value={statsPeriod.from}
-            onChange={(e) => setStatsPeriod({ ...statsPeriod, from: e.target.value })}
+            {user.role === "system_owner" ? (
+        <section className="panel" id="platform-banners">
+          <h2>{t("Bannières tableau de bord (3 visuels)", "Dashboard banners (3 slides)")}</h2>
+          <p className="app-meta" style={{ maxWidth: "56rem", marginBottom: 12 }}>
+            {t(
+              "Préparez trois images au même format paysage pour un défilement homogène. Recommandé : 1200 × 400 px (ratio ~3:1) ou 1920 × 360 px ; PNG, JPEG ou WebP ; max. 2 Mo par fichier. Un format « 24 × 45 » très vertical convient mal à cette zone : préférez une largeur nettement plus grande que la hauteur. Lien optionnel : URL complète en https://…",
+              "Use three images with the same landscape dimensions for a clean rotation. Recommended: 1200 × 400 px (~3:1) or 1920 × 360 px; PNG, JPEG or WebP; max 2 MB each. A very tall 24×45-style strip fits poorly here—keep width clearly larger than height. Optional link: full https://… URL."
+            )}
+          </p>
+          <p className="app-meta" style={{ marginBottom: 16 }}>
+            {t(
+              "Défilement automatique toutes les 6 secondes pour les bannières actives avec image. Réservé au compte propriétaire plateforme (system_owner).",
+              "Auto-rotation every 6 seconds for active slides that have an image. Managed by the platform owner (system_owner) account only."
+            )}
+          </p>
+          <div className="grid">
+            {platformBannerSlots.map((slot) => {
+              const ed = platformBannerEdits[slot.slotIndex] || {
+                linkUrl: "",
+                altText: "",
+                isActive: true
+              };
+              return (
+                <div key={slot.slotIndex} className="panel" style={{ margin: 0 }}>
+                  <h3 style={{ marginTop: 0 }}>
+                    {t("Bannière", "Banner")} {slot.slotIndex + 1}
+                  </h3>
+                  {platformBannerHasStoredImage(slot) ? (
+                    <p style={{ margin: "8px 0" }}>
+                      <img
+                        src={platformBannerThumbSrc(slot)}
+                        alt={ed.altText || slot.altText || ""}
+                        style={{ maxWidth: "100%", maxHeight: 120, objectFit: "contain" }}
+                      />
+                    </p>
+                  ) : (
+                    <p className="app-meta">{t("Aucune image", "No image yet")}</p>
+                  )}
+                  <label style={{ display: "block", marginBottom: 8 }}>
+                    {t("Fichier image", "Image file")}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      onChange={(e) => onPlatformBannerUpload(slot.slotIndex, e)}
+                      style={{ display: "block", marginTop: 6 }}
+                    />
+                  </label>
+                  <input
+                    placeholder="https://…"
+                    value={ed.linkUrl}
+                    onChange={(e) =>
+                      setPlatformBannerEdits((prev) => ({
+                        ...prev,
+                        [slot.slotIndex]: { ...ed, linkUrl: e.target.value }
+                      }))
+                    }
+                  />
+                  <input
+                    placeholder={t("Texte alternatif (accessibilité)", "Alt text (accessibility)")}
+                    value={ed.altText}
+                    onChange={(e) =>
+                      setPlatformBannerEdits((prev) => ({
+                        ...prev,
+                        [slot.slotIndex]: { ...ed, altText: e.target.value }
+                      }))
+                    }
+                  />
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={ed.isActive}
+                      onChange={(e) =>
+                        setPlatformBannerEdits((prev) => ({
+                          ...prev,
+                          [slot.slotIndex]: { ...ed, isActive: e.target.checked }
+                        }))
+                      }
+                    />
+                    {t("Afficher dans le carrousel", "Show in carousel")}
+                  </label>
+                  <div className="platform-banner-card__actions">
+                    <button type="button" onClick={() => onPlatformBannerSaveMeta(slot.slotIndex)}>
+                      {t("Enregistrer", "Save")}
+                    </button>
+                    {platformBannerHasStoredImage(slot) ? (
+                      <button type="button" className="btn-secondary-outline" onClick={() => onPlatformBannerDeleteImage(slot.slotIndex)}>
+                        {t("Supprimer l'image", "Remove image")}
+                      </button>
+                    ) : null}
+                  </div>
+                  <p className="app-meta" style={{ marginTop: 8, marginBottom: 0 }}>
+                    {t(
+                      "Enregistrer applique le lien WhatsApp, le texte alternatif et l’affichage dans le carrousel. Choisir un fichier envoie tout de suite l’image.",
+                      "Save applies the WhatsApp link, alt text, and carousel visibility. Choosing a file uploads the image immediately."
+                    )}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {user.role === "system_owner" ? <PlatformHomeMarketingPanel t={t} isEn={isEn} /> : null}
+
+      {user.role === "system_owner" && superDashboard?.tenants ? (
+        <section className="panel" id="system-tenants">
+          <h2>Vue créateur système</h2>
+          <p>
+            Compte propriétaire global. Les mots de passe des entreprises sont stockés de façon chiffrée et ne sont pas
+            affichables ; utilisez les invitations ou la réinitialisation pour donner un nouvel accès.
+          </p>
+          <DataTable
+            title={t("Espaces entreprises", "Tenant workspaces")}
+            description={t("Recherche, tri et pagination standardisés.", "Standardized search, sorting and pagination.")}
+            rows={tenantTableView.pageRows}
+            columns={[
+              {
+                key: "name",
+                header: t("Nom", "Name"),
+                sortKey: "name",
+                cell: (ten) => `${ten.name || "—"}${ten.isDemo ? " (démo)" : ""}`
+              },
+              { key: "location", header: t("Localisation", "Location"), sortKey: "location", cell: (ten) => ten.location || "—" },
+              {
+                key: "contactPhone",
+                header: t("Téléphone", "Phone"),
+                sortKey: "contactPhone",
+                cell: (ten) => ten.contactPhone || "—"
+              },
+              {
+                key: "subscriptionStatus",
+                header: t("Abonnement", "Subscription"),
+                sortKey: "subscriptionStatus",
+                cell: (ten) => ten.subscriptionStatus || t("sans abonnement", "no subscription")
+              },
+              { key: "packageName", header: t("Forfait", "Package"), sortKey: "packageName", cell: (ten) => ten.packageName || "—" },
+              {
+                key: "createdAt",
+                header: t("Créé", "Created"),
+                sortKey: "createdAt",
+                cell: (ten) => (ten.createdAt ? new Date(ten.createdAt).toLocaleDateString("fr-FR") : "—")
+              },
+              {
+                key: "actions",
+                header: t("Actions", "Actions"),
+                cell: (ten) => (
+                  <button type="button" onClick={() => refresh(ten.id)}>
+                    {t("Ouvrir", "Open")}
+                  </button>
+                )
+              }
+            ]}
+            searchValue={tenantTable.q}
+            onSearchValueChange={(q) => setTenantTable((s) => ({ ...s, q, page: 1 }))}
+            page={tenantTable.page}
+            pageSize={tenantTable.pageSize}
+            totalRows={tenantTableView.total}
+            onPageChange={(page) => setTenantTable((s) => ({ ...s, page }))}
+            onPageSizeChange={(pageSize) => setTenantTable((s) => ({ ...s, pageSize, page: 1 }))}
+            sort={tenantTable.sort}
+            onSortChange={(sort) => setTenantTable((s) => ({ ...s, sort }))}
           />
-          <input
-            type="date"
-            value={statsPeriod.to}
-            onChange={(e) => setStatsPeriod({ ...statsPeriod, to: e.target.value })}
-          />
-          <button type="submit" disabled={!selectedIspId}>
-            {t("Actualiser les stats", "Refresh stats")}
-          </button>
-        </form>
+        </section>
+      ) : null}
+
+      <section className="panel" id="reports">
+        <h2>{t("Rapports / analyses", "Reports / analytics")}</h2>
+        <p className="app-meta">
+          {t(
+            "Cette section arrive avec les tableaux et graphiques (revenus, usage, rétention, churn) et des filtres interactifs. La navigation est déjà gérée par le registre de modules pour rester extensible.",
+            "This section is coming with tables and charts (revenue, usage, retention, churn) and interactive filters. Navigation is already handled by the module registry to remain extensible."
+          )}
+        </p>
       </section>
 
-      {(user.role === "super_admin" ||
+            <section className="grid metrics">
+              <Card title={t("Utilisateurs hotspot", "Hotspot Users")} value={networkStats?.hotspotUsers ?? 0} />
+              <Card title={t("Utilisateurs PPPoE", "PPPoE Users")} value={networkStats?.pppoeUsers ?? 0} />
+              <Card
+                title={t("Appareils connectés", "Connected Devices")}
+                value={networkStats?.connectedDevices ?? 0}
+              />
+              <Card title={t("Bande passante (Go)", "Bandwidth (GB)")} value={networkStats?.bandwidthTotalGb ?? 0} />
+              <Card
+                title={t("Encaissements sur la période (USD)", "Revenue In Period (USD)")}
+                value={networkStats?.revenueCollectedUsd ?? 0}
+              />
+            </section>
+
+            <section className="grid metrics">
+              <Card
+                title={t("Caisse cash (USD)", "Cash till (USD)")}
+                value={networkStats?.cashbox?.cashUsd ?? dashboard?.cashbox?.cashUsd ?? 0}
+              />
+              <Card
+                title={t("Caisse TID (USD)", "TID till (USD)")}
+                value={networkStats?.cashbox?.tidUsd ?? dashboard?.cashbox?.tidUsd ?? 0}
+              />
+              <Card
+                title={t("Mobile Money (USD)", "Mobile Money (USD)")}
+                value={networkStats?.cashbox?.mobileMoneyUsd ?? dashboard?.cashbox?.mobileMoneyUsd ?? 0}
+              />
+              <Card
+                title={t("Retirable Mobile Money (USD)", "Withdrawable Mobile Money (USD)")}
+                value={
+                  networkStats?.cashbox?.withdrawableMobileMoneyUsd ??
+                  dashboard?.cashbox?.withdrawableMobileMoneyUsd ??
+                  0
+                }
+              />
+            </section>
+
+            <section className="panel">
+              <h2>{t("Période des statistiques", "Statistics Period")}</h2>
+              <form onSubmit={onRefreshStats}>
+                <input
+                  type="date"
+                  value={statsPeriod.from}
+                  onChange={(e) => setStatsPeriod({ ...statsPeriod, from: e.target.value })}
+                />
+                <input
+                  type="date"
+                  value={statsPeriod.to}
+                  onChange={(e) => setStatsPeriod({ ...statsPeriod, to: e.target.value })}
+                />
+                <button type="submit" disabled={!selectedIspId}>
+                  {t("Actualiser les stats", "Refresh stats")}
+                </button>
+              </form>
+            </section>
+          </>
+        </DashboardScreenGate>
+      ) : null}
+
+      {(isPlatformSuperRole(user.role) ||
         user.role === "company_manager" ||
         user.role === "isp_admin" ||
         user.role === "noc_operator" ||
-        user.role === "billing_agent") && (
+        user.role === "billing_agent") &&
+        !isFieldAgent && (
+        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
         <section className="panel">
           <h2>{t("Facturation en retard", "Overdue billing")}</h2>
           <p>
@@ -1925,10 +3796,12 @@ function App() {
             {t("Générer les factures de renouvellement maintenant", "Generate renewal invoices now")}
           </button>
         </section>
+        </DashboardScreenGate>
       )}
 
-      <section className="grid">
-        {user.role === "super_admin" && (
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} always>
+      <section className="grid" id="tenant-workspace">
+        {isPlatformSuperRole(user.role) && (
           <form className="panel" onSubmit={onCreateIsp}>
             <h2>{t("Créer un FAI (locataire)", "Create ISP Tenant")}</h2>
             <input
@@ -1955,7 +3828,7 @@ function App() {
           <select
             value={selectedIspId}
             onChange={(e) => refresh(e.target.value)}
-            disabled={user.role !== "super_admin" || Boolean(tenantContext?.ispId)}
+            disabled={!isPlatformSuperRole(user.role) || Boolean(tenantContext?.ispId)}
           >
             <option value="">{t("Choisir un FAI", "Select ISP")}</option>
             {isps.map((isp) => (
@@ -1966,9 +3839,15 @@ function App() {
           </select>
         </section>
       </section>
+      </DashboardScreenGate>
 
-      <section className="grid">
-        {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+      {!isFieldAgent && (
+        <>
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
+      <section className="grid" id="workspace-settings">
+        {(isPlatformSuperRole(user.role) ||
+          user.role === "company_manager" ||
+          user.role === "isp_admin") && (
           <form className="panel" onSubmit={onSaveBranding}>
             <h2>Image de marque / marque blanche</h2>
             <input
@@ -1976,26 +3855,58 @@ function App() {
               value={brandingForm.displayName}
               onChange={(e) => setBrandingForm({ ...brandingForm, displayName: e.target.value })}
             />
+            <p className="app-meta" style={{ margin: "4px 0 10px", maxWidth: "52ch" }}>
+              {t(
+                "Identifiant technique de votre espace (souvent *.tenant.local à la création). Sert au routage « marque blanche » si vous accédez au tableau de bord via ce nom d’hôte ; ce n’est pas un domaine public DNS tant que vous n’avez pas souscrit au Premium sur mesure.",
+                "Technical hostname for your workspace (often *.tenant.local at signup). Used for white-label routing when you open the dashboard via that host; it is not public DNS until you use Premium custom domain."
+              )}
+            </p>
             <input
-              placeholder="Sous-domaine (ex. admin1.votredomaine.com)"
+              placeholder={t(
+                "Sous-domaine technique (ex. mon-isp.tenant.local)",
+                "Technical subdomain (e.g. my-isp.tenant.local)"
+              )}
               value={brandingForm.subdomain}
               onChange={(e) => setBrandingForm({ ...brandingForm, subdomain: e.target.value })}
             />
             <input
-              placeholder="Domaine personnalisé (facultatif)"
+              placeholder={t("Domaine DNS privé (Premium sur mesure)", "Private DNS domain (Premium custom)")}
               value={brandingForm.customDomain}
               onChange={(e) => setBrandingForm({ ...brandingForm, customDomain: e.target.value })}
+              disabled={!canPrivateCustomDomain}
+              title={
+                canPrivateCustomDomain
+                  ? undefined
+                  : t(
+                      "Réservé au forfait Premium sur mesure (domaine sur votre marque).",
+                      "Reserved for Premium custom (on-demand) — your own brand domain."
+                    )
+              }
             />
+            {!canPrivateCustomDomain ? (
+              <p className="app-meta" style={{ margin: "4px 0 0", fontSize: "0.88rem" }}>
+                {t(
+                  "Le domaine DNS personnalisé (ex. admin.votredomaine.com) est activé uniquement sur le forfait Premium sur mesure. Les formules Essential et Pro conservent le sous-domaine technique ou l’accès via l’app McBuleli.",
+                  "A custom DNS domain (e.g. admin.yourbrand.com) is only available on the Premium custom (on-demand) plan. Essential and Pro keep the technical subdomain or access via the hosted McBuleli app."
+                )}
+              </p>
+            ) : null}
+            <p className="app-meta" style={{ marginTop: 8, maxWidth: "56ch" }}>
+              {t(
+                "L’en-tête du tableau de bord affiche le logo McBuleli. Le logo et les couleurs ci‑dessous servent surtout au portail client, au Wi‑Fi invité, aux factures et aux exports.",
+                "The dashboard header shows the McBuleli logo. The logo and colors below mainly apply to the customer portal, guest Wi‑Fi, invoices and exports."
+              )}
+            </p>
             <label style={{ display: "block", marginTop: 8 }}>
               Logo entreprise (depuis votre appareil)
               <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={onBrandingLogoFile} />
             </label>
-            {brandingForm.logoUrl ? (
-              <p style={{ margin: "8px 0" }}>
+            {brandingLogoPickPreview || brandingForm.logoUrl ? (
+              <p className="branding-logo-preview" style={{ margin: "8px 0" }}>
                 <img
-                  src={publicAssetUrl(brandingForm.logoUrl)}
-                  alt="Aperçu du logo"
-                  style={{ maxHeight: 48, maxWidth: 200, objectFit: "contain" }}
+                  src={brandingLogoPickPreview || publicAssetUrl(brandingForm.logoUrl)}
+                  alt={t("Aperçu du logo", "Logo preview")}
+                  style={{ maxHeight: 64, maxWidth: 220, objectFit: "contain", display: "block" }}
                 />
               </p>
             ) : null}
@@ -2052,15 +3963,109 @@ function App() {
                 setBrandingForm({ ...brandingForm, wifiPortalRedirectUrl: e.target.value })
               }
             />
+            <p className="app-meta" style={{ margin: "12px 0 6px", maxWidth: "56ch" }}>
+              {t(
+                "Image large affichée en bas de la page Wi‑Fi invité (/buy/packages ou /wifi), sous les offres — visuel promo, partenaires, etc. (PNG, JPEG, WebP, GIF ; max. 5 Mo).",
+                "Wide image at the bottom of the guest Wi‑Fi page (/buy/packages or /wifi), below the plans — promos, partners, etc. (PNG, JPEG, WebP, GIF; max 5 MB)."
+              )}
+            </p>
+            <label style={{ display: "block", marginTop: 4 }}>
+              {t("Bannière bas de page Wi‑Fi invité", "Guest Wi‑Fi bottom banner")}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                disabled={!selectedIspId}
+                onChange={onBrandingWifiBannerFile}
+                style={{ display: "block", marginTop: 6 }}
+              />
+            </label>
+            {branding?.wifiPortalBannerUrl ? (
+              <div style={{ margin: "10px 0 0" }}>
+                <img
+                  src={publicAssetUrl(branding.wifiPortalBannerUrl)}
+                  alt=""
+                  style={{
+                    width: "100%",
+                    maxWidth: 520,
+                    maxHeight: 160,
+                    objectFit: "cover",
+                    borderRadius: 14,
+                    display: "block",
+                    border: "1px solid rgba(93, 64, 55, 0.12)"
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn-secondary-outline"
+                  style={{ marginTop: 8 }}
+                  disabled={!selectedIspId}
+                  onClick={onClearBrandingWifiBanner}
+                >
+                  {t("Retirer la bannière Wi‑Fi", "Remove Wi‑Fi banner")}
+                </button>
+              </div>
+            ) : null}
+            <textarea
+              placeholder={t(
+                "Texte de pied de page portail client (RCCM, mentions légales…)",
+                "Customer portal footer text (company reg., legal line…)"
+              )}
+              rows={3}
+              value={brandingForm.portalFooterText}
+              onChange={(e) =>
+                setBrandingForm({ ...brandingForm, portalFooterText: e.target.value })
+              }
+            />
+            <input
+              placeholder={t(
+                "Préfixe n° client portail (ex. CLI-)",
+                "Portal client ID prefix (e.g. CLI-)"
+              )}
+              value={brandingForm.portalClientRefPrefix}
+              onChange={(e) =>
+                setBrandingForm({ ...brandingForm, portalClientRefPrefix: e.target.value })
+              }
+            />
             <button type="submit" disabled={!selectedIspId}>
               Enregistrer l'image de marque
             </button>
           </form>
         )}
-      </section>
 
-      <section className="grid">
-        {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+        <section className="panel" aria-label={t("Compte", "Account")}>
+          <h2>{t("Compte", "Account")}</h2>
+          <p className="app-meta">
+            {t(
+              "Déconnexion de cet appareil et fermeture de l’espace opérateur.",
+              "Sign out from this device and close the operator workspace."
+            )}
+          </p>
+          <button type="button" className="btn-expense-delete" onClick={onLogout}>
+            {t("Déconnexion", "Logout")}
+          </button>
+        </section>
+      </section>
+      </DashboardScreenGate>
+
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
+      {(isPlatformSuperRole(user.role) ||
+        user.role === "company_manager" ||
+        user.role === "isp_admin") &&
+      selectedIspId ? (
+        <IspAnnouncementsPanel
+          ispId={selectedIspId}
+          items={ispAnnouncementsManage}
+          t={t}
+          isEn={isEn}
+          staffUser={user}
+          onRefresh={refresh}
+        />
+      ) : null}
+      </DashboardScreenGate>
+
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
+      <section className="grid" id="billing-ops">
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreatePaymentMethod}>
             <h2>Moyens de paiement FAI</h2>
             <select
@@ -2134,7 +4139,7 @@ function App() {
           </form>
         )}
 
-        {(user.role === "super_admin" || user.role === "company_manager") && (
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager") && (
           <form className="panel" onSubmit={onUpsertRoleProfile}>
             <h2>Profils d'habilitation</h2>
             <input
@@ -2172,11 +4177,22 @@ function App() {
           </form>
         )}
       </section>
+      </DashboardScreenGate>
 
-      <section className="grid">
-        {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="network">
+      <section className="grid" id="network-ops">
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreateNetworkNode}>
             <h2>Nœud réseau MikroTik</h2>
+            <p className="app-meta" style={{ maxWidth: "56rem", marginBottom: 12 }}>
+              Connexion à l&apos;API REST RouterOS via{" "}
+              <code>
+                {networkNodeForm.useTls ? "https" : "http"}://hôte:port/rest
+              </code>
+              . Le port <strong>443</strong> avec <strong>TLS</strong> est l&apos;usage courant lorsque le service REST
+              est exposé en HTTPS. Vérifiez que l&apos;utilisateur API existe sur le routeur, que le service REST/API est
+              activé, et que le pare-feu autorise ce port depuis le serveur McBuleli.
+            </p>
             <input
               placeholder="Nom du nœud"
               value={networkNodeForm.name}
@@ -2239,48 +4255,100 @@ function App() {
             <button type="submit" disabled={!selectedIspId}>
               Enregistrer le nœud
             </button>
-            {networkNodes.map((node) => (
-              <p key={node.id}>
-                {node.name} ({node.host}:{node.apiPort}) [{node.isActive ? "actif" : "inactif"}]
-                {node.isDefault ? " [défaut]" : ""}{" "}
-                <button type="button" onClick={() => onToggleNetworkNode(node.id, !node.isActive)}>
-                  {node.isActive ? "Désactiver" : "Activer"}
-                </button>{" "}
-                {!node.isDefault && (
-                  <button type="button" onClick={() => onSetDefaultNetworkNode(node.id)}>
-                    Par défaut
-                  </button>
-                )}{" "}
-                {(user.role === "super_admin" ||
-                  user.role === "company_manager" ||
-                  user.role === "isp_admin" ||
-                  user.role === "noc_operator") && (
-                  <button type="button" onClick={() => onCollectTelemetry(node.id)}>
-                    Collecter la télémétrie
-                  </button>
-                )}
-              </p>
-            ))}
           </form>
         )}
 
+        <DataTable
+          title={t("Appareils MikroTik (nœuds)", "MikroTik devices (nodes)")}
+          description={t("Liste standardisée avec actions rapides.", "Standardized list with quick actions.")}
+          rows={networkNodeTableView.pageRows}
+          columns={[
+            { key: "name", header: t("Nom", "Name"), sortKey: "name", cell: (n) => n.name || "—" },
+            { key: "host", header: t("Hôte", "Host"), sortKey: "host", cell: (n) => `${n.host || "—"}:${n.apiPort || "—"}` },
+            {
+              key: "status",
+              header: t("Statut", "Status"),
+              sortKey: "isActive",
+              cell: (n) => (n.isActive ? t("En ligne", "Online") : t("Hors ligne", "Offline"))
+            },
+            { key: "default", header: t("Défaut", "Default"), sortKey: "isDefault", cell: (n) => (n.isDefault ? "✓" : "—") },
+            {
+              key: "actions",
+              header: t("Actions", "Actions"),
+              cell: (n) => (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <button type="button" onClick={() => onToggleNetworkNode(n.id, !n.isActive)}>
+                    {n.isActive ? t("Désactiver", "Disable") : t("Activer", "Enable")}
+                  </button>
+                  {!n.isDefault ? (
+                    <button type="button" className="btn-secondary-outline" onClick={() => onSetDefaultNetworkNode(n.id)}>
+                      {t("Par défaut", "Set default")}
+                    </button>
+                  ) : null}
+                  {(isPlatformSuperRole(user.role) ||
+                    user.role === "company_manager" ||
+                    user.role === "isp_admin" ||
+                    user.role === "noc_operator") ? (
+                    <button type="button" className="btn-secondary-outline" onClick={() => onCollectTelemetry(n.id)}>
+                      {t("Télémétrie", "Telemetry")}
+                    </button>
+                  ) : null}
+                </div>
+              )
+            }
+          ]}
+          searchValue={networkNodeTable.q}
+          onSearchValueChange={(q) => setNetworkNodeTable((s) => ({ ...s, q, page: 1 }))}
+          page={networkNodeTable.page}
+          pageSize={networkNodeTable.pageSize}
+          totalRows={networkNodeTableView.total}
+          onPageChange={(page) => setNetworkNodeTable((s) => ({ ...s, page }))}
+          onPageSizeChange={(pageSize) => setNetworkNodeTable((s) => ({ ...s, pageSize, page: 1 }))}
+          sort={networkNodeTable.sort}
+          onSortChange={(sort) => setNetworkNodeTable((s) => ({ ...s, sort }))}
+        />
+
         <section className="panel">
-          <h2>Événements de provisionnement</h2>
-          {provisioningEvents.slice(0, 12).map((event) => (
-            <p key={event.id}>
-              {new Date(event.createdAt).toLocaleString()} - {event.action} ({event.accessType || "n/a"}){" "}
-              [{event.status}]
-            </p>
-          ))}
+          <h2>{t("Événements de provisionnement", "Provisioning events")}</h2>
+          <p className="app-meta">
+            {t(
+              "Résumé lisible des tentatives d'activation ou de suspension sur MikroTik (PPPoE / hotspot). Un statut « Ignoré » indique souvent qu'aucun nœud par défaut n'était prêt, pas une erreur client.",
+              "Readable summary of activation or suspension attempts on MikroTik (PPPoE / hotspot). “Skipped” usually means no default node was ready—not necessarily a subscriber error."
+            )}
+          </p>
+          {provisioningEvents.slice(0, 12).map((event) => {
+            const hint = humanizeProvisioningEvent(event, isEn);
+            return (
+              <p key={event.id} className="network-event-line">
+                <span className="network-event-line__meta">
+                  {new Date(event.createdAt).toLocaleString()} — {event.action} ({event.accessType || "n/a"}) [
+                  {event.status}]
+                </span>
+                {hint ? <span className="network-event-line__hint">{hint}</span> : null}
+              </p>
+            );
+          })}
         </section>
 
         <section className="panel">
-          <h2>Synchronisation FreeRADIUS</h2>
-          {radiusSyncEvents.slice(0, 12).map((event) => (
-            <p key={event.id}>
-              {new Date(event.createdAt).toLocaleString()} - {event.action} {event.username} [{event.status}]
-            </p>
-          ))}
+          <h2>{t("Synchronisation FreeRADIUS", "FreeRADIUS synchronization")}</h2>
+          <p className="app-meta">
+            {t(
+              "Quand la synchro est active, McBuleli écrit dans les tables RADIUS locales. Si elle est désactivée globalement, les événements restent visibles à titre d'historique avec le motif « ignoré ».",
+              "When sync is enabled, McBuleli writes to local RADIUS tables. If it is disabled globally, events remain visible for history with an “ignored” reason."
+            )}
+          </p>
+          {radiusSyncEvents.slice(0, 12).map((event) => {
+            const hint = humanizeRadiusSyncEvent(event, isEn);
+            return (
+              <p key={event.id} className="network-event-line">
+                <span className="network-event-line__meta">
+                  {new Date(event.createdAt).toLocaleString()} — {event.action} {event.username} [{event.status}]
+                </span>
+                {hint ? <span className="network-event-line__hint">{hint}</span> : null}
+              </p>
+            );
+          })}
         </section>
 
         <section className="panel">
@@ -2288,6 +4356,11 @@ function App() {
           <p>
             Derniers instantanés depuis <strong>Collecter la télémétrie</strong> sur chaque nœud. Les compteurs
             alimentent le graphique du jour (sessions PPPoE / hotspot de pointe).
+          </p>
+          <p className="app-meta">
+            Les valeurs reflètent l&apos;instant de la collecte : peu de sessions peut être normal hors heures de pointe.
+            En cas de baisse brutale ou de zéro prolongé alors que le trafic attendu est élevé, vérifiez le nœud et la
+            connectivité API avant d&apos;ouvrir un ticket matériel.
           </p>
           {telemetrySnapshots.length === 0 ? (
             <p>Aucun instantané pour le moment.</p>
@@ -2330,9 +4403,11 @@ function App() {
           )}
         </section>
       </section>
+      </DashboardScreenGate>
 
-      <section className="grid">
-        {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
+      <section className="grid" id="team-settings">
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onUpsertNotificationProvider}>
             <h2>Fournisseurs de notifications</h2>
             <select
@@ -2514,66 +4589,73 @@ function App() {
 
       <section className="grid">
         <form className="panel" onSubmit={onSubmitTid}>
-          <h2>Mobile Money manuel (TID)</h2>
+          <h2>{t("Mobile Money manuel (TID)", "Manual Mobile Money (TID)")}</h2>
           <select
             value={tidForm.invoiceId}
             onChange={(e) => setTidForm({ ...tidForm, invoiceId: e.target.value })}
           >
-            <option value="">Choisir une facture ouverte (impayée / en retard)</option>
+            <option value="">
+              {t("Choisir une facture ouverte (impayée / en retard)", "Select an open invoice (unpaid / overdue)")}
+            </option>
             {invoices
               .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
               .map((inv) => (
                 <option key={inv.id} value={inv.id}>
-                  {inv.id.slice(0, 8)} - ${inv.amountUsd}
+                  {inv.id.slice(0, 8)} — ${inv.amountUsd} ({invoiceStatusShort(inv.status, isEn)})
                 </option>
               ))}
           </select>
           <input
-            placeholder="Référence de transaction (TID)"
+            placeholder={t("Référence de transaction (TID)", "Transaction reference (TID)")}
             value={tidForm.tid}
             onChange={(e) => setTidForm({ ...tidForm, tid: e.target.value })}
           />
           <input
-            placeholder="Téléphone payeur"
+            placeholder={t("Téléphone payeur", "Payer phone")}
             value={tidForm.submittedByPhone}
             onChange={(e) => setTidForm({ ...tidForm, submittedByPhone: e.target.value })}
           />
           <input
-            placeholder="Montant (facultatif)"
+            placeholder={t("Montant (facultatif)", "Amount (optional)")}
             value={tidForm.amountUsd}
             onChange={(e) => setTidForm({ ...tidForm, amountUsd: e.target.value })}
           />
           <button type="submit" disabled={!selectedIspId}>
-            Envoyer la TID
+            {t("Envoyer la TID", "Submit TID")}
           </button>
         </form>
 
         <section className="panel">
-          <h2>File de vérification des TID</h2>
-          <button onClick={onQueueTidReminders} disabled={!selectedIspId}>
-            Mettre en file les rappels TID en attente
+          <h2>{t("File de vérification des TID", "TID verification queue")}</h2>
+          <button type="button" onClick={onQueueTidReminders} disabled={!selectedIspId}>
+            {t("Mettre en file les rappels TID en attente", "Queue pending TID reminders")}
           </button>
           {tidSubmissions.map((row) => (
             <p key={row.id}>
-              {row.tid} — {row.status} — facture {row.invoiceId?.slice(0, 8)}{" "}
-              {(user.role === "super_admin" ||
+              {row.tid} — {tidSubmissionStatusLabel(row.status, isEn)} — {t("facture", "invoice")}{" "}
+              {row.invoiceId?.slice(0, 8)}{" "}
+              {(isPlatformSuperRole(user.role) ||
                 user.role === "company_manager" ||
                 user.role === "isp_admin" ||
                 user.role === "billing_agent") &&
                 row.status === "pending" && (
                   <>
-                    <button onClick={() => onReviewTid(row.id, "approved")}>Approuver</button>{" "}
-                    <button onClick={() => onReviewTid(row.id, "rejected")}>Rejeter</button>
+                    <button type="button" onClick={() => onReviewTid(row.id, "approved")}>
+                      {t("Approuver", "Approve")}
+                    </button>{" "}
+                    <button type="button" onClick={() => onReviewTid(row.id, "rejected")}>
+                      {t("Rejeter", "Reject")}
+                    </button>
                   </>
                 )}
             </p>
           ))}
           {tidConflicts.length > 0 && (
             <>
-              <h3>Conflits TID en double</h3>
+              <h3>{t("Conflits TID en double", "Duplicate TID conflicts")}</h3>
               {tidConflicts.map((c) => (
                 <p key={c.tid}>
-                  {c.tid} — {c.duplicates} envoi(s) — {c.statuses?.join(", ")}
+                  {c.tid} — {c.duplicates} {t("envoi(s)", "submission(s)")} — {c.statuses?.join(", ")}
                 </p>
               ))}
             </>
@@ -2591,7 +4673,7 @@ function App() {
             <option value="">Choisir une formule</option>
             {plans.map((plan) => (
               <option key={plan.id} value={plan.id}>
-                {plan.name} ({plan.rateLimit}, {plan.durationDays} days)
+                {plan.name} ({plan.rateLimit}, {plan.durationDays} {t("jours", "days")})
               </option>
             ))}
           </select>
@@ -2672,12 +4754,36 @@ function App() {
           <button type="submit" disabled={!selectedIspId}>
             Utiliser le bon
           </button>
-          <h3>Derniers bons</h3>
-          {vouchers.slice(0, 12).map((v) => (
-            <p key={v.id}>
-              {v.code} - {v.rateLimit} - {v.durationDays}d - devices {v.maxDevices ?? 1} - {v.status}
-            </p>
-          ))}
+          <DataTable
+            title={t("Derniers bons", "Latest vouchers")}
+            rows={voucherTableView.pageRows}
+            columns={[
+              { key: "code", header: t("Code", "Code"), sortKey: "code", cell: (v) => v.code || "—" },
+              { key: "rateLimit", header: t("Débit", "Speed"), sortKey: "rateLimit", cell: (v) => v.rateLimit || "—" },
+              {
+                key: "durationDays",
+                header: t("Durée", "Duration"),
+                sortKey: "durationDays",
+                cell: (v) => (v.durationDays != null ? `${v.durationDays}d` : "—")
+              },
+              {
+                key: "maxDevices",
+                header: t("Appareils", "Devices"),
+                sortKey: "maxDevices",
+                cell: (v) => (v.maxDevices != null ? String(v.maxDevices) : "—")
+              },
+              { key: "status", header: t("Statut", "Status"), sortKey: "status", cell: (v) => v.status || "—" }
+            ]}
+            searchValue={voucherTable.q}
+            onSearchValueChange={(q) => setVoucherTable((s) => ({ ...s, q, page: 1 }))}
+            page={voucherTable.page}
+            pageSize={voucherTable.pageSize}
+            totalRows={voucherTableView.total}
+            onPageChange={(page) => setVoucherTable((s) => ({ ...s, page }))}
+            onPageSizeChange={(pageSize) => setVoucherTable((s) => ({ ...s, pageSize, page: 1 }))}
+            sort={voucherTable.sort}
+            onSortChange={(sort) => setVoucherTable((s) => ({ ...s, sort }))}
+          />
         </form>
       </section>
 
@@ -2703,7 +4809,7 @@ function App() {
                 setPlatformSubForm({ ...platformSubForm, durationDays: e.target.value })
               }
             />
-            <button type="submit" disabled={!selectedIspId || user.role !== "super_admin"}>
+            <button type="submit" disabled={!selectedIspId || !isPlatformSuperRole(user.role)}>
               Attribuer la formule
             </button>
           </form>
@@ -2716,7 +4822,7 @@ function App() {
       </section>
 
       <section className="grid">
-        {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreateUser}>
             <h2>Créer un utilisateur équipe</h2>
             <input
@@ -2730,22 +4836,40 @@ function App() {
               onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
             />
             <input
-              placeholder="Mot de passe temporaire"
+              placeholder="Mot de passe (obligatoire seulement pour un nouvel e-mail)"
               type="password"
               value={userForm.password}
               onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+            />
+            <p className="app-meta">
+              Si l’e-mail existe déjà sur McBuleli, le compte est rattaché à ce FAI sans changer le mot de passe.
+            </p>
+            <input
+              placeholder="Téléphone (facultatif)"
+              value={userForm.phone}
+              onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
+            />
+            <input
+              placeholder="Adresse (facultatif)"
+              value={userForm.address}
+              onChange={(e) => setUserForm({ ...userForm, address: e.target.value })}
+            />
+            <input
+              placeholder="Site / zone affectée (facultatif)"
+              value={userForm.assignedSite}
+              onChange={(e) => setUserForm({ ...userForm, assignedSite: e.target.value })}
             />
             <select
               value={userForm.role}
               onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
             >
-              {user.role === "super_admin" && (
-                <option value="company_manager">Dirigeant entreprise (company_manager)</option>
+              {isPlatformSuperRole(user.role) && (
+                <option value="company_manager">Dirigeant entreprise</option>
               )}
-              <option value="isp_admin">Administrateur FAI (isp_admin)</option>
-              <option value="billing_agent">Agent facturation (billing_agent)</option>
-              <option value="noc_operator">Opérateur NOC (noc_operator)</option>
-              <option value="field_agent">Agent terrain (field_agent)</option>
+              <option value="isp_admin">Administrateur FAI</option>
+              <option value="billing_agent">Agent facturation</option>
+              <option value="noc_operator">Opérateur NOC</option>
+              <option value="field_agent">Agent terrain</option>
             </select>
             <select
               value={userForm.accreditationLevel}
@@ -2765,45 +4889,54 @@ function App() {
         )}
 
         <section className="panel">
-          <h2>Équipe du FAI</h2>
-          {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
+          <h2>{t("Équipe du FAI", "ISP team")}</h2>
+          {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
             <div style={{ marginBottom: 16 }}>
-              <h3>Import / export équipe (CSV)</h3>
+              <h3>{t("Import / export équipe (CSV)", "Import / export team (CSV)")}</h3>
               <p>
-                Téléchargez les comptes pour sauvegarde ou importez avec les colonnes : fullName, email, role, mot de
-                passe facultatif. Les lignes sans mot de passe utilisent le défaut ci-dessous (min. 6 caractères).
+                {t(
+                  "Téléchargez les comptes pour sauvegarde ou importez avec les colonnes : fullName, email, role, mot de passe facultatif. Les lignes sans mot de passe utilisent le défaut ci-dessous (min. 6 caractères).",
+                  "Download accounts for backup or import with columns: fullName, email, role, optional password. Rows without a password use the default below (min. 6 characters)."
+                )}
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                 <button type="button" onClick={onDownloadTeamUsersCsv} disabled={!selectedIspId}>
-                  Télécharger le CSV équipe
+                  {t("Télécharger le CSV équipe", "Download team users CSV")}
                 </button>
                 <button type="button" onClick={() => api.downloadTeamImportTemplate()}>
-                  Télécharger le modèle d'import
+                  {t("Télécharger le modèle d'import", "Download import template")}
                 </button>
               </div>
-              <p style={{ marginTop: 8, fontSize: "0.9em", color: "#444" }}>
-                Modèle : ligne d'en-tête uniquement — <code>fullName,email,role,password,accreditationLevel</code>.
-                Mot de passe vide = défaut ci-dessous ; rôle vide = rôle par défaut.
+              <p className="app-meta" style={{ marginTop: 8, fontSize: "0.9em" }}>
+                {t("Modèle : ligne d'en-tête uniquement —", "Template: header row only —")}{" "}
+                <code>fullName,email,role,password,accreditationLevel</code>.{" "}
+                {t(
+                  "Mot de passe vide = défaut ci-dessous ; rôle vide = rôle par défaut.",
+                  "Empty password = default below; empty role = default role."
+                )}
               </p>
               <form onSubmit={onImportTeamUsersCsv} style={{ marginTop: 12 }}>
                 <input ref={teamCsvInputRef} type="file" accept=".csv,text/csv" />
                 <input
                   type="password"
-                  placeholder="Mot de passe par défaut pour les lignes sans (min. 6)"
+                  placeholder={t(
+                    "Mot de passe par défaut pour les lignes sans (min. 6)",
+                    "Default password for rows without one (min. 6)"
+                  )}
                   value={teamImportPassword}
                   onChange={(e) => setTeamImportPassword(e.target.value)}
                 />
                 <select value={teamImportRole} onChange={(e) => setTeamImportRole(e.target.value)}>
-                  {user.role === "super_admin" && (
-                    <option value="company_manager">Dirigeant entreprise (company_manager)</option>
+                  {isPlatformSuperRole(user.role) && (
+                    <option value="company_manager">Dirigeant entreprise</option>
                   )}
-                  <option value="isp_admin">Administrateur FAI (isp_admin)</option>
-                  <option value="billing_agent">Agent facturation (billing_agent)</option>
-                  <option value="noc_operator">Opérateur NOC (noc_operator)</option>
-                  <option value="field_agent">Agent terrain (field_agent)</option>
+                  <option value="isp_admin">Administrateur FAI</option>
+                  <option value="billing_agent">Agent facturation</option>
+                  <option value="noc_operator">Opérateur NOC</option>
+                  <option value="field_agent">Agent terrain</option>
                 </select>
                 <button type="submit" disabled={!selectedIspId}>
-                  Importer le CSV équipe
+                  {t("Importer le CSV équipe", "Import team CSV")}
                 </button>
               </form>
               {teamImportReport ? (
@@ -2827,35 +4960,140 @@ function App() {
               <p>Expire : {generatedInvite.expiresIn}</p>
             </div>
           )}
-          {users.map((item) => (
-            <p key={item.id}>
-              {item.fullName} ({item.role}) — {item.email} [{item.isActive ? "actif" : "inactif"}]{" "}
-              {item.accreditationLevel ? `(${item.accreditationLevel})` : ""}{" "}
-              {(user.role === "super_admin" || user.role === "company_manager" || user.role === "isp_admin") && (
-                <>
-                  <button onClick={() => onResetPassword(item.id)}>Réinitialiser le mot de passe</button>{" "}
-                  <button onClick={() => onCreateInvite(item.id)}>Créer une invitation</button>{" "}
-                  {item.isActive && (
-                    <button onClick={() => onDeactivateUser(item.id)}>Désactiver</button>
-                  )}
-                  {!item.isActive && (
-                    <button onClick={() => onReactivateUser(item.id)}>Réactiver</button>
-                  )}
-                </>
-              )}
-            </p>
-          ))}
+          {users.map((item) => {
+            const d =
+              teamRowDraft[item.id] || {
+                role: item.role,
+                phone: item.phone || "",
+                address: item.address || "",
+                assignedSite: item.assignedSite || "",
+                accreditationLevel: item.accreditationLevel || "basic"
+              };
+            const canManageTeam =
+              isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin";
+            return (
+              <div key={item.id} className="panel" style={{ marginBottom: 12 }}>
+                <p style={{ marginTop: 0 }}>
+                  <strong>{item.fullName}</strong> — {item.email}{" "}
+                  <span className="app-meta">
+                    [
+                    {item.isActive ? "actif dans ce FAI" : "inactif dans ce FAI"}
+                    {item.userAccountActive === false ? " · compte global suspendu" : ""}]
+                  </span>
+                </p>
+                {canManageTeam ? (
+                  <div className="grid" style={{ gap: 8 }}>
+                    <select
+                      value={d.role}
+                      onChange={(e) =>
+                        setTeamRowDraft({
+                          ...teamRowDraft,
+                          [item.id]: { ...d, role: e.target.value }
+                        })
+                      }
+                    >
+                      {isPlatformSuperRole(user.role) && (
+                        <option value="company_manager">Dirigeant entreprise</option>
+                      )}
+                      <option value="isp_admin">Administrateur FAI</option>
+                      <option value="billing_agent">Agent facturation</option>
+                      <option value="noc_operator">Opérateur NOC</option>
+                      <option value="field_agent">Agent terrain</option>
+                    </select>
+                    <select
+                      value={d.accreditationLevel}
+                      onChange={(e) =>
+                        setTeamRowDraft({
+                          ...teamRowDraft,
+                          [item.id]: { ...d, accreditationLevel: e.target.value }
+                        })
+                      }
+                    >
+                      <option value="basic">Accréditation : basique</option>
+                      <option value="standard">Standard</option>
+                      <option value="senior">Senior</option>
+                      <option value="manager">Manager</option>
+                    </select>
+                    <input
+                      placeholder="Téléphone"
+                      value={d.phone}
+                      onChange={(e) =>
+                        setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, phone: e.target.value } })
+                      }
+                    />
+                    <input
+                      placeholder="Adresse"
+                      value={d.address}
+                      onChange={(e) =>
+                        setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, address: e.target.value } })
+                      }
+                    />
+                    <input
+                      placeholder="Site / zone"
+                      value={d.assignedSite}
+                      onChange={(e) =>
+                        setTeamRowDraft({
+                          ...teamRowDraft,
+                          [item.id]: { ...d, assignedSite: e.target.value }
+                        })
+                      }
+                    />
+                    <button type="button" onClick={() => onSaveTeamUser(item.id)}>
+                      Enregistrer fiche & rôle
+                    </button>
+                  </div>
+                ) : null}
+                {canManageTeam ? (
+                  <p style={{ marginBottom: 0 }}>
+                    <button type="button" onClick={() => onResetPassword(item.id)}>
+                      Réinitialiser le mot de passe
+                    </button>{" "}
+                    <button type="button" onClick={() => onCreateInvite(item.id)}>
+                      Créer une invitation
+                    </button>{" "}
+                    {item.isActive ? (
+                      <button type="button" onClick={() => onDeactivateUser(item.id)}>
+                        Désactiver dans ce FAI
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => onReactivateUser(item.id)}>
+                        Réactiver dans ce FAI
+                      </button>
+                    )}{" "}
+                    <button type="button" onClick={() => onSuspendUserGlobally(item.id)}>
+                      Suspendre compte (toutes entreprises)
+                    </button>{" "}
+                    {item.userAccountActive === false ? (
+                      <button type="button" onClick={() => onReactivateUserGlobally(item.id)}>
+                        Réactiver connexion (global)
+                      </button>
+                    ) : null}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })}
         </section>
       </section>
+      </DashboardScreenGate>
 
-      <section className="panel">
-        <h2>Journal d'audit récent</h2>
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
+      {user.role === "system_owner" ? (
+        <section className="panel" id="audit">
+          <h2>{t("Journal d'audit récent", "Recent audit log")}</h2>
+          <p className="app-meta">
+            {t(
+              "Réservé au propriétaire plateforme : historique des actions pour le FAI sélectionné.",
+              "Platform owner only: action history for the selected ISP."
+            )}
+          </p>
         {auditLogs.slice(0, 12).map((log) => (
           <p key={log.id}>
-            {new Date(log.createdAt).toLocaleString()} - {log.action} ({log.entityType})
+              {new Date(log.createdAt).toLocaleString()} — {log.action} ({log.entityType})
           </p>
         ))}
       </section>
+      ) : null}
 
       <section className="panel">
         <h2>File d'attente des notifications</h2>
@@ -2907,63 +5145,370 @@ function App() {
           </button>
         </form>
       </section>
+      </DashboardScreenGate>
+
+        </>
+      )}
+
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="dashboard">
+      <section className="grid metrics">
+        <Card title={t("Clients", "Customers")} value={dashboard?.totalCustomers ?? 0} />
+        <Card title={t("Abonnements actifs", "Active subscriptions")} value={dashboard?.activeSubscriptions ?? 0} />
+        <Card title={t("Factures impayées", "Unpaid invoices")} value={dashboard?.unpaidInvoices ?? 0} />
+        <Card title={t("Chiffre d'affaires (USD)", "Revenue (USD)")} value={dashboard?.revenueUsd ?? 0} />
+      </section>
 
       <section className="grid metrics">
-        <Card title="Clients" value={dashboard?.totalCustomers ?? 0} />
-        <Card title="Abonnements actifs" value={dashboard?.activeSubscriptions ?? 0} />
-        <Card title="Factures impayées" value={dashboard?.unpaidInvoices ?? 0} />
-        <Card title="Chiffre d'affaires (USD)" value={dashboard?.revenueUsd ?? 0} />
-        <Card
-          title={t("Sessions en ligne", "Online sessions")}
-          value={dashboard?.networkSessions ?? onlineSessions.length}
-          subtitle={t(
-            `Fenêtre ${dashboard?.networkSessionsWindowMinutes || onlineSessionsWindowMinutes} min`,
-            `${dashboard?.networkSessionsWindowMinutes || onlineSessionsWindowMinutes}-min window`
-          )}
-        />
-      </section>
+<section className="panel">
+  <Card title="Clients" value={dashboard?.totalCustomers ?? 0} />
+  <Card title="Abonnements actifs" value={dashboard?.activeSubscriptions ?? 0} />
+  <Card title="Factures impayées" value={dashboard?.unpaidInvoices ?? 0} />
+  <Card title="Chiffre d'affaires (USD)" value={dashboard?.revenueUsd ?? 0} />
 
-      <section className="panel">
-        <h2>{t("Abonnés en ligne (corrélation RADIUS)", "Online subscribers (RADIUS-correlated)")}</h2>
-        <p>
-          {t(
-            `Fenêtre active: ${onlineSessionsWindowMinutes} minutes. Les lignes ci-dessous lient username RADIUS -> client -> abonnement actif.`,
-            `Active window: ${onlineSessionsWindowMinutes} minutes. The rows below map RADIUS username -> customer -> active subscription.`
-          )}
-        </p>
-        {onlineSessions.length === 0 ? (
+  <Card
+    title={t("Sessions en ligne", "Online sessions")}
+    value={dashboard?.networkSessions ?? onlineSessions.length}
+    subtitle={t(
+      `Fenêtre ${dashboard?.networkSessionsWindowMinutes || onlineSessionsWindowMinutes} min`,
+      `${dashboard?.networkSessionsWindowMinutes || onlineSessionsWindowMinutes}-min window`
+    )}
+  />
+</section>
+
+<section className="panel">
+  <h2>{t("Abonnés en ligne (corrélation RADIUS)", "Online subscribers (RADIUS-correlated)")}</h2>
+
+  <p>
+    {t(
+      `Fenêtre active: ${onlineSessionsWindowMinutes} minutes. Les lignes ci-dessous lient username RADIUS -> client -> abonnement actif.`,
+      `Active window: ${onlineSessionsWindowMinutes} minutes. The rows below map RADIUS username -> customer -> active subscription.`
+    )}
+  </p>
+
+  {onlineSessions.length === 0 ? (
+    <p>
+      {t(
+        "Aucun abonné actif détecté dans la fenêtre actuelle.",
+        "No active subscribers detected in the current window."
+      )}
+    </p>
+  ) : (
+    onlineSessions.slice(0, 25).map((row) => (
+      <p key={row.ingestId}>
+        {new Date(row.seenAt).toLocaleString()} — {row.customerName || row.customerPhone || row.username} (
+        {row.username})
+        {row.planName ? ` · ${row.planName}` : ""}
+        {row.accessType ? ` · ${row.accessType}` : ""}
+        {row.framedIpAddress ? ` · IP ${row.framedIpAddress}` : ""}
+      </p>
+    ))
+  )}
+</section>
+
+<section className="panel">
+  <Card title={t("Cash encaissé (USD)", "Cash collected (USD)")} value={dashboard?.cashbox?.cashUsd ?? 0} />
+  <Card title={t("TID validés (USD)", "Validated TID (USD)")} value={dashboard?.cashbox?.tidUsd ?? 0} />
+  <Card title={t("Mobile Money Pawapay (USD)", "Mobile Money Pawapay (USD)")} value={dashboard?.cashbox?.mobileMoneyUsd ?? 0} />
+  <Card
+    title={t("Retirable Mobile Money (USD)", "Withdrawable Mobile Money (USD)")}
+    value={dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0}
+  />
+</section>
+      </section>
+      </DashboardScreenGate>
+
+      {isFieldAgent ? (
+        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="network">
+          <section className="panel">
+            <h2>{t("Réseau", "Network")}</h2>
+            <p className="app-meta">
+              {t(
+                "La configuration réseau (routeurs, RADIUS, télémétrie) est réservée aux administrateurs. En cas de panne d’accès abonné, contactez votre NOC ou votre responsable FAI.",
+                "Network configuration (routers, RADIUS, telemetry) is managed by administrators. If a subscriber cannot connect, contact your NOC or ISP manager."
+              )}
+            </p>
+          </section>
+        </DashboardScreenGate>
+      ) : null}
+
+      {isFieldAgent ? (
+        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
+          <section className="panel">
+            <h2>{t("Réglages", "Settings")}</h2>
+            <p className="app-meta">
+              {t(
+                "L’image de marque, les intégrations et la sécurité des retraits sont gérées par les administrateurs. Les contacts d’aide figurent en bas de l’application.",
+                "Branding, integrations, and withdrawal security are managed by administrators. Support contacts are listed at the bottom of the app."
+              )}
+            </p>
+          </section>
+        </DashboardScreenGate>
+      ) : null}
+
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
+      {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
+        <section className="panel" id="security-settings">
+          <h2>{t("Retrait Mobile Money sécurisé", "Secure Mobile Money withdrawal")}</h2>
           <p>
             {t(
-              "Aucun abonné actif détecté dans la fenêtre actuelle.",
-              "No active subscribers detected in the current window."
+              "Les retraits sont limités aux paiements Mobile Money confirmés via Pawapay. Les encaissements cash et TID manuel restent visibles dans les statistiques, mais ne sont pas retirables depuis le compte Pawapay.",
+              "Withdrawals are limited to Mobile Money payments confirmed via Pawapay. Cash and manual TID collections still appear in statistics but cannot be withdrawn from the Pawapay account."
             )}
           </p>
-        ) : (
-          onlineSessions.slice(0, 25).map((row) => (
-            <p key={row.ingestId}>
-              {new Date(row.seenAt).toLocaleString()} — {row.customerName || row.customerPhone || row.username} (
-              {row.username}){row.planName ? ` · ${row.planName}` : ""}
-              {row.accessType ? ` · ${row.accessType}` : ""}
-              {row.framedIpAddress ? ` · IP ${row.framedIpAddress}` : ""}
+          <section className="panel dashboard-totp-setup-card">
+            <h3>{t("Google Authenticator", "Google Authenticator")}</h3>
+            <p>
+              {t("Statut :", "Status:")}{" "}
+              {user.mfaTotpEnabled
+                ? t("configuré", "enabled")
+                : t("non configuré", "not configured")}
+              .{" "}
+              {t(
+                "Scannez l'URL otpauth avec Google Authenticator/Authy, puis validez avec le code à 6 chiffres.",
+                "Scan the otpauth URL with Google Authenticator or Authy, then confirm with the 6-digit code."
+              )}
             </p>
-          ))
-        )}
-      </section>
+            <button type="button" onClick={onStartTotpSetup} disabled={totpSetupLoading}>
+              {user.mfaTotpEnabled
+                ? t("Regénérer le secret MFA", "Regenerate MFA secret")
+                : t("Configurer Google Authenticator", "Set up Google Authenticator")}
+            </button>
+            {totpSetup ? (
+              <form onSubmit={onEnableTotp}>
+                <input readOnly value={totpSetup.secret || ""} />
+                <input readOnly value={totpSetup.otpauthUrl || ""} />
+                <input
+                  placeholder={t("Code Google Authenticator", "Google Authenticator code")}
+                  value={totpSetupCode}
+                  onChange={(e) => setTotpSetupCode(e.target.value)}
+                />
+                <button type="submit">{t("Activer MFA", "Enable MFA")}</button>
+              </form>
+            ) : null}
+          </section>
+          <form onSubmit={onCreateWithdrawal}>
+            <input
+              type="number"
+              min={withdrawalForm.currency === "CDF" ? "1000" : "0.5"}
+              step="0.01"
+              placeholder={
+                withdrawalForm.currency === "CDF"
+                  ? t("Montant à retirer (CDF)", "Amount to withdraw (CDF)")
+                  : t("Montant à retirer (USD)", "Amount to withdraw (USD)")
+              }
+              value={withdrawalForm.amountUsd}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, amountUsd: e.target.value })}
+            />
+            <select
+              value={withdrawalForm.currency}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, currency: e.target.value })}
+            >
+              <option value="USD">USD</option>
+              <option value="CDF">CDF</option>
+            </select>
+            <p style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+              {t(
+                "Le solde retirable est suivi en USD. Si vous choisissez CDF, le montant est converti au taux plateforme avant comparaison, puis envoyé à Pawapay en CDF.",
+                "Withdrawable balance is tracked in USD. If you choose CDF, the amount is converted at the platform rate before validation, then sent to Pawapay in CDF."
+              )}
+            </p>
+            <input
+              placeholder={t("Téléphone bénéficiaire", "Beneficiary phone")}
+              value={withdrawalForm.phoneNumber}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, phoneNumber: e.target.value })}
+            />
+            <select
+              value={withdrawalForm.networkKey}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, networkKey: e.target.value })}
+            >
+              {availablePawapayNetworks.map((n) => (
+                <option key={n.key} value={n.key}>
+                  {n.label}
+                </option>
+              ))}
+            </select>
+            <input
+              placeholder={t("Code Google Authenticator", "Google Authenticator code")}
+              value={withdrawalForm.mfaCode}
+              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, mfaCode: e.target.value })}
+            />
+            <button type="submit" disabled={!selectedIspId || !user.mfaTotpEnabled}>
+              {t("Valider le retrait", "Submit withdrawal")}
+            </button>
+          </form>
+          <DataTable
+            title={t("Historique des retraits", "Withdrawal history")}
+            rows={withdrawalTableView.pageRows}
+            columns={[
+              {
+                key: "createdAt",
+                header: t("Date", "Date"),
+                sortKey: "createdAt",
+                cell: (w) => (w.createdAt ? new Date(w.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "—")
+              },
+              {
+                key: "amount",
+                header: t("Montant", "Amount"),
+                sortKey: "amountUsd",
+                cell: (w) => `${w.amountUsd ?? "—"} ${w.currency || ""}`.trim()
+              },
+              { key: "phoneNumber", header: t("Destination", "Destination"), sortKey: "phoneNumber", cell: (w) => w.phoneNumber || "—" },
+              { key: "provider", header: t("Réseau", "Network"), sortKey: "provider", cell: (w) => w.provider || "—" },
+              {
+                key: "status",
+                header: t("Statut", "Status"),
+                sortKey: "status",
+                cell: (w) => `${withdrawalStatusLabel(w.status, isEn)}${w.failureMessage ? ` — ${w.failureMessage}` : ""}`
+              }
+            ]}
+            searchValue={withdrawalTable.q}
+            onSearchValueChange={(q) => setWithdrawalTable((s) => ({ ...s, q, page: 1 }))}
+            page={withdrawalTable.page}
+            pageSize={withdrawalTable.pageSize}
+            totalRows={withdrawalTableView.total}
+            onPageChange={(page) => setWithdrawalTable((s) => ({ ...s, page }))}
+            onPageSizeChange={(pageSize) => setWithdrawalTable((s) => ({ ...s, pageSize, page: 1 }))}
+            sort={withdrawalTable.sort}
+            onSortChange={(sort) => setWithdrawalTable((s) => ({ ...s, sort }))}
+          />
+        </section>
+      )}
+      </DashboardScreenGate>
 
-      {(user.role === "super_admin" ||
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
+      {!isFieldAgent &&
+        (isPlatformSuperRole(user.role) ||
         user.role === "company_manager" ||
         user.role === "isp_admin" ||
         user.role === "billing_agent" ||
         user.role === "noc_operator") && (
         <section className="expenses-section">
-          <h2>Dépenses &amp; suivi des fonds</h2>
+          <h2>{t("Dépenses & suivi des fonds", "Expenses & fund reporting")}</h2>
           <p className="expenses-lead">
-            Enregistrez les dépenses par rapport aux encaissements sur une période. Catégories : versements agents
-            (fixe ou pourcentage), équipement, exploitation, etc., pour une vision claire des sorties de trésorerie.
+            {t(
+              "Dépenses types d'un FAI : liaisons et transit (fibre, radio, location de tours), énergie sur sites, équipement (CPE, baies, onduleurs), salaires NOC et terrain, véhicule et carburant, licences et outils, marketing, impôts et cotisations, cloud et prestataires. Chaque catégorie sert à documenter les sorties de caisse pour les agents et la direction.",
+              "Typical ISP costs: backhaul and transit (fiber, radio, tower rent), on-site power, equipment (CPE, racks, UPS), NOC and field payroll, vehicle and fuel, licenses and tools, marketing, taxes and social contributions, cloud and vendors. Each category documents cash outflows for staff and management."
+            )}
           </p>
+          <p className="expenses-lead app-meta">
+            <strong>{t("Validation en deux étapes :", "Two-step validation:")}</strong>{" "}
+            {t(
+              "une fois la saisie enregistrée, la ligne est « En attente ». Un autre super administrateur, gestionnaire ou administrateur FAI doit l'approuver pour qu'elle entre dans les totaux « dépenses validées » utilisés pour le net (encaissements − dépenses). Si au moins deux validateurs sont inscrits sur l'espace, le demandeur ne peut pas approuver ni rejeter sa propre demande. Avec un seul validateur, l'auto-approbation reste possible (voir journal d'audit). Rejet : motif optionnel ; ligne retirée des totaux jusqu'à nouvelle soumission. Les rôles facturation et NOC consultent ; ils ne valident pas. Création, approbation, rejet et suppression tracent une opération d'audit. Les clôtures de période (bloc ci-dessous) figent les dépenses après inventaire ou révision.",
+              "once recorded, the line stays pending. Another super admin, company manager or ISP admin must approve it before it counts toward validated expenses used for net cash (collections − validated expenses). If at least two approvers are registered on the workspace, the requester cannot approve or reject their own request. With a single approver, self-approval may still apply (see audit log). Rejection: optional reason; the line is excluded from totals until resubmitted. Billing and NOC roles can view but cannot approve. Create, approve, reject and delete actions are audit-logged. Period closures (below) lock expenses after inventory or review."
+            )}
+            {user.role === "system_owner" ? (
+              <>
+                {" "}
+                {t("Détail :", "Detail:")}{" "}
+                <a href="#audit">{t("Journal d'audit récent", "Recent audit log")}</a>.
+              </>
+            ) : null}
+          </p>
+          <div className="panel accounting-closures-panel">
+            <h3>
+              {t("Clôtures comptables (révision / inventaire)", "Accounting closures (review / inventory)")}
+            </h3>
+            <p className="app-meta" style={{ maxWidth: "52rem" }}>
+              {t(
+                "Après inventaire ou contrôle, enregistrez une clôture sur une plage de dates. Toute dépense dont la période chevauche une clôture est figée : pas de nouvelle saisie, approbation, rejet ni suppression tant que la clôture existe. Aucune dépense « en attente » ne doit rester sur la plage au moment de la clôture. La levée d'une clôture est possible pour correction exceptionnelle et est inscrite au journal d'audit.",
+                "After inventory or controls, record a closure on a date range. Any expense whose period overlaps a closure is frozen: no new entry, approval, rejection or deletion while the closure exists. No pending expenses should remain on the range when you close. Reopening a closure is allowed for exceptional corrections and is audit-logged."
+              )}
+            </p>
+            {(isPlatformSuperRole(user.role) ||
+              user.role === "company_manager" ||
+              user.role === "isp_admin") && (
+              <form className="accounting-close-form" onSubmit={onCloseAccountingPeriod}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
+                  <label style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+                    {t("Début (clôture)", "Start date")}
+                    <input
+                      type="date"
+                      style={{ display: "block", marginTop: 4 }}
+                      value={periodCloseForm.periodStart}
+                      onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, periodStart: e.target.value })}
+                    />
+                  </label>
+                  <label style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+                    {t("Fin (inclus)", "End date (inclusive)")}
+                    <input
+                      type="date"
+                      style={{ display: "block", marginTop: 4 }}
+                      value={periodCloseForm.periodEnd}
+                      onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, periodEnd: e.target.value })}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-secondary-outline"
+                    onClick={() =>
+                      setPeriodCloseForm({
+                        ...periodCloseForm,
+                        periodStart: expenseFilter.from,
+                        periodEnd: expenseFilter.to
+                      })
+                    }
+                  >
+                    {t("Aligner sur le filtre du rapport", "Match report filter dates")}
+                  </button>
+                </div>
+                <input
+                  placeholder={t(
+                    "Référence inventaire ou commentaire (facultatif)",
+                    "Inventory reference or note (optional)"
+                  )}
+                  value={periodCloseForm.note}
+                  onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, note: e.target.value })}
+                  style={{ marginTop: 10, width: "100%", maxWidth: "36rem" }}
+                />
+                <button type="submit" disabled={!selectedIspId} style={{ marginTop: 12 }}>
+                  {t("Clôturer cette période", "Close this period")}
+                </button>
+              </form>
+            )}
+            <h4 style={{ marginTop: 18, marginBottom: 8, fontSize: "0.95rem" }}>
+              {t("Clôtures enregistrées", "Recorded closures")}
+            </h4>
+            {accountingPeriodClosures.length === 0 ? (
+              <p className="app-meta">
+                {t(
+                  "Aucune clôture pour cet espace — toutes les périodes sont ouvertes à la saisie.",
+                  "No closures for this workspace — all periods are open for entry."
+                )}
+              </p>
+            ) : (
+              <ul className="accounting-closures-list">
+                {accountingPeriodClosures.map((c) => (
+                  <li key={c.id}>
+                    <strong>
+                      {c.periodStart} → {c.periodEnd}
+                    </strong>
+                    {c.note ? ` — ${c.note}` : ""}
+                    <span className="app-meta">
+                      {" "}
+                      (
+                      {t("clôturée le", "closed on")}{" "}
+                      {c.closedAt ? new Date(c.closedAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "—"}
+                      {c.closedByName ? ` ${t("· par", "· by")} ${c.closedByName}` : ""})
+                    </span>
+                    {(isPlatformSuperRole(user.role) ||
+                      user.role === "company_manager" ||
+                      user.role === "isp_admin") && (
+                      <button
+                        type="button"
+                        className="btn-secondary-outline accounting-closure-reopen"
+                        onClick={() => onReopenAccountingPeriod(c.id)}
+                      >
+                        {t("Lever la clôture", "Reopen closure")}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <div className="expenses-filter">
             <label>
-              Du
+              {t("Du", "From")}
               <input
                 type="date"
                 value={expenseFilter.from}
@@ -2971,7 +5516,7 @@ function App() {
               />
             </label>
             <label>
-              Au
+              {t("Au", "To")}
               <input
                 type="date"
                 value={expenseFilter.to}
@@ -2979,13 +5524,13 @@ function App() {
               />
             </label>
             <button type="button" disabled={!selectedIspId} onClick={() => refresh()}>
-              Appliquer la période
+              {t("Appliquer la période", "Apply range")}
             </button>
           </div>
           {expenseSummary ? (
             <div className="expenses-summary">
               <div className="expenses-summary-card expenses-summary-card--green">
-                <span>Encaissé (paiements confirmés)</span>
+                <span>{t("Encaissé (paiements confirmés)", "Collected (confirmed payments)")}</span>
                 <strong>
                   {(expenseSummary.collectionsInPeriodUsd ?? 0).toLocaleString(undefined, {
                     style: "currency",
@@ -2994,7 +5539,7 @@ function App() {
                 </strong>
               </div>
               <div className="expenses-summary-card">
-                <span>Total dépenses (saisies)</span>
+                <span>{t("Dépenses validées (approuvées)", "Validated expenses (approved)")}</span>
                 <strong>
                   {(expenseSummary.totalExpensesUsd ?? 0).toLocaleString(undefined, {
                     style: "currency",
@@ -3003,7 +5548,18 @@ function App() {
                 </strong>
               </div>
               <div className="expenses-summary-card">
-                <span>Net (encaissements − dépenses)</span>
+                <span>{t("En attente de validation", "Pending approval")}</span>
+                <strong>
+                  {(expenseSummary.pendingExpensesUsd ?? 0).toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD"
+                  })}
+                </strong>
+              </div>
+              <div className="expenses-summary-card">
+                <span>
+                  {t("Net (encaissements − dépenses validées)", "Net (collections − validated expenses)")}
+                </span>
                 <strong>
                   {(
                     (expenseSummary.collectionsInPeriodUsd ?? 0) - (expenseSummary.totalExpensesUsd ?? 0)
@@ -3016,13 +5572,13 @@ function App() {
             </div>
           ) : null}
           <div className="expenses-layout">
-            {(user.role === "super_admin" ||
+            {(isPlatformSuperRole(user.role) ||
               user.role === "company_manager" ||
               user.role === "isp_admin") && (
               <form className="panel expenses-form" onSubmit={onCreateExpense}>
-                <h3>Nouvelle dépense</h3>
+                <h3>{t("Nouvelle dépense", "New expense")}</h3>
                 <label style={{ display: "block", marginBottom: 8, fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                  Catégorie
+                  {t("Catégorie", "Category")}
                   <select
                     style={{ display: "block", width: "100%", marginTop: 4 }}
                     value={expenseForm.category}
@@ -3039,7 +5595,7 @@ function App() {
                   >
                     {EXPENSE_CATEGORY_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
-                        {o.label}
+                        {isEn ? o.labelEn : o.labelFr}
                       </option>
                     ))}
                   </select>
@@ -3048,18 +5604,18 @@ function App() {
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="Montant (USD)"
+                  placeholder={t("Montant (USD)", "Amount (USD)")}
                   value={expenseForm.amountUsd}
                   onChange={(e) => setExpenseForm({ ...expenseForm, amountUsd: e.target.value })}
                 />
                 <input
-                  placeholder="Description (facultatif)"
+                  placeholder={t("Description (facultatif)", "Description (optional)")}
                   value={expenseForm.description}
                   onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
                 />
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
                   <label style={{ flex: "1 1 140px", fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                    Début de période
+                    {t("Début de période", "Period start")}
                     <input
                       type="date"
                       style={{ display: "block", width: "100%", marginTop: 4 }}
@@ -3068,7 +5624,7 @@ function App() {
                     />
                   </label>
                   <label style={{ flex: "1 1 140px", fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                    Fin de période
+                    {t("Fin de période", "Period end")}
                     <input
                       type="date"
                       style={{ display: "block", width: "100%", marginTop: 4 }}
@@ -3087,20 +5643,20 @@ function App() {
                       })
                     }
                   >
-                    Aligner sur le rapport
+                    {t("Aligner sur le rapport", "Match report")}
                   </button>
                 </div>
                 {(expenseForm.category === "field_agent_fixed" ||
                   expenseForm.category === "field_agent_percentage") && (
                   <>
                     <label style={{ display: "block", marginTop: 10, fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                      Agent terrain
+                      {t("Agent terrain", "Field agent")}
                       <select
                         style={{ display: "block", width: "100%", marginTop: 4 }}
                         value={expenseForm.fieldAgentId}
                         onChange={(e) => setExpenseForm({ ...expenseForm, fieldAgentId: e.target.value })}
                       >
-                        <option value="">Choisir un agent</option>
+                        <option value="">{t("Choisir un agent", "Choose an agent")}</option>
                         {users
                           .filter((u) => u.role === "field_agent")
                           .map((u) => (
@@ -3116,7 +5672,10 @@ function App() {
                         min="0.01"
                         max="100"
                         step="0.01"
-                        placeholder="Commission % (base CA ou encaissements)"
+                        placeholder={t(
+                          "Commission % (base CA ou encaissements)",
+                          "Commission % (revenue or collections basis)"
+                        )}
                         value={expenseForm.agentPayoutPercent}
                         onChange={(e) => setExpenseForm({ ...expenseForm, agentPayoutPercent: e.target.value })}
                       />
@@ -3127,66 +5686,181 @@ function App() {
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="Base CA USD (facultatif, traçabilité)"
+                  placeholder={t(
+                    "Base CA USD (facultatif, traçabilité)",
+                    "Revenue basis USD (optional, for audit trail)"
+                  )}
                   value={expenseForm.revenueBasisUsd}
                   onChange={(e) => setExpenseForm({ ...expenseForm, revenueBasisUsd: e.target.value })}
                 />
                 <button type="submit" disabled={!selectedIspId}>
-                  Enregistrer la dépense
+                  {t("Enregistrer la dépense", "Save expense")}
                 </button>
               </form>
             )}
             <div className="panel expenses-list">
-              <h3>Lignes sur la période</h3>
+              <h3>{t("Lignes sur la période", "Lines in this period")}</h3>
               {expenses.length === 0 ? (
                 <p style={{ color: "var(--mb-muted)", fontSize: "0.9rem" }}>
-                  Aucune dépense ne chevauche ces dates, ou les données se chargent encore.
+                  {t(
+                    "Aucune dépense ne chevauche ces dates, ou les données se chargent encore.",
+                    "No expenses overlap these dates, or data is still loading."
+                  )}
                 </p>
               ) : (
-                expenses.map((ex) => (
-                  <div key={ex.id} className="expenses-row">
-                    <div>
-                      <strong>
-                        {(ex.amountUsd ?? 0).toLocaleString(undefined, { style: "currency", currency: "USD" })}
-                      </strong>{" "}
-                      — {expenseCategoryLabel(ex.category)}
-                    </div>
-                    {ex.description ? <div>{ex.description}</div> : null}
-                    <div className="expenses-row-meta">
-                      Période {ex.periodStart} → {ex.periodEnd}
-                      {ex.fieldAgentName ? ` · Agent : ${ex.fieldAgentName}` : ""}
-                      {ex.category === "field_agent_percentage" && ex.agentPayoutPercent != null
-                        ? ` · ${ex.agentPayoutPercent}%`
-                        : ""}
-                      {ex.revenueBasisUsd != null
-                        ? ` · Base CA ${Number(ex.revenueBasisUsd).toLocaleString(undefined, {
-                            style: "currency",
-                            currency: "USD"
-                          })}`
-                        : ""}
-                      {ex.createdByName ? ` · Saisi par ${ex.createdByName}` : ""}
-                    </div>
-                    {(user.role === "super_admin" ||
-                      user.role === "company_manager" ||
-                      user.role === "isp_admin") && (
-                      <button
-                        type="button"
-                        className="btn-expense-delete"
-                        disabled={!selectedIspId}
-                        onClick={() => onDeleteExpense(ex.id)}
+                <DataTable
+                  title={null}
+                  rows={expenseTableView.pageRows}
+                  columns={[
+                    {
+                      key: "amountUsd",
+                      header: t("Montant", "Amount"),
+                      sortKey: "amountUsd",
+                      cell: (ex) =>
+                        (ex.amountUsd ?? 0).toLocaleString(undefined, { style: "currency", currency: "USD" })
+                    },
+                    {
+                      key: "status",
+                      header: t("Statut", "Status"),
+                      sortKey: "status",
+                      cell: (ex) => {
+                        const st = ex.status || "pending";
+                        return (
+                          <span className={`expense-status-badge expense-status-badge--${st}`}>
+                            {expenseApprovalStatusLabel(st, isEn)}
+                          </span>
+                        );
+                      }
+                    },
+                    {
+                      key: "category",
+                      header: t("Catégorie", "Category"),
+                      sortKey: "category",
+                      cell: (ex) => expenseCategoryLabel(ex.category, isEn)
+                    },
+                    {
+                      key: "period",
+                      header: t("Période", "Period"),
+                      cell: (ex) => `${ex.periodStart || "—"} → ${ex.periodEnd || "—"}`
+                    },
+                    {
+                      key: "meta",
+                      header: t("Traçabilité", "Trace"),
+                      cell: (ex) => {
+                        const st = ex.status || "pending";
+                        return (
+                          <div style={{ display: "grid", gap: 4, minWidth: 220 }}>
+                            {ex.description ? <div>{ex.description}</div> : <div className="app-meta">—</div>}
+                            <div className="app-meta" style={{ margin: 0 }}>
+                              {ex.createdByName ? `${t("Saisi par", "Entered by")} ${ex.createdByName}` : "—"}
+                              {ex.fieldAgentName ? ` · ${t("Agent", "Agent")}: ${ex.fieldAgentName}` : ""}
+                            </div>
+                            {st === "approved" && (ex.approvedByName || ex.approvedAt) ? (
+                              <div className="app-meta" style={{ margin: 0 }}>
+                                {t("Approuvé", "Approved")}
+                                {ex.approvedByName ? ` ${t("par", "by")} ${ex.approvedByName}` : ""}
+                                {ex.approvedAt
+                                  ? ` — ${new Date(ex.approvedAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}`
+                                  : ""}
+                              </div>
+                            ) : null}
+                            {st === "rejected" ? (
+                              <div className="app-meta expenses-row-meta--warn" style={{ margin: 0 }}>
+                                {t("Rejet", "Rejected")}
+                                {ex.rejectedByName ? ` ${t("par", "by")} ${ex.rejectedByName}` : ""}
+                                {ex.rejectionNote ? ` · ${ex.rejectionNote}` : ""}
+                              </div>
+                            ) : null}
+                            {ex.periodClosed ? (
+                              <div className="app-meta" style={{ margin: 0 }}>
+                                {t("Période clôturée", "Period closed")}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      }
+                    },
+                    {
+                      key: "actions",
+                      header: t("Actions", "Actions"),
+                      cell: (ex) => {
+                        const st = ex.status || "pending";
+                        return (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, minWidth: 220 }}>
+                            {ex.canApprove ? (
+                              <button
+                                type="button"
+                                className="btn-expense-approve"
+                                disabled={!selectedIspId}
+                                onClick={() => onApproveExpense(ex.id)}
+                              >
+                                {t("Approuver", "Approve")}
+                              </button>
+                            ) : null}
+                            {ex.canReject ? (
+                              <button
+                                type="button"
+                                className="btn-expense-reject"
+                                disabled={!selectedIspId}
+                                onClick={() => onRejectExpense(ex.id)}
+                              >
+                                {t("Rejeter", "Reject")}
+                              </button>
+                            ) : null}
+                            {(isPlatformSuperRole(user.role) ||
+                              user.role === "company_manager" ||
+                              user.role === "isp_admin") &&
+                            (st === "pending" || st === "rejected") &&
+                            !ex.periodClosed ? (
+                              <button
+                                type="button"
+                                className="btn-expense-delete"
+                                disabled={!selectedIspId}
+                                onClick={() => onDeleteExpense(ex.id)}
+                              >
+                                {t("Supprimer", "Delete")}
+                              </button>
+                            ) : null}
+                          </div>
+                        );
+                      }
+                    }
+                  ]}
+                  searchValue={expenseTable.q}
+                  onSearchValueChange={(q) => setExpenseTable((s) => ({ ...s, q, page: 1 }))}
+                  filters={
+                    <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                      <span>{t("Statut", "Status")}</span>
+                      <select
+                        value={expenseTable.status}
+                        onChange={(e) => setExpenseTable((s) => ({ ...s, status: e.target.value, page: 1 }))}
                       >
-                        Supprimer
-                      </button>
-                    )}
-                  </div>
-                ))
+                        <option value="all">{t("Tous", "All")}</option>
+                        <option value="pending">{t("En attente", "Pending")}</option>
+                        <option value="approved">{t("Approuvé", "Approved")}</option>
+                        <option value="rejected">{t("Rejeté", "Rejected")}</option>
+                      </select>
+                    </label>
+                  }
+                  page={expenseTable.page}
+                  pageSize={expenseTable.pageSize}
+                  totalRows={expenseTableView.total}
+                  onPageChange={(page) => setExpenseTable((s) => ({ ...s, page }))}
+                  onPageSizeChange={(pageSize) => setExpenseTable((s) => ({ ...s, pageSize, page: 1 }))}
+                  sort={expenseTable.sort}
+                  onSortChange={(sort) => setExpenseTable((s) => ({ ...s, sort }))}
+                />
               )}
             </div>
           </div>
         </section>
       )}
+      </DashboardScreenGate>
 
-      <section className="grid">
+      <section className="grid" id="field-clients">
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
+        {!isFieldAgent ? (
+          <>
         <form className="panel" onSubmit={onCreateCustomer}>
           <h2>Créer un client</h2>
           <input
@@ -3210,42 +5884,63 @@ function App() {
             value={customerForm.initialPassword}
             onChange={(e) => setCustomerForm({ ...customerForm, initialPassword: e.target.value })}
           />
+          <label className="app-meta" style={{ display: "block", marginBottom: 8 }}>
+            Agent terrain (facultatif)
+            <select
+              value={customerForm.fieldAgentId}
+              onChange={(e) => setCustomerForm({ ...customerForm, fieldAgentId: e.target.value })}
+              style={{ display: "block", width: "100%", marginTop: 4 }}
+            >
+              <option value="">— Aucun —</option>
+              {fieldTeamUsers.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.fullName}
+                </option>
+              ))}
+            </select>
+          </label>
           <button type="submit" disabled={!selectedIspId}>
             Enregistrer le client
           </button>
         </form>
 
         <div className="panel">
-          <h2>Import / export clients (CSV)</h2>
+          <h2>{t("Import / export clients (CSV)", "Import / export customers (CSV)")}</h2>
           <p>
-            Téléchargez votre liste d'abonnés ou importez depuis un autre outil ou un export MikroTik (colonnes du
-            type nom, secret → nom abonné et mot de passe portail facultatif). Les doublons de téléphone pour ce FAI
-            sont ignorés.
+            {t(
+              "Téléchargez votre liste d'abonnés ou importez depuis un autre outil ou un export MikroTik (colonnes du type nom, secret → nom abonné et mot de passe portail facultatif). Les doublons de téléphone pour ce FAI sont ignorés.",
+              "Download your subscriber list or import from another tool or a MikroTik export (e.g. name, secret → subscriber name and optional portal password). Duplicate phone numbers for this ISP are skipped."
+            )}
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <button type="button" onClick={onDownloadCustomersCsv} disabled={!selectedIspId}>
-              Télécharger le CSV clients
+              {t("Télécharger le CSV clients", "Download customers CSV")}
             </button>
             <button type="button" onClick={() => api.downloadCustomerImportTemplate()}>
-              Télécharger le modèle d'import
+              {t("Télécharger le modèle d'import", "Download import template")}
             </button>
           </div>
-          <p style={{ marginTop: 8, fontSize: "0.9em", color: "#444" }}>
-            Modèle : ligne d'en-tête uniquement — <code>fullName,phone,email,password</code>. E-mail et mot de passe
-            facultatifs par ligne (utilisez le mot de passe par défaut ci-dessous si vide). MikroTik exporte souvent{" "}
-            <code>name</code> — copiez dans <code>fullName</code> et <code>phone</code> ou renommez l'en-tête pour
-            correspondre.
+          <p className="app-meta" style={{ marginTop: 8, fontSize: "0.9em" }}>
+            {t("Modèle : ligne d'en-tête uniquement —", "Template: header row only —")}{" "}
+            <code>fullName,phone,email,password</code>.{" "}
+            {t(
+              "E-mail et mot de passe facultatifs par ligne (utilisez le mot de passe par défaut ci-dessous si vide). MikroTik exporte souvent name — copiez dans fullName et phone ou renommez l'en-tête pour correspondre.",
+              "Email and password are optional per row (use the default password below if empty). MikroTik often exports name — copy into fullName and phone, or rename the header to match."
+            )}
           </p>
           <form onSubmit={onImportCustomersCsv} style={{ marginTop: 12 }}>
             <input ref={customerCsvInputRef} type="file" accept=".csv,text/csv" />
             <input
               type="password"
-              placeholder="Mot de passe portail par défaut pour les lignes sans (facultatif, min. 6 car.)"
+              placeholder={t(
+                "Mot de passe portail par défaut pour les lignes sans (facultatif, min. 6 car.)",
+                "Default portal password for rows without one (optional, min. 6 chars)"
+              )}
               value={customerImportPassword}
               onChange={(e) => setCustomerImportPassword(e.target.value)}
             />
             <button type="submit" disabled={!selectedIspId}>
-              Importer CSV
+              {t("Importer CSV", "Import CSV")}
             </button>
           </form>
           {customerImportReport ? (
@@ -3258,12 +5953,74 @@ function App() {
           ) : null}
         </div>
 
+        <div className="panel">
+          <h2>{t("Utilisateurs", "Users")}</h2>
+          <DataTable
+            title={t("Clients", "Clients")}
+            description={t("Liste standardisée (recherche, tri, pagination).", "Standardized list (search, sort, pagination).")}
+            rows={customerTableView.pageRows}
+            columns={[
+              { key: "fullName", header: t("Nom", "Name"), sortKey: "fullName", cell: (c) => c.fullName || "—" },
+              { key: "phone", header: t("Téléphone", "Phone"), sortKey: "phone", cell: (c) => c.phone || "—" },
+              { key: "email", header: "Email", sortKey: "email", cell: (c) => c.email || "—" },
+              {
+                key: "fieldAgentName",
+                header: t("Agent", "Agent"),
+                sortKey: "fieldAgentName",
+                cell: (c) => c.fieldAgentName || "—"
+              },
+              {
+                key: "actions",
+                header: t("Actions", "Actions"),
+                cell: (c) => (
+                  <button
+                    type="button"
+                    className="btn-secondary-outline"
+                    onClick={() =>
+                      setCustomerEmailForm({
+                        customerId: c.id,
+                        email: c.email || "",
+                        fieldAgentId: c.fieldAgentId || ""
+                      })
+                    }
+                  >
+                    {t("Modifier", "Edit")}
+                  </button>
+                )
+              }
+            ]}
+            searchValue={customerTable.q}
+            onSearchValueChange={(q) => setCustomerTable((s) => ({ ...s, q, page: 1 }))}
+            page={customerTable.page}
+            pageSize={customerTable.pageSize}
+            totalRows={customerTableView.total}
+            onPageChange={(page) => setCustomerTable((s) => ({ ...s, page }))}
+            onPageSizeChange={(pageSize) => setCustomerTable((s) => ({ ...s, pageSize, page: 1 }))}
+            sort={customerTable.sort}
+            onSortChange={(sort) => setCustomerTable((s) => ({ ...s, sort }))}
+          />
+        </div>
+          </>
+        ) : null}
+
         <form className="panel" onSubmit={onPatchCustomerEmail}>
-          <h2>Mettre à jour l'e-mail client</h2>
-          <p>Pour les e-mails de facturation de renouvellement lorsque le canal utilise SMTP.</p>
+          <h2>{isFieldAgent ? "E-mail client (clients assignés)" : "E-mail et agent terrain"}</h2>
+          <p>
+            {isFieldAgent
+              ? "Vous pouvez mettre à jour l’adresse e-mail des abonnés qui vous sont assignés."
+              : "E-mail pour les renouvellements (SMTP) et attribution d’un agent terrain pour le suivi sur le terrain."}
+          </p>
           <select
             value={customerEmailForm.customerId}
-            onChange={(e) => setCustomerEmailForm({ ...customerEmailForm, customerId: e.target.value })}
+            onChange={(e) => {
+              const id = e.target.value;
+              const cst = customers.find((c) => c.id === id);
+              setCustomerEmailForm({
+                customerId: id,
+                email: cst?.email || "",
+                fieldAgentId: cst?.fieldAgentId || ""
+              });
+            }}
           >
             <option value="">Choisir un client</option>
             {customers.map((cst) => (
@@ -3278,12 +6035,41 @@ function App() {
             value={customerEmailForm.email}
             onChange={(e) => setCustomerEmailForm({ ...customerEmailForm, email: e.target.value })}
           />
+          {!isFieldAgent &&
+          (isPlatformSuperRole(user.role) ||
+            user.role === "company_manager" ||
+            user.role === "isp_admin" ||
+            user.role === "billing_agent") ? (
+            <label className="app-meta" style={{ display: "block", marginBottom: 8 }}>
+              Agent terrain
+              <select
+                value={customerEmailForm.fieldAgentId || ""}
+                onChange={(e) =>
+                  setCustomerEmailForm({ ...customerEmailForm, fieldAgentId: e.target.value })
+                }
+                style={{ display: "block", width: "100%", marginTop: 4 }}
+              >
+                <option value="">— Aucun —</option>
+                {fieldTeamUsers.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.fullName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <button type="submit" disabled={!selectedIspId || !customerEmailForm.customerId}>
-            Enregistrer l'e-mail
+            {isFieldAgent ? "Enregistrer l'e-mail" : "Enregistrer e-mail et agent"}
           </button>
         </form>
+      </DashboardScreenGate>
 
-        {(user.role === "super_admin" ||
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        ids={isFieldAgent ? ["billing"] : ["users"]}
+      >
+        {(isPlatformSuperRole(user.role) ||
           user.role === "company_manager" ||
           user.role === "isp_admin" ||
           user.role === "billing_agent" ||
@@ -3334,7 +6120,11 @@ function App() {
             )}
           </form>
         )}
+      </DashboardScreenGate>
 
+      {!isFieldAgent ? (
+        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
+        <>
         <form className="panel" onSubmit={onCreatePlan}>
           <h2>Créer une formule Wi‑Fi / accès</h2>
           <input
@@ -3401,18 +6191,6 @@ function App() {
           <button type="submit" disabled={!selectedIspId}>
             Enregistrer la formule
           </button>
-          {selectedIspId && (
-            <p>
-              <small>
-                Lien invité :{" "}
-                <code>
-                  {typeof window !== "undefined"
-                    ? `${window.location.origin}/wifi?ispId=${selectedIspId}`
-                    : "/wifi?ispId=…"}
-                </code>
-              </small>
-            </p>
-          )}
         </form>
 
         <form className="panel" onSubmit={onSavePlanPatch}>
@@ -3514,6 +6292,19 @@ function App() {
           </button>
         </form>
 
+        {selectedIspId ? (
+          <div className="panel">
+            <h2>{t("Page d’achat Wi‑Fi invité", "Guest Wi‑Fi purchase page")}</h2>
+            <p className="app-meta" style={{ marginTop: 0 }}>
+              {t(
+                "Même lien pour toutes les formules publiées : partagez-le ou le QR code près du point d’accès.",
+                "Same link for all published plans—share it or the QR code near the access point."
+              )}
+            </p>
+            <GuestWifiShare ispId={selectedIspId} caption={t("Lien invité Wi‑Fi", "Wi‑Fi guest link")} t={t} />
+          </div>
+        ) : null}
+
         <form className="panel" onSubmit={onCreateSubscription}>
           <h2>Créer un abonnement</h2>
           <select
@@ -3549,42 +6340,83 @@ function App() {
             Activer l'abonnement
           </button>
         </form>
+          </>
+        </DashboardScreenGate>
+        ) : null}
       </section>
 
-      <section className="panel">
-        <h2>Factures</h2>
-        <div className="table">
-          <div className="row header">
-            <span>ID</span>
-            <span>Montant</span>
-            <span>Statut</span>
-            <span>Action</span>
-          </div>
-          {invoices.map((invoice) => (
-            <div className="row" key={invoice.id}>
-              <span>{invoice.id.slice(0, 8)}</span>
-              <span>${invoice.amountUsd}</span>
-              <span>{invoice.status}</span>
-              <span>
-                {invoice.status === "unpaid" || invoice.status === "overdue" ? (
-                  <button onClick={() => onMarkPaid(invoice.id, invoice.amountUsd)}>Marquer payée</button>
+      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
+      <section className="panel billing-invoices-panel">
+        <h2>{t("Factures", "Invoices")}</h2>
+        <DataTable
+          title={null}
+          rows={invoiceTableView.pageRows}
+          columns={[
+            {
+              key: "id",
+              header: "ID",
+              cell: (inv) => String(inv.id || "").slice(0, 8)
+            },
+            {
+              key: "amountUsd",
+              header: t("Montant", "Amount"),
+              sortKey: "amountUsd",
+              cell: (inv) => `$${inv.amountUsd ?? "—"}`
+            },
+            {
+              key: "status",
+              header: t("Statut", "Status"),
+              sortKey: "status",
+              cell: (inv) => invoiceStatusShort(inv.status, isEn)
+            },
+            {
+              key: "payment",
+              header: t("Paiement", "Payment"),
+              cell: (inv) =>
+                inv.status === "unpaid" || inv.status === "overdue" ? (
+                  !isFieldAgent ? (
+                    <button type="button" onClick={() => onMarkPaid(inv.id, inv.amountUsd)}>
+                      {t("Marquer payée", "Mark paid")}
+                    </button>
+                  ) : (
+                    "—"
+                  )
                 ) : (
-                  "Payée"
-                )}
-              </span>
-            </div>
-          ))}
-        </div>
+                  t("Payée", "Paid")
+                )
+            },
+            {
+              key: "pdf",
+              header: "PDF",
+              cell: (inv) => (
+                <button type="button" className="btn-secondary-outline" onClick={() => onDownloadInvoiceProforma(inv.id)}>
+                  {t("Proforma", "Proforma")}
+                </button>
+              )
+            }
+          ]}
+          searchValue={invoiceTable.q}
+          onSearchValueChange={(q) => setInvoiceTable((s) => ({ ...s, q, page: 1 }))}
+          page={invoiceTable.page}
+          pageSize={invoiceTable.pageSize}
+          totalRows={invoiceTableView.total}
+          onPageChange={(page) => setInvoiceTable((s) => ({ ...s, page }))}
+          onPageSizeChange={(pageSize) => setInvoiceTable((s) => ({ ...s, pageSize, page: 1 }))}
+          sort={invoiceTable.sort}
+          onSortChange={(sort) => setInvoiceTable((s) => ({ ...s, sort }))}
+        />
       </section>
 
       <section className="panel">
-        <h2>Abonnements</h2>
+        <h2>{t("Abonnements", "Subscriptions")}</h2>
         {subscriptions.map((subscription) => (
           <p key={subscription.id}>
             {subscription.id.slice(0, 8)} - {subscription.status} ({subscription.accessType || "pppoe"})
             {subscription.maxSimultaneousDevices != null
               ? ` — appareils ${subscription.maxSimultaneousDevices}`
               : ""}{" "}
+            {!isFieldAgent ? (
+              <>
             {subscription.status !== "suspended" ? (
               <button onClick={() => onSuspendSubscription(subscription.id)}>Suspendre</button>
             ) : (
@@ -3596,15 +6428,85 @@ function App() {
             <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "suspend")}>
               Sync suspendre
             </button>
+              </>
+            ) : null}
           </p>
         ))}
       </section>
+      </DashboardScreenGate>
 
-      <footer className="app-footer">
-        <span className="app-footer-brand">McBuleli</span>
-        <span className="app-footer-note">Facturation FAI &amp; opérations réseau</span>
+        </div>
+      </div>
+
+      <footer className="app-footer app-footer--dashboard" id="dashboard-support-hub">
+        <div className="app-footer-inner">
+          {(() => {
+            const orgTitle =
+              workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) ||
+              String(branding?.displayName || "").trim();
+            const addr = String(branding?.address || "").trim();
+            const portalLeg = String(branding?.portalFooterText || "").trim();
+            const invFoot = String(branding?.invoiceFooter || "").trim();
+            const email = String(branding?.contactEmail || "").trim();
+            const phone = String(branding?.contactPhone || "").trim();
+            const telHref = telHrefFromBrandingPhone(phone);
+            return (
+              <>
+                {orgTitle ? (
+                  <div className="app-footer-row app-footer-row--brand">
+                    <span className="app-footer-brand">{orgTitle}</span>
+                  </div>
+                ) : null}
+                {addr ? <p className="app-footer-address">{addr}</p> : null}
+                {portalLeg ? (
+                  <p className="app-footer-legal app-footer-legal--pre">{portalLeg}</p>
+                ) : null}
+                {invFoot ? (
+                  <p
+                    className={`app-footer-legal app-footer-legal--pre${
+                      portalLeg ? " app-footer-legal--secondary" : ""
+                    }`}
+                  >
+                    {invFoot}
+                  </p>
+                ) : null}
+                {email || telHref ? (
+                  <div className="app-footer-contact-row">
+                    {telHref ? (
+                      <a className="app-footer-contact-pill" href={telHref}>
+                        <IconPhone width={18} height={18} aria-hidden />
+                        <span>{phone}</span>
+                      </a>
+                    ) : null}
+                    {email ? (
+                      <a className="app-footer-contact-pill" href={`mailto:${email}`}>
+                        <IconMail width={18} height={18} aria-hidden />
+                        <span>{email}</span>
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            );
+          })()}
+          <PoweredByMcBuleli
+            className="app-footer-powered"
+            poweredByLabel={isEn ? "Powered by" : "Propulsé par"}
+          />
+        </div>
       </footer>
     </main>
+    {isMobileShell ? (
+      <DashboardMobileSheetMenu
+        open={mobilePwaMenuOpen}
+        onClose={() => setMobilePwaMenuOpen(false)}
+        categories={pwaNavCategories}
+        navigateMobileScreen={navigateMobileScreen}
+        t={t}
+      />
+    ) : null}
+    <PwaInstallPrompt enabled={pwaPromptGateOk} workspaceLabel={workspaceTitleForPwa} isEn={isEn} />
+    </>
   );
 }
 

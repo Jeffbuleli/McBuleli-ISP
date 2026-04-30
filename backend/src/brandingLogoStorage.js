@@ -89,5 +89,8 @@ export async function purgeHostedBrandingAssets(ispId) {
   const key = row.rows[0]?.logo_object_key;
   if (key) await deleteBrandingObjectInS3(key);
   await clearBrandingLogoFiles(ispId);
-  await query("UPDATE isp_branding SET logo_object_key = NULL WHERE isp_id = $1", [ispId]);
+  await query(
+    "UPDATE isp_branding SET logo_object_key = NULL, logo_bytes = NULL, logo_mime = NULL WHERE isp_id = $1",
+    [ispId]
+  );
 }
