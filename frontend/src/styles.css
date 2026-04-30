@@ -7478,22 +7478,85 @@ html:has(.app-shell--mobile-pwa) {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
+  min-width: 0;
+  /* When the footer is narrow, switch pager to symbols (see @container below). */
+  container-type: inline-size;
+  container-name: mb-table-foot;
 }
 
 .mb-table__pager {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mb-table__pagenums {
+  flex: 0 1 auto;
+  min-width: 0;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mb-table__pagepill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28em;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.mb-table__pagesep {
+  opacity: 0.65;
+  font-weight: 500;
+  padding: 0 0.06em;
+}
+
+.mb-table__pagenum {
+  white-space: nowrap;
+  min-width: 1ch;
+  text-align: center;
 }
 
 .mb-table__pagebtn {
   min-height: 38px;
+  min-width: 44px;
   border-radius: 12px;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.9);
   cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mb-table__pagebtn-glyph {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.mb-table__pagesize-label--compact {
+  display: none;
+  font-weight: 600;
+  opacity: 0.85;
+  padding-right: 2px;
 }
 
 .mb-table__pagebtn:disabled {
@@ -7507,6 +7570,7 @@ html:has(.app-shell--mobile-pwa) {
   gap: 10px;
   color: rgba(255, 255, 255, 0.72);
   font-size: 0.9rem;
+  flex-shrink: 0;
 }
 
 .mb-table__pagesize select {
@@ -7516,6 +7580,71 @@ html:has(.app-shell--mobile-pwa) {
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.9);
   padding: 6px 10px;
+}
+
+@container mb-table-foot (max-width: 28rem) {
+  .mb-table__foot {
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    justify-content: center;
+  }
+
+  .mb-table__pager {
+    flex: 1 1 100%;
+    justify-content: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .mb-table__pagesize {
+    flex: 1 1 auto;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .mb-table__pagesize-label--full {
+    display: none;
+  }
+
+  .mb-table__pagesize-label--compact {
+    display: inline;
+  }
+}
+
+@container mb-table-foot (max-width: 26rem) {
+  .mb-table__pagepill {
+    padding: 6px 10px;
+    font-size: 0.9rem;
+  }
+}
+
+/* Petit écran : même comportement si les container queries ne s’appliquent pas */
+@media (max-width: 480px) {
+  .mb-table__foot {
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    justify-content: center;
+  }
+
+  .mb-table__pager {
+    flex: 1 1 100%;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .mb-table__pagesize {
+    flex: 1 1 auto;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .mb-table__pagesize-label--full {
+    display: none;
+  }
+
+  .mb-table__pagesize-label--compact {
+    display: inline;
+  }
 }
 
 /* ---- Unified toggle/checkbox style (mobile/tablet/desktop) ---- */

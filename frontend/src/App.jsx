@@ -3830,6 +3830,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             affichables ; utilisez les invitations ou la réinitialisation pour donner un nouvel accès.
           </p>
           <DataTable
+            t={t}
             title={t("Espaces entreprises", "Tenant workspaces")}
             description={t("Recherche, tri et pagination standardisés.", "Standardized search, sorting and pagination.")}
             rows={tenantTableView.pageRows}
@@ -4449,6 +4450,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         )}
 
         <DataTable
+          t={t}
           title={t("Appareils MikroTik (nœuds)", "MikroTik devices (nodes)")}
           description={t("Liste standardisée avec actions rapides.", "Standardized list with quick actions.")}
           rows={networkNodeTableView.pageRows}
@@ -4922,6 +4924,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         <section className="panel">
           <h2>{t("Paiements manuels à valider", "Manual payments to validate")}</h2>
           <DataTable
+            t={t}
             title={null}
             rows={paymentIntentTableView.pageRows}
             columns={[
@@ -5063,6 +5066,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             Utiliser le bon
           </button>
           <DataTable
+            t={t}
             title={t("Derniers bons", "Latest vouchers")}
             rows={voucherTableView.pageRows}
             columns={[
@@ -5659,6 +5663,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             </button>
           </form>
           <DataTable
+            t={t}
             title={t("Historique des retraits", "Withdrawal history")}
             rows={withdrawalTableView.pageRows}
             columns={[
@@ -5913,6 +5918,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           ) : null}
           <div className="panel" style={{ marginBottom: 12 }}>
             <DataTable
+              t={t}
               title={t("Grand livre comptable", "Accounting ledger")}
               description={t(
                 "Écritures automatiques des encaissements (caisse/banque) et compte client.",
@@ -6081,6 +6087,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                 </p>
               ) : (
                 <DataTable
+                  t={t}
                   title={null}
                   rows={expenseTableView.pageRows}
                   columns={[
@@ -6328,6 +6335,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         <div className="panel">
           <h2>{t("Utilisateurs", "Users")}</h2>
           <DataTable
+            t={t}
             title={t("Clients", "Clients")}
             description={t("Liste standardisée (recherche, tri, pagination).", "Standardized list (search, sort, pagination).")}
             rows={customerTableView.pageRows}
@@ -6721,6 +6729,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
       <section className="panel billing-invoices-panel">
         <h2>{t("Factures", "Invoices")}</h2>
         <DataTable
+          t={t}
           title={null}
           rows={invoiceTableView.pageRows}
           columns={[
