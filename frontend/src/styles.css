@@ -5052,25 +5052,7 @@ a.public-footer-card:hover {
   border-bottom: 1px solid var(--mb-border);
 }
 
-.billing-invoices-scroll {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  width: 100%;
-  margin-top: 10px;
-}
-
-.billing-invoices-scroll .billing-invoices-table.table {
-  min-width: 600px;
-}
-
-.billing-invoices-scroll .billing-invoices-table .row > span {
-  min-width: 0;
-  word-break: break-word;
-}
-
-.billing-invoices-scroll .billing-invoices-table button {
-  white-space: nowrap;
-}
+/* Legacy invoice table styles removed (migrated to DataTable). */
 
 .tenant-pagination {
   display: flex;
