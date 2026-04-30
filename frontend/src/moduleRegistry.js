@@ -20,8 +20,6 @@ import {
 export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
   const role = user?.role || "";
   const isSystemOwner = role === "system_owner";
-  const canSeeAnnouncements =
-    !isFieldAgent && (role === "system_owner" || role === "super_admin" || role === "company_manager" || role === "isp_admin");
   const canSeeSecurity = role === "system_owner" || role === "super_admin" || role === "company_manager" || role === "isp_admin";
 
   if (isFieldAgent) {
@@ -32,6 +30,13 @@ export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
         href: "#field-clients",
         label: t("Clients et portail", "Clients & portal"),
         mobileScreen: "users"
+      },
+      {
+        key: "settings.workspace",
+        nav: { category: "settings", categoryLabel: t("Paramètres", "Settings"), categoryIcon: IconSliders },
+        href: "#workspace-settings",
+        label: t("Paramètres", "Settings"),
+        mobileScreen: "settings"
       }
     ];
   }
@@ -126,24 +131,13 @@ export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
     mobileScreen: "dashboard"
   });
 
-  if (canSeeAnnouncements) {
-    modules.push(
-      {
-        key: "communication.announcements",
-        nav: { category: "communication", categoryLabel: t("Communication", "Communication"), categoryIcon: IconMail },
-        href: "#isp-announcements",
-        label: t("Annonces", "Announcements"),
-        mobileScreen: "users"
-      },
-      {
-        key: "communication.chat",
-        nav: { category: "communication", categoryLabel: t("Communication", "Communication"), categoryIcon: IconMail },
-        href: "#team-chat",
-        label: t("Chat équipe", "Team chat"),
-        mobileScreen: "dashboard"
-      }
-    );
-  }
+  modules.push({
+    key: "communication.chat",
+    nav: { category: "communication", categoryLabel: t("Communication", "Communication"), categoryIcon: IconMail },
+    href: "#team-chat",
+    label: t("Chat équipe", "Team chat"),
+    mobileScreen: "dashboard"
+  });
 
   modules.push({
     key: "settings.workspace",

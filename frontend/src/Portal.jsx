@@ -349,9 +349,6 @@ export default function Portal() {
     <>
     <main
       className="container portal-page portal-page--dark"
-      style={{
-        color: brand?.secondaryColor || "#162030"
-      }}
     >
       <header className="portal-hero">
         <div className="portal-hero-head">
@@ -577,25 +574,25 @@ export default function Portal() {
                 {t("paymentHelpLead")}
               </p>
               {paymentInstructions.items.map((item) => (
-                <div key={item.id} style={{ marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                  <p style={{ margin: "0 0 6px", fontWeight: 700 }}>
+                <div key={item.id} className="portal-payment-instruction">
+                  <p className="portal-payment-instruction__title">
                     {paymentMethodLabel(item.methodType)} — {item.providerName}
                   </p>
-                  {item.instructions?.accountName ? <p style={{ margin: 0 }}>Account owner: <b>{item.instructions.accountName}</b></p> : null}
-                  {item.instructions?.bankName ? <p style={{ margin: 0 }}>Bank: <b>{item.instructions.bankName}</b></p> : null}
-                  {item.instructions?.accountNumber ? <p style={{ margin: 0 }}>Account number: <b>{item.instructions.accountNumber}</b></p> : null}
-                  {item.instructions?.iban ? <p style={{ margin: 0 }}>IBAN: <b>{item.instructions.iban}</b></p> : null}
-                  {item.instructions?.swiftCode ? <p style={{ margin: 0 }}>SWIFT: <b>{item.instructions.swiftCode}</b></p> : null}
-                  {item.instructions?.mobileMoneyNumber ? <p style={{ margin: 0 }}>Mobile money: <b>{item.instructions.mobileMoneyNumber}</b></p> : null}
-                  {item.instructions?.walletAddress ? <p style={{ margin: 0 }}>Wallet: <b>{item.instructions.walletAddress}</b></p> : null}
-                  {item.instructions?.walletNetwork ? <p style={{ margin: 0 }}>Network: <b>{item.instructions.walletNetwork}</b></p> : null}
-                  {item.instructions?.memoTag ? <p style={{ margin: 0 }}>Memo/Tag: <b>{item.instructions.memoTag}</b></p> : null}
+                  {item.instructions?.accountName ? <p>Account owner: <b>{item.instructions.accountName}</b></p> : null}
+                  {item.instructions?.bankName ? <p>Bank: <b>{item.instructions.bankName}</b></p> : null}
+                  {item.instructions?.accountNumber ? <p>Account number: <b>{item.instructions.accountNumber}</b></p> : null}
+                  {item.instructions?.iban ? <p>IBAN: <b>{item.instructions.iban}</b></p> : null}
+                  {item.instructions?.swiftCode ? <p>SWIFT: <b>{item.instructions.swiftCode}</b></p> : null}
+                  {item.instructions?.mobileMoneyNumber ? <p>Mobile money: <b>{item.instructions.mobileMoneyNumber}</b></p> : null}
+                  {item.instructions?.walletAddress ? <p>Wallet: <b>{item.instructions.walletAddress}</b></p> : null}
+                  {item.instructions?.walletNetwork ? <p>Network: <b>{item.instructions.walletNetwork}</b></p> : null}
+                  {item.instructions?.memoTag ? <p>Memo/Tag: <b>{item.instructions.memoTag}</b></p> : null}
                   {item.instructions?.validationEtaMinutes ? (
-                    <p style={{ margin: 0 }}>
+                    <p>
                       Validation ETA: <b>{item.instructions.validationEtaMinutes} min</b>
                     </p>
                   ) : null}
-                  {item.instructions?.note ? <p style={{ margin: "4px 0 0" }}>{item.instructions.note}</p> : null}
+                  {item.instructions?.note ? <p>{item.instructions.note}</p> : null}
                 </div>
               ))}
               {paymentInstructions.owner?.displayName ? (

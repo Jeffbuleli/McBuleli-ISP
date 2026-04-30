@@ -218,7 +218,7 @@ export default function WifiPortal() {
             <p className="wifi-lead">{t("heroLead")}</p>
           </div>
           <div className="wifi-hero-toolbar wifi-hero-toolbar--end">
-            <HomeShortcut title={t("homeShortcut")} idPrefix="wifi" />
+            <HomeShortcut title={t("homeShortcut")} idPrefix="wifi" className="app-home-shortcut" />
           </div>
         </div>
         {activeIspId && hasIspContact(branding) ? (

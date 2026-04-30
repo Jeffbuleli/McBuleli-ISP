@@ -1892,6 +1892,12 @@ a:hover {
   color: currentColor;
 }
 
+.app-home-shortcut {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+}
+
 .dashboard-ad-slot {
   width: 100%;
   margin-top: 14px;
@@ -6710,6 +6716,15 @@ body:has(.wifi-portal-page--dark) {
   margin-left: auto;
 }
 
+.wifi-portal-page--dark .wifi-hero-toolbar .btn-icon-toolbar,
+.portal-page--dark .portal-hero-toolbar .btn-icon-toolbar,
+.wifi-portal-page--dark .wifi-hero-toolbar .app-home-shortcut {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: #d6f4e5;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.26);
+}
+
 .portal-page--dark button[type="submit"],
 .wifi-portal-page--dark button[type="submit"] {
   background: #63b38f;
@@ -6732,6 +6747,45 @@ body:has(.wifi-portal-page--dark) {
   border-color: rgba(99, 179, 143, 0.52);
   background: rgba(99, 179, 143, 0.16);
   color: #9ce2bf;
+}
+
+.portal-page--dark .panel h2,
+.wifi-portal-page--dark .panel h2 {
+  color: #f2f4f6;
+}
+
+.portal-page--dark .portal-hero,
+.wifi-portal-page--dark .wifi-hero {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: linear-gradient(170deg, rgba(18, 21, 24, 0.94) 0%, rgba(24, 28, 31, 0.92) 100%);
+}
+
+.portal-page--dark .portal-login-grid .panel,
+.wifi-portal-page--dark .panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(160deg, rgba(23, 26, 29, 0.94) 0%, rgba(19, 22, 25, 0.95) 100%);
+}
+
+.portal-page--dark .portal-login-grid .panel p,
+.portal-page--dark .portal-login-grid .panel label {
+  color: rgba(234, 238, 241, 0.88);
+}
+
+.portal-page--dark .portal-payment-instruction {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.portal-page--dark .portal-payment-instruction__title {
+  margin: 0 0 6px;
+  font-weight: 750;
+  color: #e8f5ed;
+}
+
+.portal-page--dark .portal-payment-instruction p {
+  margin: 0;
+  color: rgba(232, 236, 239, 0.86);
 }
 
 .wifi-portal-page--dark .isp-enduser-brand-head {

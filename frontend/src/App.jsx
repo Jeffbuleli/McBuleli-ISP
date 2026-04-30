@@ -10,7 +10,6 @@ import DashboardStickyBanner from "./DashboardStickyBanner.jsx";
 import { DataTable } from "./ui/DataTable.jsx";
 import { useDashboardMobilePath } from "./useDashboardMobilePath.js";
 import { buildDashboardNavCategories } from "./dashboardNavCategories.js";
-import IspAnnouncementsPanel from "./IspAnnouncementsPanel.jsx";
 import PlatformHomeMarketingPanel from "./PlatformHomeMarketingPanel.jsx";
 import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
 import PoweredByMcBuleli from "./PoweredByMcBuleli.jsx";
@@ -616,7 +615,6 @@ function App() {
   const [branding, setBranding] = useState(null);
   const [ispAnnouncements, setIspAnnouncements] = useState([]);
   const [ispAnnouncementsManage, setIspAnnouncementsManage] = useState([]);
-  const [announcementsBellOpen, setAnnouncementsBellOpen] = useState(false);
   const [networkStats, setNetworkStats] = useState(null);
   const [networkNodes, setNetworkNodes] = useState([]);
   const [networkNodeTable, setNetworkNodeTable] = useState({
@@ -697,6 +695,7 @@ function App() {
   const [invoices, setInvoices] = useState([]);
   const [invoiceTable, setInvoiceTable] = useState({
     q: "",
+    status: "all",
     page: 1,
     pageSize: 10,
     sort: { key: "status", dir: "asc" }
@@ -723,12 +722,16 @@ function App() {
 
   const invoiceTableView = useMemo(() => {
     const q = String(invoiceTable.q || "").trim().toLowerCase();
+    const statusFilter = String(invoiceTable.status || "all").toLowerCase();
     let list = Array.isArray(invoices) ? invoices : [];
+    if (statusFilter !== "all") {
+      list = list.filter((inv) => String(inv?.status || "").toLowerCase() === statusFilter);
+    }
     if (q) {
       list = list.filter((inv) => {
         const id = String(inv?.id || "").toLowerCase();
-        const st = String(inv?.status || "").toLowerCase();
-        return id.includes(q) || st.includes(q);
+        const invStatus = String(inv?.status || "").toLowerCase();
+        return id.includes(q) || invStatus.includes(q);
       });
     }
 
@@ -1243,24 +1246,6 @@ function App() {
   const isMobileShell = useMediaQuery("(max-width: 899px)");
   const { mobileScreen, navigateMobileScreen } = useDashboardMobilePath(isMobileShell);
   const dashboardNavCompactEffective = Boolean(dashboardNavCompact && !dashboardLayoutStacked && !isMobileShell);
-
-  const openAnnouncementsManage = useCallback(() => {
-    if (isMobileShell) {
-      navigateMobileScreen("users");
-      window.requestAnimationFrame(() => {
-        window.location.hash = "isp-announcements";
-        window.setTimeout(() => {
-          try {
-            document.getElementById("isp-announcements")?.scrollIntoView({ behavior: "smooth", block: "start" });
-          } catch (_e) {
-            /* ignore */
-          }
-        }, 220);
-      });
-    } else {
-      window.location.hash = "isp-announcements";
-    }
-  }, [isMobileShell, navigateMobileScreen]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3495,13 +3480,6 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
       : null;
   const showDashboardHeaderPromos = !user?.dashboardBanners?.length && !user?.dashboardBannerHtml;
 
-  const canSeeAnnouncements =
-    !isFieldAgent &&
-    (user.role === "system_owner" ||
-      user.role === "super_admin" ||
-      user.role === "company_manager" ||
-      user.role === "isp_admin");
-
   const gateMobile = isMobileShell;
 
   return (
@@ -3906,12 +3884,40 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
 
       <section className="panel" id="reports">
         <h2>{t("Rapports / analyses", "Reports / analytics")}</h2>
-        <p className="app-meta">
-          {t(
-            "Cette section arrive avec les tableaux et graphiques (revenus, usage, rétention, churn) et des filtres interactifs. La navigation est déjà gérée par le registre de modules pour rester extensible.",
-            "This section is coming with tables and charts (revenue, usage, retention, churn) and interactive filters. Navigation is already handled by the module registry to remain extensible."
-          )}
-        </p>
+        <div className="app-meta" style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+          <span>{t("Trend (line chart)", "Trend (line chart)")}</span>
+          <span>·</span>
+          <span>{t("Graph (real-time)", "Graph (real-time)")}</span>
+          <span>·</span>
+          <span>{t("Metrics", "Metrics")}</span>
+          <span>·</span>
+          <span>{t("Payment success/failure (bar chart)", "Payment success/failure (bar chart)")}</span>
+          <span>·</span>
+          <span>{t("Bandwidth (line or area)", "Bandwidth (line or area)")}</span>
+          <span>·</span>
+          <span>{t("Top users (bar ranking)", "Top users (bar ranking)")}</span>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
+          <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+            <span>{t("Du", "From")}</span>
+            <input
+              type="date"
+              value={statsPeriod.from}
+              onChange={(e) => setStatsPeriod((s) => ({ ...s, from: e.target.value }))}
+            />
+          </label>
+          <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+            <span>{t("Au", "To")}</span>
+            <input
+              type="date"
+              value={statsPeriod.to}
+              onChange={(e) => setStatsPeriod((s) => ({ ...s, to: e.target.value }))}
+            />
+          </label>
+          <button type="button" className="btn-secondary-outline" onClick={() => refresh()} disabled={!selectedIspId}>
+            {t("Appliquer les filtres", "Apply filters")}
+          </button>
+        </div>
       </section>
 
             <section className="grid metrics">
@@ -4244,22 +4250,6 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           </button>
         </section>
       </section>
-      </DashboardScreenGate>
-
-      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
-      {(isPlatformSuperRole(user.role) ||
-        user.role === "company_manager" ||
-        user.role === "isp_admin") &&
-      selectedIspId ? (
-        <IspAnnouncementsPanel
-          ispId={selectedIspId}
-          items={ispAnnouncementsManage}
-          t={t}
-          isEn={isEn}
-          staffUser={user}
-          onRefresh={refresh}
-        />
-      ) : null}
       </DashboardScreenGate>
 
       <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
@@ -6764,6 +6754,20 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           ]}
           searchValue={invoiceTable.q}
           onSearchValueChange={(q) => setInvoiceTable((s) => ({ ...s, q, page: 1 }))}
+          filters={
+            <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+              <span>{t("Statut", "Status")}</span>
+              <select
+                value={invoiceTable.status || "all"}
+                onChange={(e) => setInvoiceTable((s) => ({ ...s, status: e.target.value, page: 1 }))}
+              >
+                <option value="all">{t("Tous", "All")}</option>
+                <option value="unpaid">{t("Impayée", "Unpaid")}</option>
+                <option value="overdue">{t("En retard", "Overdue")}</option>
+                <option value="paid">{t("Payée", "Paid")}</option>
+              </select>
+            </label>
+          }
           page={invoiceTable.page}
           pageSize={invoiceTable.pageSize}
           totalRows={invoiceTableView.total}
