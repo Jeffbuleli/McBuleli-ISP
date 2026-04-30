@@ -78,6 +78,13 @@ export default function DashboardSideNav({
           onClick={() => {
             setActiveHash(item.href);
             setExpandedCategory(cat.id);
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("dashboard-nav-select", {
+                  detail: { href: item.href }
+                })
+              );
+            }
           }}
         >
           {item.label}

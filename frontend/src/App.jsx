@@ -611,6 +611,7 @@ function App() {
   const [branding, setBranding] = useState(null);
   const [ispAnnouncements, setIspAnnouncements] = useState([]);
   const [ispAnnouncementsManage, setIspAnnouncementsManage] = useState([]);
+  const [announcementsBellOpen, setAnnouncementsBellOpen] = useState(false);
   const [networkStats, setNetworkStats] = useState(null);
   const [networkNodes, setNetworkNodes] = useState([]);
   const [networkNodeTable, setNetworkNodeTable] = useState({
@@ -936,6 +937,23 @@ function App() {
     window.addEventListener("hashchange", syncChatHash);
     return () => window.removeEventListener("hashchange", syncChatHash);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    function onDashboardNavSelect(event) {
+      const href = event?.detail?.href;
+      if (href === "#team-chat") setTeamChatOpen(true);
+    }
+    window.addEventListener("dashboard-nav-select", onDashboardNavSelect);
+    return () => window.removeEventListener("dashboard-nav-select", onDashboardNavSelect);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!teamChatOpen && window.location.hash === "#team-chat") {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
+  }, [teamChatOpen]);
 
   const [customerForm, setCustomerForm] = useState({
     fullName: "",
@@ -3323,6 +3341,11 @@ withdrawalData = take(settled, 3, { cashbox: null, items: [] }, "withdrawals");
             isFieldAgent={isFieldAgent}
             dashboardChatIspId={dashboardChatIspId}
             teamChatUnread={teamChatUnread}
+            announcements={ispAnnouncementsManage}
+            announcementsOpen={announcementsBellOpen}
+            onAnnouncementsOpenChange={setAnnouncementsBellOpen}
+            canManageAnnouncements={canSeeAnnouncements && Boolean(selectedIspId)}
+            onManageAnnouncements={openAnnouncementsManage}
             onToggleChat={() => setTeamChatOpen((o) => !o)}
             onOpenSettings={() => {
               if (typeof window !== "undefined") window.location.hash = "#workspace-settings";
