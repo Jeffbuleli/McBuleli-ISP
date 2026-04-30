@@ -848,6 +848,13 @@ export const api = {
     request(
       withIsp(`/network/radius-accounting-ingest${limit ? `?limit=${encodeURIComponent(limit)}` : ""}`, ispId)
     ),
+  getOnlineSessions: (ispId, limit, windowMinutes) =>
+    request(
+      withIsp(
+        `/network/online-sessions?limit=${encodeURIComponent(limit || 80)}&windowMinutes=${encodeURIComponent(windowMinutes || 30)}`,
+        ispId
+      )
+    ),
   syncSubscriptionNetwork: (ispId, subscriptionId, action) =>
     request(withIsp(`/network/subscriptions/${subscriptionId}/sync`, ispId), {
       method: "POST",

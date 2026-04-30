@@ -560,8 +560,9 @@ const LOAD_FAILURE_LABELS_FR = {
   vouchers: "bons",
   telemetry: "télémétrie",
   radiusAccounting: "compta RADIUS",
-  expenses: "dépenses",
-  accountingPeriodClosures: "clôtures comptables"
+onlineSessions: "abonnés en ligne",
+expenses: "dépenses",
+accountingPeriodClosures: "clôtures comptables"
 };
 
 function App() {
@@ -622,6 +623,8 @@ function App() {
   const [radiusSyncEvents, setRadiusSyncEvents] = useState([]);
   const [telemetrySnapshots, setTelemetrySnapshots] = useState([]);
   const [radiusAccountingIngest, setRadiusAccountingIngest] = useState([]);
+  const [onlineSessions, setOnlineSessions] = useState([]);
+  const [onlineSessionsWindowMinutes, setOnlineSessionsWindowMinutes] = useState(30);
   const [tidSubmissions, setTidSubmissions] = useState([]);
   const [tidConflicts, setTidConflicts] = useState([]);
   const [vouchers, setVouchers] = useState([]);
@@ -1266,7 +1269,8 @@ function App() {
       let vchs = [];
       let telemetry = [];
       let radiusAcct = [];
-      let withdrawalData = { items: [] };
+let onlineSessionsPayload = { windowMinutes: 30, items: [] };
+let withdrawalData = { items: [] };
 
       if (activeIspId) {
         if (currentUser.role === "field_agent") {
@@ -1312,9 +1316,10 @@ function App() {
           api.getVouchers(activeIspId),
           api.getTelemetrySnapshots(activeIspId),
           api.getRadiusAccountingIngest(activeIspId, 80),
-          api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to),
-          api.getAccountingPeriodClosures(activeIspId),
-          api.getWithdrawals(activeIspId)
+api.getOnlineSessions(activeIspId, 80, 30),
+api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to),
+api.getAccountingPeriodClosures(activeIspId),
+api.getWithdrawals(activeIspId)
         ]);
         dash = take(settled, 0, {}, "dashboard");
         c = take(settled, 1, [], "customers");
@@ -1338,9 +1343,13 @@ function App() {
         vchs = take(settled, 19, [], "vouchers");
         telemetry = take(settled, 20, [], "telemetry");
         radiusAcct = take(settled, 21, [], "radiusAccounting");
-        const expData = take(settled, 22, { items: [], summary: null }, "expenses");
-        const closuresList = take(settled, 23, [], "accountingPeriodClosures");
-        withdrawalData = take(settled, 24, { cashbox: null, items: [] }, "withdrawals");
+onlineSessionsPayload = take(settled, 0, { windowMinutes: 30, items: [] }, "onlineSessions");
+
+const expData = take(settled, 1, { items: [], summary: null }, "expenses");
+
+const closuresList = take(settled, 2, [], "accountingPeriodClosures");
+
+withdrawalData = take(settled, 3, { cashbox: null, items: [] }, "withdrawals");
         setExpenses(Array.isArray(expData?.items) ? expData.items : []);
         setExpenseSummary(expData?.summary || null);
         setAccountingPeriodClosures(Array.isArray(closuresList) ? closuresList : []);
@@ -1418,6 +1427,8 @@ function App() {
       setRadiusSyncEvents(radiusEvents);
       setTelemetrySnapshots(telemetry);
       setRadiusAccountingIngest(radiusAcct);
+      setOnlineSessions(Array.isArray(onlineSessionsPayload?.items) ? onlineSessionsPayload.items : []);
+      setOnlineSessionsWindowMinutes(Number(onlineSessionsPayload?.windowMinutes) || 30);
       setRoleProfiles(roles);
       setPlatformPackages(packages);
       setPlatformSubscriptions(platformSubs);
@@ -1834,6 +1845,8 @@ function App() {
     setRadiusSyncEvents([]);
     setTelemetrySnapshots([]);
     setRadiusAccountingIngest([]);
+    setOnlineSessions([]);
+    setOnlineSessionsWindowMinutes(30);
     setTidSubmissions([]);
     setTidConflicts([]);
     setVouchers([]);
@@ -5146,13 +5159,61 @@ function App() {
       </section>
 
       <section className="grid metrics">
-        <Card title={t("Cash encaissé (USD)", "Cash collected (USD)")} value={dashboard?.cashbox?.cashUsd ?? 0} />
-        <Card title={t("TID validés (USD)", "Validated TID (USD)")} value={dashboard?.cashbox?.tidUsd ?? 0} />
-        <Card title={t("Mobile Money Pawapay (USD)", "Mobile Money Pawapay (USD)")} value={dashboard?.cashbox?.mobileMoneyUsd ?? 0} />
-        <Card
-          title={t("Retirable Mobile Money (USD)", "Withdrawable Mobile Money (USD)")}
-          value={dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0}
-        />
+<section className="panel">
+  <Card title="Clients" value={dashboard?.totalCustomers ?? 0} />
+  <Card title="Abonnements actifs" value={dashboard?.activeSubscriptions ?? 0} />
+  <Card title="Factures impayées" value={dashboard?.unpaidInvoices ?? 0} />
+  <Card title="Chiffre d'affaires (USD)" value={dashboard?.revenueUsd ?? 0} />
+
+  <Card
+    title={t("Sessions en ligne", "Online sessions")}
+    value={dashboard?.networkSessions ?? onlineSessions.length}
+    subtitle={t(
+      `Fenêtre ${dashboard?.networkSessionsWindowMinutes || onlineSessionsWindowMinutes} min`,
+      `${dashboard?.networkSessionsWindowMinutes || onlineSessionsWindowMinutes}-min window`
+    )}
+  />
+</section>
+
+<section className="panel">
+  <h2>{t("Abonnés en ligne (corrélation RADIUS)", "Online subscribers (RADIUS-correlated)")}</h2>
+
+  <p>
+    {t(
+      `Fenêtre active: ${onlineSessionsWindowMinutes} minutes. Les lignes ci-dessous lient username RADIUS -> client -> abonnement actif.`,
+      `Active window: ${onlineSessionsWindowMinutes} minutes. The rows below map RADIUS username -> customer -> active subscription.`
+    )}
+  </p>
+
+  {onlineSessions.length === 0 ? (
+    <p>
+      {t(
+        "Aucun abonné actif détecté dans la fenêtre actuelle.",
+        "No active subscribers detected in the current window."
+      )}
+    </p>
+  ) : (
+    onlineSessions.slice(0, 25).map((row) => (
+      <p key={row.ingestId}>
+        {new Date(row.seenAt).toLocaleString()} — {row.customerName || row.customerPhone || row.username} (
+        {row.username})
+        {row.planName ? ` · ${row.planName}` : ""}
+        {row.accessType ? ` · ${row.accessType}` : ""}
+        {row.framedIpAddress ? ` · IP ${row.framedIpAddress}` : ""}
+      </p>
+    ))
+  )}
+</section>
+
+<section className="panel">
+  <Card title={t("Cash encaissé (USD)", "Cash collected (USD)")} value={dashboard?.cashbox?.cashUsd ?? 0} />
+  <Card title={t("TID validés (USD)", "Validated TID (USD)")} value={dashboard?.cashbox?.tidUsd ?? 0} />
+  <Card title={t("Mobile Money Pawapay (USD)", "Mobile Money Pawapay (USD)")} value={dashboard?.cashbox?.mobileMoneyUsd ?? 0} />
+  <Card
+    title={t("Retirable Mobile Money (USD)", "Withdrawable Mobile Money (USD)")}
+    value={dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0}
+  />
+</section>
       </section>
       </DashboardScreenGate>
 
