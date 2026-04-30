@@ -3,10 +3,9 @@ import { buildDashboardNavCategories } from "./dashboardNavCategories.js";
 import DashboardStaffProfileAvatar from "./DashboardStaffProfileAvatar.jsx";
 import DashboardTeamChatButton from "./DashboardTeamChatButton.jsx";
 import DashboardCommandPalette from "./DashboardCommandPalette.jsx";
-import DashboardAnnouncementsBell from "./DashboardAnnouncementsBell.jsx";
 import {
   IconHome,
-  IconSliders,
+  IconSettings,
   IconMenuHamburger,
   IconX
 } from "./icons.jsx";
@@ -17,11 +16,6 @@ export default function DashboardTopBar({
   isFieldAgent,
   dashboardChatIspId,
   teamChatUnread,
-  announcements,
-  announcementsOpen,
-  onAnnouncementsOpenChange,
-  canManageAnnouncements,
-  onManageAnnouncements,
   onToggleChat,
   onOpenSettings,
   onGoHome,
@@ -81,15 +75,6 @@ export default function DashboardTopBar({
         </div>
 
         <div className="mb-topbar__right" role="toolbar" aria-label={t("Actions", "Actions")}>
-          <DashboardAnnouncementsBell
-            items={announcements}
-            t={t}
-            open={announcementsOpen}
-            onOpenChange={onAnnouncementsOpenChange}
-            variant={isMobileShell ? "mobile" : "desktop"}
-            canManage={canManageAnnouncements}
-            onManageAnnouncements={onManageAnnouncements}
-          />
           {dashboardChatIspId ? (
             <DashboardTeamChatButton unreadCount={teamChatUnread} t={t} variant={isMobileShell ? "mobile" : "desktop"} onClick={onToggleChat} />
           ) : null}
@@ -101,7 +86,7 @@ export default function DashboardTopBar({
             aria-label={t("Paramètres", "Settings")}
             title={t("Paramètres", "Settings")}
           >
-            <IconSliders width={20} height={20} aria-hidden />
+            <IconSettings width={20} height={20} aria-hidden />
           </button>
 
           <button

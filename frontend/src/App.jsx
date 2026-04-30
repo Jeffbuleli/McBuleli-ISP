@@ -3341,14 +3341,16 @@ withdrawalData = take(settled, 3, { cashbox: null, items: [] }, "withdrawals");
             isFieldAgent={isFieldAgent}
             dashboardChatIspId={dashboardChatIspId}
             teamChatUnread={teamChatUnread}
-            announcements={ispAnnouncementsManage}
-            announcementsOpen={announcementsBellOpen}
-            onAnnouncementsOpenChange={setAnnouncementsBellOpen}
-            canManageAnnouncements={canSeeAnnouncements && Boolean(selectedIspId)}
-            onManageAnnouncements={openAnnouncementsManage}
             onToggleChat={() => setTeamChatOpen((o) => !o)}
             onOpenSettings={() => {
-              if (typeof window !== "undefined") window.location.hash = "#workspace-settings";
+              if (isMobileShell) {
+                navigateMobileScreen("settings");
+                window.requestAnimationFrame(() => {
+                  window.location.hash = "workspace-settings";
+                });
+              } else if (typeof window !== "undefined") {
+                window.location.hash = "#workspace-settings";
+              }
             }}
             onGoHome={() => {
               if (typeof window !== "undefined") window.location.href = "/?site=public";
