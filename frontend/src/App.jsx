@@ -606,6 +606,12 @@ function App() {
   const [ispAnnouncementsManage, setIspAnnouncementsManage] = useState([]);
   const [networkStats, setNetworkStats] = useState(null);
   const [networkNodes, setNetworkNodes] = useState([]);
+  const [networkNodeTable, setNetworkNodeTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "name", dir: "asc" }
+  });
   const [provisioningEvents, setProvisioningEvents] = useState([]);
   const [radiusSyncEvents, setRadiusSyncEvents] = useState([]);
   const [telemetrySnapshots, setTelemetrySnapshots] = useState([]);
@@ -695,6 +701,37 @@ function App() {
     const pageRows = list.slice(start, start + pageSize);
     return { pageRows, total: list.length };
   }, [invoices, invoiceTable]);
+
+  const networkNodeTableView = useMemo(() => {
+    const q = String(networkNodeTable.q || "").trim().toLowerCase();
+    let list = Array.isArray(networkNodes) ? networkNodes : [];
+    if (q) {
+      list = list.filter((n) => {
+        const hay = `${n?.name || ""} ${n?.host || ""} ${n?.apiPort || ""} ${n?.username || ""} ${n?.isActive ? "active" : ""} ${
+          n?.isDefault ? "default" : ""
+        }`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = networkNodeTable.sort?.key;
+    const sDir = networkNodeTable.sort?.dir === "desc" ? -1 : 1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(networkNodeTable.pageSize) || 10;
+    const page = Math.max(1, Number(networkNodeTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [networkNodes, networkNodeTable.page, networkNodeTable.pageSize, networkNodeTable.q, networkNodeTable.sort]);
 
   const fetchTeamChatUnread = useCallback(async () => {
     if (!user) return;
@@ -4060,30 +4097,58 @@ function App() {
             <button type="submit" disabled={!selectedIspId}>
               Enregistrer le nœud
             </button>
-            {networkNodes.map((node) => (
-              <p key={node.id}>
-                {node.name} ({node.host}:{node.apiPort}) [{node.isActive ? "actif" : "inactif"}]
-                {node.isDefault ? " [défaut]" : ""}{" "}
-                <button type="button" onClick={() => onToggleNetworkNode(node.id, !node.isActive)}>
-                  {node.isActive ? "Désactiver" : "Activer"}
-                </button>{" "}
-                {!node.isDefault && (
-                  <button type="button" onClick={() => onSetDefaultNetworkNode(node.id)}>
-                    Par défaut
-                  </button>
-                )}{" "}
-                {(isPlatformSuperRole(user.role) ||
-                  user.role === "company_manager" ||
-                  user.role === "isp_admin" ||
-                  user.role === "noc_operator") && (
-                  <button type="button" onClick={() => onCollectTelemetry(node.id)}>
-                    Collecter la télémétrie
-                  </button>
-                )}
-              </p>
-            ))}
           </form>
         )}
+
+        <DataTable
+          title={t("Appareils MikroTik (nœuds)", "MikroTik devices (nodes)")}
+          description={t("Liste standardisée avec actions rapides.", "Standardized list with quick actions.")}
+          rows={networkNodeTableView.pageRows}
+          columns={[
+            { key: "name", header: t("Nom", "Name"), sortKey: "name", cell: (n) => n.name || "—" },
+            { key: "host", header: t("Hôte", "Host"), sortKey: "host", cell: (n) => `${n.host || "—"}:${n.apiPort || "—"}` },
+            {
+              key: "status",
+              header: t("Statut", "Status"),
+              sortKey: "isActive",
+              cell: (n) => (n.isActive ? t("En ligne", "Online") : t("Hors ligne", "Offline"))
+            },
+            { key: "default", header: t("Défaut", "Default"), sortKey: "isDefault", cell: (n) => (n.isDefault ? "✓" : "—") },
+            {
+              key: "actions",
+              header: t("Actions", "Actions"),
+              cell: (n) => (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <button type="button" onClick={() => onToggleNetworkNode(n.id, !n.isActive)}>
+                    {n.isActive ? t("Désactiver", "Disable") : t("Activer", "Enable")}
+                  </button>
+                  {!n.isDefault ? (
+                    <button type="button" className="btn-secondary-outline" onClick={() => onSetDefaultNetworkNode(n.id)}>
+                      {t("Par défaut", "Set default")}
+                    </button>
+                  ) : null}
+                  {(isPlatformSuperRole(user.role) ||
+                    user.role === "company_manager" ||
+                    user.role === "isp_admin" ||
+                    user.role === "noc_operator") ? (
+                    <button type="button" className="btn-secondary-outline" onClick={() => onCollectTelemetry(n.id)}>
+                      {t("Télémétrie", "Telemetry")}
+                    </button>
+                  ) : null}
+                </div>
+              )
+            }
+          ]}
+          searchValue={networkNodeTable.q}
+          onSearchValueChange={(q) => setNetworkNodeTable((s) => ({ ...s, q, page: 1 }))}
+          page={networkNodeTable.page}
+          pageSize={networkNodeTable.pageSize}
+          totalRows={networkNodeTableView.total}
+          onPageChange={(page) => setNetworkNodeTable((s) => ({ ...s, page }))}
+          onPageSizeChange={(pageSize) => setNetworkNodeTable((s) => ({ ...s, pageSize, page: 1 }))}
+          sort={networkNodeTable.sort}
+          onSortChange={(sort) => setNetworkNodeTable((s) => ({ ...s, sort }))}
+        />
 
         <section className="panel">
           <h2>{t("Événements de provisionnement", "Provisioning events")}</h2>
