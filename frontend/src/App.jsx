@@ -643,6 +643,13 @@ function App() {
     pageSize: 10,
     sort: { key: "createdAt", dir: "desc" }
   });
+  const [withdrawals, setWithdrawals] = useState([]);
+  const [withdrawalTable, setWithdrawalTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "createdAt", dir: "desc" }
+  });
   const [expenseSummary, setExpenseSummary] = useState(null);
   const [expenseFilter, setExpenseFilter] = useState(() => ({
     from: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
@@ -1105,13 +1112,6 @@ function App() {
   });
   const [saasDepositResult, setSaasDepositResult] = useState(null);
   const [pawapayNetworks, setPawapayNetworks] = useState(DEFAULT_PAWAPAY_NETWORKS);
-  const [withdrawals, setWithdrawals] = useState([]);
-  const [withdrawalTable, setWithdrawalTable] = useState({
-    q: "",
-    page: 1,
-    pageSize: 10,
-    sort: { key: "createdAt", dir: "desc" }
-  });
   const [withdrawalForm, setWithdrawalForm] = useState({
     amountUsd: "",
     currency: "USD",
