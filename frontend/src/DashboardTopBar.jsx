@@ -6,6 +6,7 @@ import DashboardCommandPalette from "./DashboardCommandPalette.jsx";
 import {
   IconHome,
   IconSettings,
+  IconSignOut,
   IconMenuHamburger,
   IconX
 } from "./icons.jsx";
@@ -19,6 +20,7 @@ export default function DashboardTopBar({
   onToggleChat,
   onOpenSettings,
   onGoHome,
+  onLogout,
   onToggleSidebar,
   sidebarOpen,
   isMobileShell
@@ -98,6 +100,18 @@ export default function DashboardTopBar({
           >
             <IconHome width={20} height={20} aria-hidden />
           </button>
+
+          {typeof onLogout === "function" ? (
+            <button
+              type="button"
+              className="mb-topbar__iconbtn"
+              onClick={onLogout}
+              aria-label={t("Déconnexion", "Logout")}
+              title={t("Déconnexion", "Logout")}
+            >
+              <IconSignOut width={20} height={20} aria-hidden />
+            </button>
+          ) : null}
         </div>
       </div>
 

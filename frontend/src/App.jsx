@@ -3507,6 +3507,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             onGoHome={() => {
               if (typeof window !== "undefined") window.location.href = "/?site=public";
             }}
+            onLogout={onLogout}
             onToggleSidebar={() => {
               if (isMobileShell) {
                 setMobilePwaMenuOpen((o) => !o);
@@ -5540,14 +5541,28 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
 
       {isFieldAgent ? (
         <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
-          <section className="panel">
-            <h2>{t("Réglages", "Settings")}</h2>
-            <p className="app-meta">
-              {t(
-                "L’image de marque, les intégrations et la sécurité des retraits sont gérées par les administrateurs. Les contacts d’aide figurent en bas de l’application.",
-                "Branding, integrations, and withdrawal security are managed by administrators. Support contacts are listed at the bottom of the app."
-              )}
-            </p>
+          <section className="grid" id="workspace-settings">
+            <section className="panel">
+              <h2>{t("Réglages", "Settings")}</h2>
+              <p className="app-meta">
+                {t(
+                  "L’image de marque, les intégrations et la sécurité des retraits sont gérées par les administrateurs. Les contacts d’aide figurent en bas de l’application.",
+                  "Branding, integrations, and withdrawal security are managed by administrators. Support contacts are listed at the bottom of the app."
+                )}
+              </p>
+            </section>
+            <section className="panel" aria-label={t("Compte", "Account")}>
+              <h2>{t("Compte", "Account")}</h2>
+              <p className="app-meta">
+                {t(
+                  "Déconnexion de cet appareil et fermeture de l’espace opérateur.",
+                  "Sign out from this device and close the operator workspace."
+                )}
+              </p>
+              <button type="button" className="btn-expense-delete" onClick={onLogout}>
+                {t("Déconnexion", "Logout")}
+              </button>
+            </section>
           </section>
         </DashboardScreenGate>
       ) : null}
