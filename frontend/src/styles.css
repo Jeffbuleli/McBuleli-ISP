@@ -5,6 +5,8 @@
    */
   --mb-primary: #5d4037;
   --mb-primary-hover: #4e342e;
+  --mb-secondary: #2f7439;
+  --mb-secondary-hover: #276733;
   --mb-accent: #c8e6c9;
   --mb-accent-strong: #a5d6a7;
   --mb-accent-text: #1b3a1d;
@@ -6243,6 +6245,8 @@ body:has(.app-shell--dashboard-dark) {
   --mb-surface: #1a1a1a;
   --mb-primary: #63b38f;
   --mb-primary-hover: #52a680;
+  --mb-secondary: #b98b66;
+  --mb-secondary-hover: #a67c52;
 }
 
 .app-shell--dashboard-dark .app-header {
