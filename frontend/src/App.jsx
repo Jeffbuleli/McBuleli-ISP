@@ -593,6 +593,12 @@ function App() {
   const [superDashboard, setSuperDashboard] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [customers, setCustomers] = useState([]);
+  const [customerTable, setCustomerTable] = useState({
+    q: "",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "fullName", dir: "asc" }
+  });
   const [users, setUsers] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [notificationProviders, setNotificationProviders] = useState([]);
@@ -836,6 +842,35 @@ function App() {
     const pageRows = list.slice(start, start + pageSize);
     return { pageRows, total: list.length };
   }, [withdrawals, withdrawalTable.page, withdrawalTable.pageSize, withdrawalTable.q, withdrawalTable.sort]);
+
+  const customerTableView = useMemo(() => {
+    const q = String(customerTable.q || "").trim().toLowerCase();
+    let list = Array.isArray(customers) ? customers : [];
+    if (q) {
+      list = list.filter((c) => {
+        const hay = `${c?.fullName || ""} ${c?.phone || ""} ${c?.email || ""} ${c?.fieldAgentName || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = customerTable.sort?.key;
+    const sDir = customerTable.sort?.dir === "desc" ? -1 : 1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(customerTable.pageSize) || 10;
+    const page = Math.max(1, Number(customerTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [customers, customerTable.page, customerTable.pageSize, customerTable.q, customerTable.sort]);
 
   const fetchTeamChatUnread = useCallback(async () => {
     if (!user) return;
@@ -5855,6 +5890,54 @@ function App() {
               onDismiss={() => setCustomerImportReport(null)}
             />
           ) : null}
+        </div>
+
+        <div className="panel">
+          <h2>{t("Utilisateurs", "Users")}</h2>
+          <DataTable
+            title={t("Clients", "Clients")}
+            description={t("Liste standardisée (recherche, tri, pagination).", "Standardized list (search, sort, pagination).")}
+            rows={customerTableView.pageRows}
+            columns={[
+              { key: "fullName", header: t("Nom", "Name"), sortKey: "fullName", cell: (c) => c.fullName || "—" },
+              { key: "phone", header: t("Téléphone", "Phone"), sortKey: "phone", cell: (c) => c.phone || "—" },
+              { key: "email", header: "Email", sortKey: "email", cell: (c) => c.email || "—" },
+              {
+                key: "fieldAgentName",
+                header: t("Agent", "Agent"),
+                sortKey: "fieldAgentName",
+                cell: (c) => c.fieldAgentName || "—"
+              },
+              {
+                key: "actions",
+                header: t("Actions", "Actions"),
+                cell: (c) => (
+                  <button
+                    type="button"
+                    className="btn-secondary-outline"
+                    onClick={() =>
+                      setCustomerEmailForm({
+                        customerId: c.id,
+                        email: c.email || "",
+                        fieldAgentId: c.fieldAgentId || ""
+                      })
+                    }
+                  >
+                    {t("Modifier", "Edit")}
+                  </button>
+                )
+              }
+            ]}
+            searchValue={customerTable.q}
+            onSearchValueChange={(q) => setCustomerTable((s) => ({ ...s, q, page: 1 }))}
+            page={customerTable.page}
+            pageSize={customerTable.pageSize}
+            totalRows={customerTableView.total}
+            onPageChange={(page) => setCustomerTable((s) => ({ ...s, page }))}
+            onPageSizeChange={(pageSize) => setCustomerTable((s) => ({ ...s, pageSize, page: 1 }))}
+            sort={customerTable.sort}
+            onSortChange={(sort) => setCustomerTable((s) => ({ ...s, sort }))}
+          />
         </div>
           </>
         ) : null}
