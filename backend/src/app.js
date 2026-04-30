@@ -5446,7 +5446,6 @@ const [customers, active, unpaid, revenue, sessionCount, cashbox] = await Promis
 
   getCashboxSummary(ispId, from, to, faId)
 ]);
-  ]);
   res.json({
     totalCustomers: customers.rows[0].value,
     activeSubscriptions: active.rows[0].value,
