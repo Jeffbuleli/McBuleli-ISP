@@ -135,7 +135,6 @@ export default function TeamChatPanel({
   /** Compact chat handle editor when still on default backend username */
   const [handleDraft, setHandleDraft] = useState("");
   const [handleBusy, setHandleBusy] = useState(false);
-  const [showProfileHint, setShowProfileHint] = useState(false);
   /** Desktop: position panel under measured sticky header (see updateDesktopDock). */
   const [desktopDock, setDesktopDock] = useState(null);
   const showHandleBanner = user && isDefaultChatUsername(user.chatUsername);
@@ -227,22 +226,6 @@ export default function TeamChatPanel({
       if (iv) window.clearInterval(iv);
     };
   }, [open, ispId, markRead, reload]);
-
-  useEffect(() => {
-    if (!open || !user?.id) return;
-    const k = `mcb_team_chat_profile_hint_seen:${user.id}`;
-    try {
-      const seen = window.localStorage.getItem(k) === "1";
-      if (seen) {
-        setShowProfileHint(false);
-      } else {
-        setShowProfileHint(true);
-        window.localStorage.setItem(k, "1");
-      }
-    } catch {
-      setShowProfileHint(false);
-    }
-  }, [open, user?.id]);
 
   useEffect(() => {
     if (!open || !ispId) return undefined;
@@ -474,30 +457,6 @@ export default function TeamChatPanel({
           <IconX width={20} height={20} />
         </button>
       </div>
-
-      {user ? (
-        <div className="dashboard-team-chat-profile-photo">
-          <div className="dashboard-team-chat-profile-photo__preview" aria-hidden>
-            <TeamChatAvatar
-              photoUrl={effectiveOwnChatPhoto}
-              chatUsername={user.chatUsername}
-              fullName={user.fullName}
-              isMe
-              className="dashboard-team-chat-profile-photo__avatar"
-            />
-          </div>
-          <div className="dashboard-team-chat-profile-photo__body">
-            {showProfileHint ? (
-              <p className="dashboard-team-chat-profile-photo__hint">
-                {t(
-                  "La photo principale de votre profil est utilisée automatiquement dans le chat équipe. Sans photo, vos initiales sont affichées.",
-                  "Your main profile photo is automatically reused in team chat. Without a photo, your initials are shown."
-                )}
-              </p>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
 
       {showHandleBanner ? (
         <form className="dashboard-team-chat-handle" onSubmit={saveHandle}>

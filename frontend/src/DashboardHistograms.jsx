@@ -131,6 +131,7 @@ export default function DashboardHistograms({
   isEn,
   globalSummary,
   networkStats,
+  cashbox,
   users,
   telemetrySnapshots
 }) {
@@ -163,6 +164,18 @@ export default function DashboardHistograms({
   const payWindow = payDaily.slice(-7);
   const payLabels = payWindow.map((r) => formatShortDate(r.date));
   const payVals = payWindow.map((r) => Number(r.amountUsd) || 0);
+  const paymentMethodLabels = [
+    t("Cash", "Cash"),
+    t("Mobile Money", "Mobile Money"),
+    t("TID/Ref", "TID/Ref"),
+    t("MM retirable", "MM withdrawable")
+  ];
+  const paymentMethodVals = [
+    Number(cashbox?.cashUsd) || 0,
+    Number(cashbox?.mobileMoneyUsd) || 0,
+    Number(cashbox?.tidUsd) || 0,
+    Number(cashbox?.withdrawableMobileMoneyUsd) || 0
+  ];
 
   const gVals = globalSummary
     ? [
@@ -178,8 +191,8 @@ export default function DashboardHistograms({
       <h2>{t("Performance & activité", "Performance & activity")}</h2>
       <p className="dash-hist-lead">
         {t(
-          "Histogrammes relatifs : chaque graphique normalise ses barres au maximum affiché dans ce graphique uniquement — ce n’est pas un jugement absolu de santé métier. Séries journalières limitées aux 7 derniers points ; encaissements = paiements confirmés par jour (date de paiement).",
-          "Relative histograms: each chart scales bars to that chart’s own maximum — not an absolute business-health verdict. Daily series show at most the last seven points; collections chart uses confirmed payments grouped by payment date."
+          "ⓘ Relatif: chaque graphique a sa propre échelle. Max 7 jours. Encaissements = paiements confirmés (date de paiement).",
+          "ⓘ Relative: each chart has its own scale. Max 7 days. Collections = confirmed payments (payment date)."
         )}
       </p>
       {networkStats?.quality?.coverageRatio != null && networkStats?.quality?.expectedDays > 2 ? (
@@ -252,13 +265,20 @@ export default function DashboardHistograms({
         {payVals.length ? (
           <BarGroup
             title={t("Encaissements confirmés par jour", "Confirmed collections per day")}
-            subtitle={t(
-              "Somme des paiements confirmés par date de paiement.",
-              "Sum of confirmed payments grouped by payment date."
-            )}
+            subtitle={t("Flux journalier", "Daily flow")}
             tierMode="temporal"
             labels={payLabels}
             values={payVals}
+            format={(v) => formatUsd(v, loc)}
+          />
+        ) : null}
+        {paymentMethodVals.some((v) => v > 0) ? (
+          <BarGroup
+            title={t("Rapport paiements par méthode", "Payment report by method")}
+            subtitle={t("Cash / Mobile Money / Réf.", "Cash / Mobile Money / Ref.")}
+            tierMode="share"
+            labels={paymentMethodLabels}
+            values={paymentMethodVals}
             format={(v) => formatUsd(v, loc)}
           />
         ) : null}
@@ -278,8 +298,8 @@ export default function DashboardHistograms({
       </div>
       <p className="dash-hist-tier-legend dash-hist-tier-legend--global">
         {t(
-          "Échelle intra-graphique uniquement : les couleurs classent les barres les unes par rapport aux autres dans CE graphique (proximité du max affiché et dynamique courte vs veille). Ne pas les interpréter comme seuils SLA ou scores absolus sans définition métier explicite.",
-          "Within-chart scaling only: colors rank bars relative to each other inside THIS chart (nearness to that chart’s displayed peak and short momentum vs yesterday). Do not read them as SLA thresholds or absolute scores unless your business defines them explicitly."
+          "🎨 Couleurs = classement local dans le graphique (pas un score absolu).",
+          "🎨 Colors = local ranking in this chart (not an absolute score)."
         )}
       </p>
     </section>

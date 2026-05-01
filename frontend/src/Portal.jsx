@@ -176,6 +176,12 @@ export default function Portal() {
     }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (selectedInstructionMethodId) return;
+    if (!Array.isArray(paymentInstructions.items) || !paymentInstructions.items.length) return;
+    setSelectedInstructionMethodId(paymentInstructions.items[0].id);
+  }, [paymentInstructions.items, selectedInstructionMethodId]);
+
   useLayoutEffect(() => {
     if (!import.meta.env.PROD) return;
     if (!session) {
@@ -356,6 +362,8 @@ export default function Portal() {
     if (m === "visa_card") return "Visa Card";
     return methodType || "Payment";
   }
+  const selectedInstruction = paymentInstructions.items.find((item) => item.id === selectedInstructionMethodId) || null;
+  const selectedInstructionType = selectedInstruction?.methodType || "mobile_money";
 
   return (
     <>
@@ -582,21 +590,22 @@ export default function Portal() {
           {paymentInstructions.items?.length ? (
             <section className="panel">
               <h2>{t("paymentHelpTitle")}</h2>
-              <p>
-                {t("paymentHelpLead")}
-              </p>
+              <p className="app-meta">{t("paymentHelpLead")}</p>
               <select
                 value={selectedInstructionMethodId}
                 onChange={(e) => setSelectedInstructionMethodId(e.target.value)}
                 style={{ maxWidth: 460, marginBottom: 12 }}
               >
-                <option value="">All configured methods</option>
+                <option value="">{isEnPortal ? "Choose method" : "Choisir la méthode"}</option>
                 {paymentInstructions.items.map((item) => (
                   <option key={item.id} value={item.id}>
                     {paymentMethodLabel(item.methodType)} — {item.providerName}
                   </option>
                 ))}
               </select>
+              {!selectedInstructionMethodId ? (
+                <p className="app-meta">{isEnPortal ? "ⓘ Pick one method to view exact company instructions." : "ⓘ Choisissez une méthode pour voir les consignes exactes de l'entreprise."}</p>
+              ) : null}
               {paymentInstructions.items
                 .filter((item) => !selectedInstructionMethodId || item.id === selectedInstructionMethodId)
                 .map((item) => (
@@ -642,8 +651,10 @@ export default function Portal() {
             </section>
           ) : null}
 
+          {selectedInstructionType === "mobile_money" ? (
           <form className="panel" onSubmit={onStartMobileMoneyPayment}>
             <h2>{t("payMobileTitle")}</h2>
+            <p className="app-meta">{isEnPortal ? "ⓘ Mobile Money flow" : "ⓘ Flux Mobile Money"}</p>
             <select
               value={mobilePayForm.invoiceId}
               onChange={(e) => setMobilePayForm({ ...mobilePayForm, invoiceId: e.target.value })}
@@ -691,9 +702,12 @@ export default function Portal() {
               </p>
             ) : null}
           </form>
+          ) : null}
 
+          {selectedInstructionType !== "mobile_money" ? (
           <form className="panel" onSubmit={onSubmitTid}>
             <h2>{t("tidTitle")}</h2>
+            <p className="app-meta">{isEnPortal ? "ⓘ Manual/transfer/card/crypto: send transaction reference for verification." : "ⓘ Manuel/virement/carte/crypto : envoyez la référence de transaction pour vérification."}</p>
             <select
               value={tidForm.invoiceId}
               onChange={(e) => setTidForm({ ...tidForm, invoiceId: e.target.value })}
@@ -726,6 +740,7 @@ export default function Portal() {
               {t("sendTid")}
             </button>
           </form>
+          ) : null}
         </>
       )}
       {brand?.portalFooterText ? (

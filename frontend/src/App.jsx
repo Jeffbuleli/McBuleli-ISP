@@ -475,6 +475,14 @@ const ROLE_PERMISSION_OPTIONS = [
   { key: "manage_customers", fr: "Gérer clients", en: "Manage customers" },
   { key: "manage_subscriptions", fr: "Gérer abonnements", en: "Manage subscriptions" }
 ];
+const STANDARD_PLATFORM_PAYMENT_METHODS = [
+  "mobile_money",
+  "cash",
+  "bank_transfer",
+  "visa_card",
+  "crypto_wallet",
+  "binance_pay"
+];
 
 function roleProfileLabel(roleKey, t) {
   const row = ROLE_PROFILE_OPTIONS.find((x) => x.key === roleKey);
@@ -1444,15 +1452,10 @@ function App() {
   });
   const availablePawapayNetworks = pawapayNetworks.length ? pawapayNetworks : DEFAULT_PAWAPAY_NETWORKS;
   useEffect(() => {
-    if (!platformBillingMethods.length) return;
-    const allowed = platformBillingMethods
-      .map((m) => m.methodType)
-      .filter((mt) => ["mobile_money", "cash", "bank_transfer", "visa_card", "crypto_wallet", "binance_pay"].includes(mt));
-    if (!allowed.length) return;
-    if (!allowed.includes(saasPayForm.methodType)) {
-      setSaasPayForm((prev) => ({ ...prev, methodType: allowed[0] }));
+    if (!STANDARD_PLATFORM_PAYMENT_METHODS.includes(saasPayForm.methodType)) {
+      setSaasPayForm((prev) => ({ ...prev, methodType: "mobile_money" }));
     }
-  }, [platformBillingMethods, saasPayForm.methodType]);
+  }, [saasPayForm.methodType]);
 
   const dashboardLayoutStacked = useMediaQuery("(max-width: 1200px)");
   const isMobileShell = useMediaQuery("(max-width: 899px)");
@@ -3907,28 +3910,29 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         if (user.role === "field_agent") return null;
         if (user.role === "system_owner") return null;
         const locked = billing.accessAllowed === false;
+        const configuredPlatformMethods = platformBillingMethods
+          .filter((m) => STANDARD_PLATFORM_PAYMENT_METHODS.includes(m.methodType))
+          .reduce((acc, m) => {
+            if (!acc[m.methodType]) acc[m.methodType] = [];
+            acc[m.methodType].push(m.providerName);
+            return acc;
+          }, {});
+        const selectedConfigured = Array.isArray(configuredPlatformMethods[saasPayForm.methodType]) && configuredPlatformMethods[saasPayForm.methodType].length > 0;
         return (
           <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
             <section className={`panel ${locked ? "error" : ""}`} id="mcbuleli-billing">
             <h2>{t("Abonnement McBuleli (paiements standards)", "McBuleli subscription (standard payments)")}</h2>
-            {locked ? (
-              <p>
-                {t(
-                  "Cet espace est verrouillé jusqu'au paiement mensuel. Choisissez une méthode de paiement configurée, puis suivez la validation étape par étape.",
-                  "This workspace is locked until monthly payment is received. Choose a configured payment method, then follow the step-by-step validation."
-                )}
-              </p>
-            ) : null}
+            {locked ? <p>{t("⚠ Espace verrouillé jusqu'au paiement.", "⚠ Workspace locked until payment.")}</p> : null}
             {billing.package ? (
-              <p>
+              <p className="app-meta">
                 {t("Formule :", "Plan:")} <strong>{billing.package.name}</strong> ({billing.package.code}) —{" "}
                 {isEn
-                  ? `$${billing.monthlyPriceUsd}/month, about ${billing.cdfEstimateForMonth} CDF/month (estimate). Billing period: ${billing.billingPeriodDays} days after each successful payment.`
-                  : `${billing.monthlyPriceUsd} $ / mois, environ ${billing.cdfEstimateForMonth} CDF/mois (estimation). Période de facturation : ${billing.billingPeriodDays} jours après chaque paiement réussi.`}
+                  ? `$${billing.monthlyPriceUsd}/month · ~${billing.cdfEstimateForMonth} CDF · ${billing.billingPeriodDays}d cycle`
+                  : `${billing.monthlyPriceUsd} $/mois · ~${billing.cdfEstimateForMonth} CDF · cycle ${billing.billingPeriodDays}j`}
               </p>
             ) : null}
             {billing.subscription ? (
-              <p>
+              <p className="app-meta">
                 {t("Statut :", "Status:")} <strong>{billing.subscription.status}</strong> {t("jusqu'au", "until")}{" "}
                 {new Date(billing.subscription.endsAt).toLocaleString("fr-FR")}.
               </p>
@@ -3937,7 +3941,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               user.role === "company_manager" ||
               user.role === "isp_admin") && (
               <>
-                <h3>{t("Initier le paiement de renouvellement", "Start renewal payment")}</h3>
+                <h3>{t("Renouvellement", "Renewal")}</h3>
                 <form onSubmit={onInitiatePlatformDeposit}>
                   <select
                     value={saasPayForm.packageId}
@@ -3960,23 +3964,24 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                     value={saasPayForm.methodType}
                     onChange={(e) => setSaasPayForm({ ...saasPayForm, methodType: e.target.value })}
                   >
-                    {platformBillingMethods
-                      .filter((m) =>
-                        ["mobile_money", "cash", "bank_transfer", "visa_card", "crypto_wallet", "binance_pay"].includes(
-                          m.methodType
-                        )
-                      )
-                      .map((m) => (
-                        <option key={`${m.methodType}-${m.providerName}`} value={m.methodType}>
-                          {paymentMethodTypeText(m.methodType, t)} — {m.providerName}
+                    {STANDARD_PLATFORM_PAYMENT_METHODS.map((mt) => {
+                      const providers = configuredPlatformMethods[mt] || [];
+                      const configured = providers.length > 0;
+                      const suffix = configured
+                        ? `✓ ${providers[0]}`
+                        : t("⚠ configurer", "⚠ configure");
+                      return (
+                        <option key={mt} value={mt}>
+                          {paymentMethodTypeText(mt, t)} — {suffix}
                         </option>
-                      ))}
-                    {!platformBillingMethods.length ? (
-                      <option value="mobile_money">
-                        {t("Aucune méthode active (configurer dans Facturation)", "No active method (configure in Billing)")}
-                      </option>
-                    ) : null}
+                      );
+                    })}
                   </select>
+                  {!selectedConfigured ? (
+                    <p className="app-meta">
+                      {t("ⓘ Activez d'abord cette méthode dans la table Facturation > Moyens de paiement FAI.", "ⓘ Activate this method first in Billing > ISP payment methods.")}
+                    </p>
+                  ) : null}
                   {saasPayForm.methodType === "mobile_money" ? (
                     <>
                   <select
@@ -4047,7 +4052,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                       ) : null}
                     </>
                   )}
-                  <button type="submit" disabled={!selectedIspId}>
+                  <button type="submit" disabled={!selectedIspId || !selectedConfigured}>
                     {t("Soumettre le paiement", "Submit payment")}
                   </button>
                 </form>
@@ -4068,10 +4073,10 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               </>
             )}
             {billing.subscription?.status === "trialing" ? (
-              <p style={{ fontSize: "0.9rem", color: "var(--mb-muted)" }}>
+              <p className="app-meta" style={{ fontSize: "0.9rem", color: "var(--mb-muted)" }}>
                 {t(
-                  "Pour changer de formule, choisissez le nouveau plan puis une méthode de paiement configurée. L’activation est appliquée après validation du paiement.",
-                  "To switch plan, select the new tier then a configured payment method. Activation is applied after payment validation."
+                  "ⓘ Changer de plan: choisir forfait + méthode active.",
+                  "ⓘ To switch plan: pick tier + active method."
                 )}
               </p>
             ) : null}
@@ -4390,6 +4395,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                   isEn={isEn}
                   globalSummary={user.role === "system_owner" ? superDashboard : null}
                   networkStats={networkStats}
+                  cashbox={dashboard?.cashbox}
                   users={users}
                   telemetrySnapshots={telemetrySnapshots}
                 />
