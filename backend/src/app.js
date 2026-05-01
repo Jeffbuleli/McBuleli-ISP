@@ -99,16 +99,12 @@ function isUuidString(value) {
 }
 
 const PAYMENT_METHOD_TYPES = new Set([
-  "pawapay",
-  "onafriq",
-  "paypal",
-  "binance_pay",
-  "crypto_wallet",
-  "bank_transfer",
   "cash",
   "mobile_money",
-  "gateway",
-  "other"
+  "binance_pay",
+  "bank_transfer",
+  "crypto_wallet",
+  "visa_card"
 ]);
 
 function normalizeMethodType(value) {
@@ -161,9 +157,66 @@ function paymentIntentChannelToMethod(channel) {
   if (c === "cash_agent") return "cash";
   if (c === "mobile_money_manual") return "manual_mobile_money";
   if (c === "bank_transfer") return "bank_transfer";
-  if (c === "card_manual") return "gateway";
+  if (c === "card_manual") return "visa_card";
   if (c === "crypto_wallet") return "crypto_wallet";
   return "other";
+}
+
+function normalizePaymentMethodConfig(methodType, config) {
+  const cfg = config && typeof config === "object" ? config : {};
+  const note = String(cfg.note || "").trim().slice(0, 1500);
+  const validationEtaMinutes = Math.max(1, Math.min(1440, Number(cfg.validationEtaMinutes || 15)));
+  const base = {
+    note,
+    validationEtaMinutes,
+    checkoutSteps: Array.isArray(cfg.checkoutSteps)
+      ? cfg.checkoutSteps.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 8)
+      : []
+  };
+
+  if (methodType === "cash") {
+    return {
+      ...base,
+      collectionPoint: String(cfg.collectionPoint || "").trim().slice(0, 255),
+      collectionContact: String(cfg.collectionContact || "").trim().slice(0, 255),
+      collectorPolicy: String(cfg.collectorPolicy || "").trim().slice(0, 500)
+    };
+  }
+  if (methodType === "mobile_money") {
+    return {
+      ...base,
+      mobileMoneyNumber: String(cfg.mobileMoneyNumber || cfg.phone || "").trim().slice(0, 255),
+      accountName: String(cfg.accountName || cfg.ownerName || "").trim().slice(0, 255),
+      networkHints: String(cfg.networkHints || "").trim().slice(0, 255)
+    };
+  }
+  if (methodType === "bank_transfer") {
+    return {
+      ...base,
+      bankName: String(cfg.bankName || "").trim().slice(0, 255),
+      accountName: String(cfg.accountName || "").trim().slice(0, 255),
+      accountNumber: String(cfg.accountNumber || "").trim().slice(0, 255),
+      iban: String(cfg.iban || "").trim().slice(0, 255),
+      swiftCode: String(cfg.swiftCode || "").trim().slice(0, 255)
+    };
+  }
+  if (methodType === "binance_pay" || methodType === "crypto_wallet") {
+    return {
+      ...base,
+      walletAddress: String(cfg.walletAddress || "").trim().slice(0, 255),
+      walletNetwork: String(cfg.walletNetwork || "").trim().slice(0, 255),
+      memoTag: String(cfg.memoTag || "").trim().slice(0, 255)
+    };
+  }
+  if (methodType === "visa_card") {
+    return {
+      ...base,
+      processorName: String(cfg.processorName || "").trim().slice(0, 255),
+      merchantLabel: String(cfg.merchantLabel || "").trim().slice(0, 255),
+      supportContact: String(cfg.supportContact || "").trim().slice(0, 255)
+    };
+  }
+  return base;
 }
 
 function resolvePublicApiBase(req) {
@@ -1887,13 +1940,14 @@ app.get("/api/portal/announcements", authenticatePortal, async (req, res) => {
 
 app.get("/api/portal/payment-instructions", authenticatePortal, async (req, res) => {
   const { ispId } = req.portal;
+  const allowedPortalMethods = ["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card"];
   const [methods, branding] = await Promise.all([
     query(
       `SELECT id, method_type AS "methodType", provider_name AS "providerName", config_json AS "configJson"
        FROM isp_payment_methods
-       WHERE isp_id = $1 AND is_active = TRUE
+       WHERE isp_id = $1 AND is_active = TRUE AND method_type = ANY($2::text[])
        ORDER BY created_at DESC`,
-      [ispId]
+      [ispId, allowedPortalMethods]
     ),
     query(
       `SELECT display_name AS "displayName", contact_phone AS "contactPhone", contact_email AS "contactEmail"
@@ -1919,7 +1973,17 @@ app.get("/api/portal/payment-instructions", authenticatePortal, async (req, res)
         walletNetwork: cfg.walletNetwork || "",
         memoTag: cfg.memoTag || "",
         validationEtaMinutes: Number(cfg.validationEtaMinutes || 15),
-        note: cfg.note || ""
+        note: cfg.note || "",
+        collectionPoint: cfg.collectionPoint || "",
+        collectionContact: cfg.collectionContact || "",
+        collectorPolicy: cfg.collectorPolicy || "",
+        processorName: cfg.processorName || "",
+        merchantLabel: cfg.merchantLabel || "",
+        supportContact: cfg.supportContact || "",
+        networkHints: cfg.networkHints || "",
+        checkoutSteps: Array.isArray(cfg.checkoutSteps)
+          ? cfg.checkoutSteps.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 8)
+          : []
       }
     };
   });
@@ -3199,16 +3263,10 @@ app.post(
         message: `Unsupported methodType. Allowed: ${Array.from(PAYMENT_METHOD_TYPES).join(", ")}`
       });
     }
-    const limits = await getPlatformFeatureLimits(ispId);
-    const customGatewayTypes = new Set(["pawapay", "onafriq", "paypal", "binance_pay", "crypto_wallet", "gateway"]);
-    if (customGatewayTypes.has(normalizedMethodType) && !limits?.customPaymentGateway) {
-      return res.status(403).json({
-        message: "Votre formule actuelle utilise le compte Pawapay McBuleli. Passez à Pro ou Premium pour ajouter votre propre agrégateur."
-      });
-    }
+    const normalizedConfig = normalizePaymentMethodConfig(normalizedMethodType, config);
     const inserted = await query(
       "INSERT INTO isp_payment_methods (id, isp_id, method_type, provider_name, config_json, is_active, created_by) VALUES (gen_random_uuid(), $1, $2, $3, $4::jsonb, $5, $6) RETURNING id, isp_id AS \"ispId\", method_type AS \"methodType\", provider_name AS \"providerName\", config_json AS \"config\", is_active AS \"isActive\", created_at AS \"createdAt\"",
-      [ispId, normalizedMethodType, providerName, JSON.stringify(config), Boolean(isActive), req.user.sub]
+      [ispId, normalizedMethodType, providerName, JSON.stringify(normalizedConfig), Boolean(isActive), req.user.sub]
     );
     await logAudit({
       ispId,
@@ -5524,6 +5582,33 @@ app.post(
     if (!allowedChannels.has(String(channel))) {
       return res.status(400).json({ message: "Invalid channel." });
     }
+    const normalizedChannel = String(channel).toLowerCase();
+    const requiredMethodTypes =
+      normalizedChannel === "cash_agent"
+        ? ["cash"]
+        : normalizedChannel === "mobile_money_manual"
+          ? ["mobile_money"]
+          : normalizedChannel === "bank_transfer"
+            ? ["bank_transfer"]
+            : normalizedChannel === "card_manual"
+              ? ["visa_card"]
+              : normalizedChannel === "crypto_wallet"
+                ? ["crypto_wallet", "binance_pay"]
+                : [];
+    if (requiredMethodTypes.length) {
+      const configured = await query(
+        `SELECT id
+         FROM isp_payment_methods
+         WHERE isp_id = $1 AND is_active = TRUE AND method_type = ANY($2::text[])
+         LIMIT 1`,
+        [ispId, requiredMethodTypes]
+      );
+      if (!configured.rows[0]) {
+        return res.status(400).json({
+          message: `Payment channel "${normalizedChannel}" requires an active method configuration: ${requiredMethodTypes.join(", ")}.`
+        });
+      }
+    }
     const inv = await query(
       `SELECT id, isp_id, customer_id, subscription_id, amount_usd, status
        FROM invoices WHERE id = $1 AND isp_id = $2`,
@@ -5539,7 +5624,16 @@ app.post(
       return res.status(400).json({ message: "Invalid amountUsd." });
     }
     const safeEvidence = evidence && typeof evidence === "object" ? evidence : {};
-    if (String(channel) === "bank_transfer") {
+    if (normalizedChannel === "cash_agent") {
+      const collectorName = String(safeEvidence.collectorName || "").trim();
+      const receiptNumber = String(safeEvidence.receiptNumber || "").trim();
+      if (!collectorName || !receiptNumber) {
+        return res.status(400).json({
+          message: "cash_agent requires evidence.collectorName and evidence.receiptNumber."
+        });
+      }
+    }
+    if (normalizedChannel === "bank_transfer") {
       const bankName = String(safeEvidence.bankName || "").trim();
       const accountNumber = String(safeEvidence.accountNumber || "").trim();
       const accountName = String(safeEvidence.accountName || "").trim();
@@ -5549,17 +5643,17 @@ app.post(
         });
       }
     }
-    if (String(channel) === "card_manual") {
+    if (normalizedChannel === "card_manual") {
       const processorName = String(safeEvidence.processorName || "").trim();
       const cardLast4 = String(safeEvidence.cardLast4 || "").trim();
       const authCode = String(safeEvidence.authCode || "").trim();
       if (!processorName || !/^\d{4}$/.test(cardLast4) || !authCode) {
         return res.status(400).json({
-          message: "card_manual requires evidence.processorName, evidence.cardLast4 (4 digits), and evidence.authCode."
+          message: "card_manual (Visa card) requires evidence.processorName, evidence.cardLast4 (4 digits), and evidence.authCode."
         });
       }
     }
-    if (String(channel) === "crypto_wallet") {
+    if (normalizedChannel === "crypto_wallet") {
       const walletNetwork = String(safeEvidence.walletNetwork || "").trim();
       const walletAddress = String(safeEvidence.walletAddress || "").trim();
       const txHash = String(externalRef || "").trim();

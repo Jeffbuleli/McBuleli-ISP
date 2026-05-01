@@ -372,20 +372,93 @@ function translateToEnglish(input) {
 /** Libellés types de moyen de paiement (liste déroulante + affichage) */
 const PAYMENT_METHOD_TYPE_I18N = {
   cash: ["Espèces (cash)", "Cash"],
-  pawapay: ["Mobile Money", "Mobile Money"],
-  onafriq: ["ONAFRIQ", "ONAFRIQ"],
-  paypal: ["PayPal", "PayPal"],
+  mobile_money: ["Mobile Money", "Mobile Money"],
   binance_pay: ["Binance Pay", "Binance Pay"],
-  mobile_money: ["Mobile Money (générique)", "Mobile Money (generic)"],
-  gateway: ["Gateway personnalisé", "Custom gateway"],
   bank_transfer: ["Virement bancaire", "Bank transfer"],
   crypto_wallet: ["Portefeuille crypto", "Crypto wallet"],
-  other: ["Autre", "Other"]
+  visa_card: ["Visa Card", "Visa Card"]
 };
 
 function paymentMethodTypeText(mt, t) {
   const p = PAYMENT_METHOD_TYPE_I18N[mt];
   return p ? t(p[0], p[1]) : mt || "—";
+}
+
+function paymentMethodConfigFromForm(form) {
+  const mt = String(form.methodType || "");
+  const base = {
+    note: String(form.note || "").trim(),
+    validationEtaMinutes: Number(form.validationEtaMinutes || 15),
+    checkoutSteps: []
+  };
+  if (mt === "cash") {
+    return {
+      ...base,
+      checkoutSteps: [
+        "Client reçoit le montant + référence facture.",
+        "Agent terrain collecte et remet un reçu signé.",
+        "Superviseur valide l'encaissement avant activation."
+      ],
+      collectionPoint: String(form.collectionPoint || "").trim(),
+      collectionContact: String(form.collectionContact || "").trim(),
+      collectorPolicy: String(form.collectorPolicy || "").trim()
+    };
+  }
+  if (mt === "mobile_money") {
+    return {
+      ...base,
+      checkoutSteps: [
+        "Client envoie Mobile Money vers le numéro du FAI.",
+        "Client partage la référence transaction.",
+        "Agent validation confirme réception avant activation."
+      ],
+      mobileMoneyNumber: String(form.mobileMoneyNumber || "").trim(),
+      accountName: String(form.accountName || "").trim(),
+      networkHints: String(form.networkHints || "").trim()
+    };
+  }
+  if (mt === "bank_transfer") {
+    return {
+      ...base,
+      checkoutSteps: [
+        "Client initie le virement au bénéficiaire FAI.",
+        "Client transmet la référence bancaire.",
+        "Finance FAI vérifie le crédit compte avant activation."
+      ],
+      bankName: String(form.bankName || "").trim(),
+      accountName: String(form.accountName || "").trim(),
+      accountNumber: String(form.accountNumber || "").trim(),
+      iban: String(form.iban || "").trim(),
+      swiftCode: String(form.swiftCode || "").trim()
+    };
+  }
+  if (mt === "crypto_wallet" || mt === "binance_pay") {
+    return {
+      ...base,
+      checkoutSteps: [
+        "Client envoie le montant vers l'adresse officielle.",
+        "Client partage le hash TX.",
+        "FAI confirme transaction on-chain avant activation."
+      ],
+      walletAddress: String(form.walletAddress || "").trim(),
+      walletNetwork: String(form.walletNetwork || "").trim(),
+      memoTag: String(form.memoTag || "").trim()
+    };
+  }
+  if (mt === "visa_card") {
+    return {
+      ...base,
+      checkoutSteps: [
+        "Client paie via terminal ou lien Visa.",
+        "Client conserve le reçu/autorisation.",
+        "FAI vérifie la capture avant activation."
+      ],
+      processorName: String(form.processorName || "").trim(),
+      merchantLabel: String(form.merchantLabel || "").trim(),
+      supportContact: String(form.supportContact || "").trim()
+    };
+  }
+  return base;
 }
 
 function CsvImportResultBlock({ createdCount, skipped, errors, maxRows = 40, onDismiss, t }) {
@@ -1138,7 +1211,24 @@ function App() {
   const [paymentMethodForm, setPaymentMethodForm] = useState({
     methodType: "cash",
     providerName: "Guichet espèces",
-    configText: "{}"
+    accountName: "",
+    bankName: "",
+    accountNumber: "",
+    iban: "",
+    swiftCode: "",
+    mobileMoneyNumber: "",
+    networkHints: "",
+    walletAddress: "",
+    walletNetwork: "",
+    memoTag: "",
+    processorName: "",
+    merchantLabel: "",
+    supportContact: "",
+    collectionPoint: "",
+    collectionContact: "",
+    collectorPolicy: "",
+    validationEtaMinutes: "15",
+    note: ""
   });
   const [gatewayCallbackByMethod, setGatewayCallbackByMethod] = useState({});
   const [notificationProviderForm, setNotificationProviderForm] = useState({
@@ -1231,7 +1321,11 @@ function App() {
     cardLast4: "",
     authCode: "",
     walletNetwork: "",
-    walletAddress: ""
+    walletAddress: "",
+    collectorName: "",
+    receiptNumber: "",
+    collectionLocation: "",
+    collectedAt: ""
   });
   const [voucherForm, setVoucherForm] = useState({
     planId: "",
@@ -2799,15 +2893,33 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
 
   async function onCreatePaymentMethod(e) {
     e.preventDefault();
+    const config = paymentMethodConfigFromForm(paymentMethodForm);
     await api.createPaymentMethod(selectedIspId, {
       methodType: paymentMethodForm.methodType,
       providerName: paymentMethodForm.providerName,
-      config: JSON.parse(paymentMethodForm.configText || "{}")
+      config
     });
     setPaymentMethodForm({
       methodType: "cash",
       providerName: "Guichet espèces",
-      configText: "{}"
+      accountName: "",
+      bankName: "",
+      accountNumber: "",
+      iban: "",
+      swiftCode: "",
+      mobileMoneyNumber: "",
+      networkHints: "",
+      walletAddress: "",
+      walletNetwork: "",
+      memoTag: "",
+      processorName: "",
+      merchantLabel: "",
+      supportContact: "",
+      collectionPoint: "",
+      collectionContact: "",
+      collectorPolicy: "",
+      validationEtaMinutes: "15",
+      note: ""
     });
     refresh();
   }
@@ -3015,6 +3127,12 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
   async function onCreatePaymentIntent(e) {
     e.preventDefault();
     const ev = {};
+    if (paymentIntentForm.channel === "cash_agent") {
+      ev.collectorName = paymentIntentForm.collectorName;
+      ev.receiptNumber = paymentIntentForm.receiptNumber;
+      ev.collectionLocation = paymentIntentForm.collectionLocation;
+      ev.collectedAt = paymentIntentForm.collectedAt || undefined;
+    }
     if (paymentIntentForm.channel === "bank_transfer") {
       ev.bankName = paymentIntentForm.bankName;
       ev.accountName = paymentIntentForm.accountName;
@@ -3051,7 +3169,11 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
       cardLast4: "",
       authCode: "",
       walletNetwork: "",
-      walletAddress: ""
+      walletAddress: "",
+      collectorName: "",
+      receiptNumber: "",
+      collectionLocation: "",
+      collectedAt: ""
     });
     refresh();
   }
@@ -3786,8 +3908,8 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               <h2>{t("Analyse — fenêtre temporelle", "Analytics — time window")}</h2>
               <p className="app-meta dashboard-analytics-period__lead">
                 {t(
-                  "Les indicateurs « flux » et caisse utilisent strictement l’intervalle ci‑dessous (paiements confirmés par date `paid_at`). Les stocks (clients, abonnements, facturation cumulée) sont des instantanés au dernier chargement.",
-                  "Flow KPIs and cashbox use strictly the interval below (confirmed payments by `paid_at` date). Stock KPIs (customers, subscriptions, lifetime billed revenue) are snapshots from the latest refresh."
+                  "Les indicateurs « flux » et caisse utilisent strictement l’intervalle ci‑dessous (paiements confirmés par date de paiement). Les stocks (clients, abonnements, facturation cumulée) sont des instantanés au dernier chargement.",
+                  "Flow KPIs and cashbox use strictly the interval below (confirmed payments by payment date). Stock KPIs (customers, subscriptions, lifetime billed revenue) are snapshots from the latest refresh."
                 )}
               </p>
               <div className="dashboard-analytics-period__controls">
@@ -4553,13 +4675,19 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreatePaymentMethod}>
             <h2>{t("Moyens de paiement FAI", "ISP payment methods")}</h2>
+            <p className="app-meta">
+              {t(
+                "Catalogue standard disponible: Cash, Mobile Money, Binance Pay, Virement bancaire, Portefeuille crypto et Visa Card. Les autres méthodes sont réservées aux demandes Premium.",
+                "Standard catalog enabled: Cash, Mobile Money, Binance Pay, Bank transfer, Crypto wallet and Visa Card. Other methods are reserved for Premium requests."
+              )}
+            </p>
             <select
               value={paymentMethodForm.methodType}
               onChange={(e) =>
                 setPaymentMethodForm({ ...paymentMethodForm, methodType: e.target.value })
               }
             >
-              {Object.keys(PAYMENT_METHOD_TYPE_I18N).map((key) => (
+              {["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card"].map((key) => (
                 <option key={key} value={key}>
                   {paymentMethodTypeText(key, t)}
                 </option>
@@ -4573,16 +4701,72 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               }
             />
             <input
-              placeholder={t('Configuration JSON (ex : {"apiKey":"xxx"})', 'Config JSON (e.g. {"apiKey":"xxx"})')}
-              value={paymentMethodForm.configText}
-              onChange={(e) =>
-                setPaymentMethodForm({ ...paymentMethodForm, configText: e.target.value })
-              }
+              placeholder={t("Délai de validation (minutes)", "Validation ETA (minutes)")}
+              value={paymentMethodForm.validationEtaMinutes}
+              onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, validationEtaMinutes: e.target.value })}
             />
+            <input
+              placeholder={t("Note visible côté client", "Customer-facing note")}
+              value={paymentMethodForm.note}
+              onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, note: e.target.value })}
+            />
+            {paymentMethodForm.methodType === "cash" ? (
+              <>
+                <input
+                  placeholder={t("Point de collecte", "Collection point")}
+                  value={paymentMethodForm.collectionPoint}
+                  onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, collectionPoint: e.target.value })}
+                />
+                <input
+                  placeholder={t("Contact collecte", "Collection contact")}
+                  value={paymentMethodForm.collectionContact}
+                  onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, collectionContact: e.target.value })}
+                />
+              </>
+            ) : null}
+            {paymentMethodForm.methodType === "mobile_money" ? (
+              <>
+                <input
+                  placeholder={t("Numéro Mobile Money", "Mobile Money number")}
+                  value={paymentMethodForm.mobileMoneyNumber}
+                  onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, mobileMoneyNumber: e.target.value })}
+                />
+                <input
+                  placeholder={t("Nom bénéficiaire", "Beneficiary name")}
+                  value={paymentMethodForm.accountName}
+                  onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, accountName: e.target.value })}
+                />
+              </>
+            ) : null}
+            {paymentMethodForm.methodType === "bank_transfer" ? (
+              <>
+                <input placeholder={t("Banque", "Bank")} value={paymentMethodForm.bankName} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, bankName: e.target.value })} />
+                <input placeholder={t("Titulaire", "Account owner")} value={paymentMethodForm.accountName} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, accountName: e.target.value })} />
+                <input placeholder={t("N° compte", "Account number")} value={paymentMethodForm.accountNumber} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, accountNumber: e.target.value })} />
+                <input placeholder="IBAN" value={paymentMethodForm.iban} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, iban: e.target.value })} />
+                <input placeholder="SWIFT/BIC" value={paymentMethodForm.swiftCode} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, swiftCode: e.target.value })} />
+              </>
+            ) : null}
+            {(paymentMethodForm.methodType === "crypto_wallet" || paymentMethodForm.methodType === "binance_pay") ? (
+              <>
+                <input placeholder={t("Adresse wallet", "Wallet address")} value={paymentMethodForm.walletAddress} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, walletAddress: e.target.value })} />
+                <input placeholder={t("Réseau wallet", "Wallet network")} value={paymentMethodForm.walletNetwork} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, walletNetwork: e.target.value })} />
+                <input placeholder={t("Memo/Tag (optionnel)", "Memo/Tag (optional)")} value={paymentMethodForm.memoTag} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, memoTag: e.target.value })} />
+              </>
+            ) : null}
+            {paymentMethodForm.methodType === "visa_card" ? (
+              <>
+                <input placeholder={t("Acquéreur / PSP", "Processor / PSP")} value={paymentMethodForm.processorName} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, processorName: e.target.value })} />
+                <input placeholder={t("Libellé commerçant", "Merchant label")} value={paymentMethodForm.merchantLabel} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, merchantLabel: e.target.value })} />
+                <input placeholder={t("Contact support", "Support contact")} value={paymentMethodForm.supportContact} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, supportContact: e.target.value })} />
+              </>
+            ) : null}
             <button type="submit" disabled={!selectedIspId}>
               {t("Ajouter un moyen de paiement", "Add payment method")}
             </button>
-            {paymentMethods.map((pm) => (
+            {paymentMethods
+              .filter((pm) => ["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card"].includes(pm.methodType))
+              .map((pm) => (
               <p key={pm.id}>
                 {paymentMethodTypeText(pm.methodType, t)} — {pm.providerName} [
                 {pm.isActive ? t("actif", "active") : t("inactif", "inactive")}]{" "}
@@ -5072,7 +5256,13 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
 
       <section className="grid">
         <form className="panel" onSubmit={onCreatePaymentIntent}>
-          <h2>{t("Encaissement manuel (cash / banque / carte / crypto)", "Manual collection (cash / bank / card / crypto)")}</h2>
+          <h2>{t("Encaissement manuel standard", "Standard manual collection")}</h2>
+          <p className="app-meta">
+            {t(
+              "Procédure: 1) collecte preuve client, 2) validation financière FAI, 3) activation internet après confirmation.",
+              "Procedure: 1) capture customer proof, 2) FAI finance validation, 3) internet activation after confirmation."
+            )}
+          </p>
           <select
             value={paymentIntentForm.invoiceId}
             onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, invoiceId: e.target.value })}
@@ -5094,8 +5284,8 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           >
             <option value="cash_agent">{t("Cash agent terrain", "Field cash collection")}</option>
             <option value="bank_transfer">{t("Virement bancaire", "Bank transfer")}</option>
-            <option value="card_manual">{t("Carte bancaire (manuel)", "Card payment (manual)")}</option>
-            <option value="crypto_wallet">{t("Crypto / Binance", "Crypto / Binance")}</option>
+            <option value="card_manual">{t("Visa Card (manuel)", "Visa Card (manual)")}</option>
+            <option value="crypto_wallet">{t("Portefeuille crypto / Binance", "Crypto wallet / Binance")}</option>
             <option value="mobile_money_manual">{t("Mobile Money manuel", "Manual Mobile Money")}</option>
           </select>
           <input
@@ -5113,6 +5303,14 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             value={paymentIntentForm.amountUsd}
             onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, amountUsd: e.target.value })}
           />
+          {paymentIntentForm.channel === "cash_agent" ? (
+            <>
+              <input placeholder={t("Nom agent collecteur", "Collector agent name")} value={paymentIntentForm.collectorName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, collectorName: e.target.value })} />
+              <input placeholder={t("N° reçu cash", "Cash receipt number")} value={paymentIntentForm.receiptNumber} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, receiptNumber: e.target.value })} />
+              <input placeholder={t("Lieu de collecte", "Collection location")} value={paymentIntentForm.collectionLocation} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, collectionLocation: e.target.value })} />
+              <input type="datetime-local" value={paymentIntentForm.collectedAt} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, collectedAt: e.target.value })} />
+            </>
+          ) : null}
           {paymentIntentForm.channel === "bank_transfer" ? (
             <>
               <input placeholder={t("Banque", "Bank name")} value={paymentIntentForm.bankName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, bankName: e.target.value })} />

@@ -178,8 +178,8 @@ export default function DashboardHistograms({
       <h2>{t("Performance & activité", "Performance & activity")}</h2>
       <p className="dash-hist-lead">
         {t(
-          "Histogrammes relatifs : chaque graphique normalise ses barres au maximum affiché dans ce graphique uniquement — ce n’est pas un jugement absolu de santé métier. Séries journalières limitées aux 7 derniers points ; encaissements = paiements confirmés par jour (`paid_at`).",
-          "Relative histograms: each chart scales bars to that chart’s own maximum — not an absolute business-health verdict. Daily series show at most the last seven points; collections chart uses confirmed payments grouped by `paid_at` day."
+          "Histogrammes relatifs : chaque graphique normalise ses barres au maximum affiché dans ce graphique uniquement — ce n’est pas un jugement absolu de santé métier. Séries journalières limitées aux 7 derniers points ; encaissements = paiements confirmés par jour (date de paiement).",
+          "Relative histograms: each chart scales bars to that chart’s own maximum — not an absolute business-health verdict. Daily series show at most the last seven points; collections chart uses confirmed payments grouped by payment date."
         )}
       </p>
       {networkStats?.quality?.coverageRatio != null && networkStats?.quality?.expectedDays > 2 ? (
@@ -253,8 +253,8 @@ export default function DashboardHistograms({
           <BarGroup
             title={t("Encaissements confirmés par jour", "Confirmed collections per day")}
             subtitle={t(
-              "Somme des paiements confirmés par date payeur (`paid_at`).",
-              "Sum of confirmed payments grouped by payer-settled day (`paid_at`)."
+              "Somme des paiements confirmés par date de paiement.",
+              "Sum of confirmed payments grouped by payment date."
             )}
             tierMode="temporal"
             labels={payLabels}

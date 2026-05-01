@@ -45,8 +45,8 @@ export const DEFINITION_GLOSSARY = {
     en: "Count of open invoices (unpaid or overdue) at time T."
   },
   confirmed_payments_by_paid_at_in_period: {
-    fr: "Somme des paiements confirmés dont la date `paid_at` tombe dans l’intervalle sélectionné (flux de trésorerie).",
-    en: "Sum of confirmed payments whose `paid_at` date falls in the selected interval (cash-flow view)."
+    fr: "Somme des paiements confirmés dont la date de paiement tombe dans l’intervalle sélectionné (flux de trésorerie).",
+    en: "Sum of confirmed payments whose payment date falls in the selected interval (cash-flow view)."
   },
   network_daily_rollup_sum: {
     fr: "Agrégation quotidienne réseau : somme des relevés journaliers sur l’intervalle (voir note d’agrégation côté API).",

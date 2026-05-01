@@ -92,6 +92,7 @@ export default function Portal() {
   const [session, setSession] = useState(null);
   const [portalAnnouncements, setPortalAnnouncements] = useState([]);
   const [paymentInstructions, setPaymentInstructions] = useState({ owner: null, items: [] });
+  const [selectedInstructionMethodId, setSelectedInstructionMethodId] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [tidForm, setTidForm] = useState({ invoiceId: "", tid: "", submittedByPhone: "", amountUsd: "" });
@@ -349,9 +350,10 @@ export default function Portal() {
   function paymentMethodLabel(methodType) {
     const m = String(methodType || "").toLowerCase();
     if (m === "bank_transfer") return t("contactBankName");
-    if (m === "mobile_money" || m === "pawapay") return t("payMobileTitle");
+    if (m === "mobile_money") return t("payMobileTitle");
     if (m === "crypto_wallet" || m === "binance_pay") return "Crypto / Binance";
-    if (m === "cash") return "Cash Agent";
+    if (m === "cash") return "Cash";
+    if (m === "visa_card") return "Visa Card";
     return methodType || "Payment";
   }
 
@@ -583,20 +585,47 @@ export default function Portal() {
               <p>
                 {t("paymentHelpLead")}
               </p>
-              {paymentInstructions.items.map((item) => (
+              <select
+                value={selectedInstructionMethodId}
+                onChange={(e) => setSelectedInstructionMethodId(e.target.value)}
+                style={{ maxWidth: 460, marginBottom: 12 }}
+              >
+                <option value="">All configured methods</option>
+                {paymentInstructions.items.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {paymentMethodLabel(item.methodType)} — {item.providerName}
+                  </option>
+                ))}
+              </select>
+              {paymentInstructions.items
+                .filter((item) => !selectedInstructionMethodId || item.id === selectedInstructionMethodId)
+                .map((item) => (
                 <div key={item.id} className="portal-payment-instruction">
                   <p className="portal-payment-instruction__title">
                     {paymentMethodLabel(item.methodType)} — {item.providerName}
                   </p>
+                  {Array.isArray(item.instructions?.checkoutSteps) && item.instructions.checkoutSteps.length ? (
+                    <ol>
+                      {item.instructions.checkoutSteps.map((step, idx) => (
+                        <li key={`${item.id}-s-${idx}`}>{step}</li>
+                      ))}
+                    </ol>
+                  ) : null}
                   {item.instructions?.accountName ? <p>Account owner: <b>{item.instructions.accountName}</b></p> : null}
                   {item.instructions?.bankName ? <p>Bank: <b>{item.instructions.bankName}</b></p> : null}
                   {item.instructions?.accountNumber ? <p>Account number: <b>{item.instructions.accountNumber}</b></p> : null}
                   {item.instructions?.iban ? <p>IBAN: <b>{item.instructions.iban}</b></p> : null}
                   {item.instructions?.swiftCode ? <p>SWIFT: <b>{item.instructions.swiftCode}</b></p> : null}
                   {item.instructions?.mobileMoneyNumber ? <p>Mobile money: <b>{item.instructions.mobileMoneyNumber}</b></p> : null}
+                  {item.instructions?.networkHints ? <p>Network hints: <b>{item.instructions.networkHints}</b></p> : null}
                   {item.instructions?.walletAddress ? <p>Wallet: <b>{item.instructions.walletAddress}</b></p> : null}
                   {item.instructions?.walletNetwork ? <p>Network: <b>{item.instructions.walletNetwork}</b></p> : null}
                   {item.instructions?.memoTag ? <p>Memo/Tag: <b>{item.instructions.memoTag}</b></p> : null}
+                  {item.instructions?.collectionPoint ? <p>Collection point: <b>{item.instructions.collectionPoint}</b></p> : null}
+                  {item.instructions?.collectionContact ? <p>Collection contact: <b>{item.instructions.collectionContact}</b></p> : null}
+                  {item.instructions?.processorName ? <p>Processor: <b>{item.instructions.processorName}</b></p> : null}
+                  {item.instructions?.merchantLabel ? <p>Merchant: <b>{item.instructions.merchantLabel}</b></p> : null}
+                  {item.instructions?.supportContact ? <p>Support: <b>{item.instructions.supportContact}</b></p> : null}
                   {item.instructions?.validationEtaMinutes ? (
                     <p>
                       Validation ETA: <b>{item.instructions.validationEtaMinutes} min</b>
