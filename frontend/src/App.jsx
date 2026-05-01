@@ -3918,6 +3918,9 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             return acc;
           }, {});
         const selectedConfigured = Array.isArray(configuredPlatformMethods[saasPayForm.methodType]) && configuredPlatformMethods[saasPayForm.methodType].length > 0;
+        const renewalPackages = platformPackages
+          .filter((p) => ["essential", "pro"].includes(String(p.code || "").toLowerCase()))
+          .filter((p, idx, arr) => arr.findIndex((x) => String(x.code || "").toLowerCase() === String(p.code || "").toLowerCase()) === idx);
         return (
           <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
             <section className={`panel ${locked ? "error" : ""}`} id="mcbuleli-billing">
@@ -3952,8 +3955,8 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                         ? `${billing.package.name} (${billing.monthlyPriceUsd} $ / mois)`
                         : t("Formule actuelle", "Current plan")}
                     </option>
-                    {platformPackages
-                      .filter((p) => ["essential", "pro", "business"].includes(p.code))
+                    {renewalPackages
+                      .filter((p) => String(p.id || "") !== String(billing.package?.id || ""))
                       .map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name} ({p.monthlyPriceUsd}&nbsp;$ / mois)
@@ -4260,14 +4263,14 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                   />
                 </section>
 
-                <h3 className="dashboard-analytics-block-title">{t("C — Caisse par canal", "C — Cashbox by channel")}</h3>
+                <h3 className="dashboard-analytics-block-title">{t("C — Caisse par canal (mois)", "C — Cashbox by channel (month)")}</h3>
                 <section className="grid analytic-metric-grid">
                   <AnalyticMetricCard
                     t={t}
                     title={t("Cash", "Cash")}
-                    value={formatUsd(dashboard?.cashbox?.cashUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-                    comparison={dashboard?.meta?.comparison?.cashUsd}
+                    value={formatUsd(dashboard?.cashboxMonth?.cashUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+                    comparison={dashboard?.meta?.monthComparison?.cashUsd}
                     deltaHint="up_good"
                     definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
                     locale={dashLocale}
@@ -4275,9 +4278,9 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                   <AnalyticMetricCard
                     t={t}
                     title={t("TID validés", "Validated TID")}
-                    value={formatUsd(dashboard?.cashbox?.tidUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-                    comparison={dashboard?.meta?.comparison?.tidUsd}
+                    value={formatUsd(dashboard?.cashboxMonth?.tidUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+                    comparison={dashboard?.meta?.monthComparison?.tidUsd}
                     deltaHint="up_good"
                     definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
                     locale={dashLocale}
@@ -4285,9 +4288,49 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                   <AnalyticMetricCard
                     t={t}
                     title={t("Mobile Money", "Mobile Money")}
-                    value={formatUsd(dashboard?.cashbox?.mobileMoneyUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-                    comparison={dashboard?.meta?.comparison?.mobileMoneyUsd}
+                    value={formatUsd(dashboard?.cashboxMonth?.mobileMoneyUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+                    comparison={dashboard?.meta?.monthComparison?.mobileMoneyUsd}
+                    deltaHint="up_good"
+                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+                    locale={dashLocale}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Binance Pay", "Binance Pay")}
+                    value={formatUsd(dashboard?.cashboxMonth?.binancePayUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+                    comparison={dashboard?.meta?.monthComparison?.binancePayUsd}
+                    deltaHint="up_good"
+                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+                    locale={dashLocale}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Virement bancaire", "Bank transfer")}
+                    value={formatUsd(dashboard?.cashboxMonth?.bankTransferUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+                    comparison={dashboard?.meta?.monthComparison?.bankTransferUsd}
+                    deltaHint="up_good"
+                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+                    locale={dashLocale}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Portefeuille crypto", "Crypto wallet")}
+                    value={formatUsd(dashboard?.cashboxMonth?.cryptoWalletUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+                    comparison={dashboard?.meta?.monthComparison?.cryptoWalletUsd}
+                    deltaHint="up_good"
+                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+                    locale={dashLocale}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Visa Card", "Visa Card")}
+                    value={formatUsd(dashboard?.cashboxMonth?.visaCardUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+                    comparison={dashboard?.meta?.monthComparison?.visaCardUsd}
                     deltaHint="up_good"
                     definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
                     locale={dashLocale}
@@ -4295,9 +4338,9 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                   <AnalyticMetricCard
                     t={t}
                     title={t("Retirable Mobile Money", "Withdrawable Mobile Money")}
-                    value={formatUsd(dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-                    comparison={dashboard?.meta?.comparison?.withdrawableMobileMoneyUsd}
+                    value={formatUsd(dashboard?.cashboxMonth?.withdrawableMobileMoneyUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+                    comparison={dashboard?.meta?.monthComparison?.withdrawableMobileMoneyUsd}
                     deltaHint="up_good"
                     definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
                     locale={dashLocale}
@@ -4395,7 +4438,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                   isEn={isEn}
                   globalSummary={user.role === "system_owner" ? superDashboard : null}
                   networkStats={networkStats}
-                  cashbox={dashboard?.cashbox}
+                  cashbox={dashboard?.cashboxMonth || dashboard?.cashbox}
                   users={users}
                   telemetrySnapshots={telemetrySnapshots}
                 />
@@ -6242,30 +6285,70 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           <section className="grid analytic-metric-grid">
             <AnalyticMetricCard
               t={t}
-              title={t("Cash (période)", "Cash (period)")}
-              value={formatUsd(dashboard?.cashbox?.cashUsd ?? 0, dashLocale)}
-              timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-              comparison={dashboard?.meta?.comparison?.cashUsd}
+              title={t("Cash (mois)", "Cash (month)")}
+              value={formatUsd(dashboard?.cashboxMonth?.cashUsd ?? 0, dashLocale)}
+              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+              comparison={dashboard?.meta?.monthComparison?.cashUsd}
               deltaHint="up_good"
               definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
               locale={dashLocale}
             />
             <AnalyticMetricCard
               t={t}
-              title={t("TID (période)", "TID (period)")}
-              value={formatUsd(dashboard?.cashbox?.tidUsd ?? 0, dashLocale)}
-              timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-              comparison={dashboard?.meta?.comparison?.tidUsd}
+              title={t("TID (mois)", "TID (month)")}
+              value={formatUsd(dashboard?.cashboxMonth?.tidUsd ?? 0, dashLocale)}
+              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+              comparison={dashboard?.meta?.monthComparison?.tidUsd}
               deltaHint="up_good"
               definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
               locale={dashLocale}
             />
             <AnalyticMetricCard
               t={t}
-              title={t("Mobile Money (période)", "Mobile Money (period)")}
-              value={formatUsd(dashboard?.cashbox?.mobileMoneyUsd ?? 0, dashLocale)}
-              timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-              comparison={dashboard?.meta?.comparison?.mobileMoneyUsd}
+              title={t("Mobile Money (mois)", "Mobile Money (month)")}
+              value={formatUsd(dashboard?.cashboxMonth?.mobileMoneyUsd ?? 0, dashLocale)}
+              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+              comparison={dashboard?.meta?.monthComparison?.mobileMoneyUsd}
+              deltaHint="up_good"
+              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+              locale={dashLocale}
+            />
+            <AnalyticMetricCard
+              t={t}
+              title={t("Binance (mois)", "Binance (month)")}
+              value={formatUsd(dashboard?.cashboxMonth?.binancePayUsd ?? 0, dashLocale)}
+              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+              comparison={dashboard?.meta?.monthComparison?.binancePayUsd}
+              deltaHint="up_good"
+              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+              locale={dashLocale}
+            />
+            <AnalyticMetricCard
+              t={t}
+              title={t("Virement (mois)", "Transfer (month)")}
+              value={formatUsd(dashboard?.cashboxMonth?.bankTransferUsd ?? 0, dashLocale)}
+              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+              comparison={dashboard?.meta?.monthComparison?.bankTransferUsd}
+              deltaHint="up_good"
+              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+              locale={dashLocale}
+            />
+            <AnalyticMetricCard
+              t={t}
+              title={t("Crypto (mois)", "Crypto (month)")}
+              value={formatUsd(dashboard?.cashboxMonth?.cryptoWalletUsd ?? 0, dashLocale)}
+              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+              comparison={dashboard?.meta?.monthComparison?.cryptoWalletUsd}
+              deltaHint="up_good"
+              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+              locale={dashLocale}
+            />
+            <AnalyticMetricCard
+              t={t}
+              title={t("Visa (mois)", "Visa (month)")}
+              value={formatUsd(dashboard?.cashboxMonth?.visaCardUsd ?? 0, dashLocale)}
+              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+              comparison={dashboard?.meta?.monthComparison?.visaCardUsd}
               deltaHint="up_good"
               definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
               locale={dashLocale}
@@ -6273,9 +6356,9 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             <AnalyticMetricCard
               t={t}
               title={t("Retirable MM", "Withdrawable MM")}
-              value={formatUsd(dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0, dashLocale)}
-              timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-              comparison={dashboard?.meta?.comparison?.withdrawableMobileMoneyUsd}
+              value={formatUsd(dashboard?.cashboxMonth?.withdrawableMobileMoneyUsd ?? 0, dashLocale)}
+              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
+              comparison={dashboard?.meta?.monthComparison?.withdrawableMobileMoneyUsd}
               deltaHint="up_good"
               definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
               locale={dashLocale}

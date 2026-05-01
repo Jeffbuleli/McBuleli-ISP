@@ -168,12 +168,20 @@ export default function DashboardHistograms({
     t("Cash", "Cash"),
     t("Mobile Money", "Mobile Money"),
     t("TID/Ref", "TID/Ref"),
+    t("Binance", "Binance"),
+    t("Bank", "Bank"),
+    t("Crypto", "Crypto"),
+    t("Visa", "Visa"),
     t("MM retirable", "MM withdrawable")
   ];
   const paymentMethodVals = [
     Number(cashbox?.cashUsd) || 0,
     Number(cashbox?.mobileMoneyUsd) || 0,
     Number(cashbox?.tidUsd) || 0,
+    Number(cashbox?.binancePayUsd) || 0,
+    Number(cashbox?.bankTransferUsd) || 0,
+    Number(cashbox?.cryptoWalletUsd) || 0,
+    Number(cashbox?.visaCardUsd) || 0,
     Number(cashbox?.withdrawableMobileMoneyUsd) || 0
   ];
 

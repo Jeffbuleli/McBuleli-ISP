@@ -1062,6 +1062,10 @@ function normalizeRevenueMethod(method) {
   const m = String(method || "").toLowerCase();
   if (m === "cash") return "cash";
   if (m === "manual_mobile_money") return "tid";
+  if (m === "bank_transfer") return "bankTransfer";
+  if (m === "visa_card") return "visaCard";
+  if (m === "binance_pay") return "binancePay";
+  if (m === "crypto_wallet") return "cryptoWallet";
   if (MOBILE_MONEY_WITHDRAWAL_METHODS.includes(m)) return "mobileMoney";
   return "other";
 }
@@ -1097,6 +1101,10 @@ async function getCashboxSummary(
     cashUsd: 0,
     tidUsd: 0,
     mobileMoneyUsd: 0,
+    bankTransferUsd: 0,
+    visaCardUsd: 0,
+    binancePayUsd: 0,
+    cryptoWalletUsd: 0,
     otherUsd: 0,
     totalUsd: 0
   };
@@ -1107,6 +1115,10 @@ async function getCashboxSummary(
     if (bucket === "cash") breakdown.cashUsd += amount;
     else if (bucket === "tid") breakdown.tidUsd += amount;
     else if (bucket === "mobileMoney") breakdown.mobileMoneyUsd += amount;
+    else if (bucket === "bankTransfer") breakdown.bankTransferUsd += amount;
+    else if (bucket === "visaCard") breakdown.visaCardUsd += amount;
+    else if (bucket === "binancePay") breakdown.binancePayUsd += amount;
+    else if (bucket === "cryptoWallet") breakdown.cryptoWalletUsd += amount;
     else breakdown.otherUsd += amount;
   }
   if (fieldAgentUserId) {
@@ -1694,10 +1706,53 @@ app.get("/api/public/wifi-plans", rlPublicRead, async (req, res) => {
   });
 });
 
+app.get("/api/public/wifi-payment-methods", rlPublicRead, async (req, res) => {
+  const ispId = String(req.query.ispId || "").trim();
+  if (!ispId) return res.status(400).json({ message: "ispId is required" });
+  if (!(await ispGuestWifiPubliclyAllowed(ispId))) {
+    return res.status(403).json({
+      message:
+        "Cet opérateur n'a pas d'abonnement plateforme McBuleli actif. L'achat Wi‑Fi invité n'est pas disponible pour le moment."
+    });
+  }
+  const allowed = ["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card"];
+  const methods = await query(
+    `SELECT id, method_type AS "methodType", provider_name AS "providerName", config_json AS "configJson"
+     FROM isp_payment_methods
+     WHERE isp_id = $1 AND is_active = TRUE AND method_type = ANY($2::text[])
+     ORDER BY created_at DESC`,
+    [ispId, allowed]
+  );
+  const items = methods.rows.map((row) => {
+    const cfg = row.configJson && typeof row.configJson === "object" ? row.configJson : {};
+    return {
+      id: row.id,
+      methodType: row.methodType,
+      providerName: row.providerName,
+      instructions: {
+        accountName: cfg.accountName || cfg.ownerName || "",
+        bankName: cfg.bankName || "",
+        accountNumber: cfg.accountNumber || "",
+        mobileMoneyNumber: cfg.mobileMoneyNumber || cfg.phone || "",
+        walletAddress: cfg.walletAddress || "",
+        walletNetwork: cfg.walletNetwork || "",
+        collectionPoint: cfg.collectionPoint || "",
+        collectionContact: cfg.collectionContact || "",
+        processorName: cfg.processorName || "",
+        merchantLabel: cfg.merchantLabel || "",
+        networkHints: cfg.networkHints || "",
+        note: cfg.note || ""
+      }
+    };
+  });
+  return res.json({ items });
+});
+
 app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
-  const { ispId, planId, phoneNumber, networkKey, captiveContext } = req.body || {};
-  if (!ispId || !planId || !phoneNumber || !networkKey) {
-    return res.status(400).json({ message: "ispId, planId, phoneNumber and networkKey are required" });
+  const { ispId, planId, phoneNumber, networkKey, captiveContext, methodType, externalRef, payerContact } = req.body || {};
+  const resolvedMethodType = normalizeMethodType(methodType || "mobile_money");
+  if (!ispId || !planId) {
+    return res.status(400).json({ message: "ispId and planId are required" });
   }
   if (!(await ispGuestWifiPubliclyAllowed(String(ispId)))) {
     return res.status(403).json({
@@ -1713,11 +1768,9 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
           mac: captiveContext.mac != null ? String(captiveContext.mac).slice(0, 64) : null
         }
       : null;
-  const pawapayProvider = resolveWifiGuestPawapayProvider(networkKey);
-  if (!pawapayProvider) {
-    return res.status(400).json({ message: "networkKey must be one of: orange, airtel, mpesa" });
-  }
-  const phone = String(phoneNumber).replace(/\s+/g, "").replace(/^\+/, "");
+  const allowedManualMethods = new Set(["cash", "bank_transfer", "visa_card", "crypto_wallet", "binance_pay"]);
+  const phone = String(phoneNumber || "").replace(/\s+/g, "").replace(/^\+/, "");
+  const manualRef = String(externalRef || "").trim().slice(0, 255);
   const planRow = await query(
     `SELECT p.id, p.isp_id AS "ispId", p.name, p.price_usd AS "priceUsd", p.duration_days AS "durationDays",
             p.success_redirect_url AS "successRedirectUrl"
@@ -1734,6 +1787,52 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
   const redirectUrl = defaultRedirectUrl(plan, brandRow.rows[0] || {});
   const amount = usdAmountString(plan.priceUsd);
   const depositId = uuidv4();
+  if (resolvedMethodType !== "mobile_money") {
+    if (!allowedManualMethods.has(resolvedMethodType)) {
+      return res.status(400).json({ message: "Unsupported methodType for guest Wi-Fi checkout." });
+    }
+    if (!manualRef) {
+      return res.status(400).json({ message: "externalRef is required for manual checkout methods." });
+    }
+    const activeMethod = await query(
+      `SELECT id
+       FROM isp_payment_methods
+       WHERE isp_id = $1 AND is_active = TRUE AND method_type = $2
+       LIMIT 1`,
+      [ispId, resolvedMethodType]
+    );
+    if (!activeMethod.rows[0]) {
+      return res.status(400).json({ message: `No active payment method configured for ${resolvedMethodType}.` });
+    }
+    await query(
+      `INSERT INTO wifi_guest_purchases
+       (id, isp_id, plan_id, deposit_id, phone, pawapay_provider, currency, amount, status, redirect_url, method_type, external_ref, payer_contact)
+       VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, 'USD', $6, 'pending_manual', $7, $8, $9, $10)`,
+      [ispId, planId, depositId, String(payerContact || phone || "manual").slice(0, 64), resolvedMethodType, amount, redirectUrl, resolvedMethodType, manualRef, String(payerContact || "").slice(0, 255)]
+    );
+    await logAudit({
+      ispId,
+      action: "wifi_guest.purchase_initiated_manual",
+      entityType: "wifi_guest_purchase",
+      entityId: depositId,
+      details: { planId, methodType: resolvedMethodType, externalRef: manualRef }
+    });
+    return res.status(201).json({
+      depositId,
+      amount,
+      currency: "USD",
+      methodType: resolvedMethodType,
+      status: "pending_manual",
+      message: "Reference sent. ISP team will validate and activate your access."
+    });
+  }
+  if (!phone || !networkKey) {
+    return res.status(400).json({ message: "phoneNumber and networkKey are required for mobile_money." });
+  }
+  const pawapayProvider = resolveWifiGuestPawapayProvider(networkKey);
+  if (!pawapayProvider) {
+    return res.status(400).json({ message: "networkKey must be one of: orange, airtel, mpesa" });
+  }
   const body = {
     depositId,
     amount,
@@ -1759,8 +1858,8 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
     if (pw.status === "ACCEPTED") {
       await query(
         `INSERT INTO wifi_guest_purchases
-         (id, isp_id, plan_id, deposit_id, phone, pawapay_provider, currency, amount, status, redirect_url)
-         VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, 'USD', $6, 'pending', $7)`,
+         (id, isp_id, plan_id, deposit_id, phone, pawapay_provider, currency, amount, status, redirect_url, method_type)
+         VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, 'USD', $6, 'pending', $7, 'mobile_money')`,
         [ispId, planId, depositId, phone, pawapayProvider, amount, redirectUrl]
       );
     }
@@ -1797,7 +1896,7 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
 app.get("/api/public/wifi-purchase/status/:depositId", rlWifiStatus, async (req, res) => {
   const { depositId } = req.params;
   const local = await query(
-    `SELECT id, status, redirect_url AS "redirectUrl", subscription_id AS "subscriptionId",
+    `SELECT id, status, method_type AS "methodType", redirect_url AS "redirectUrl", subscription_id AS "subscriptionId",
             subscriber_setup_token AS "setupToken"
      FROM wifi_guest_purchases WHERE deposit_id = $1::uuid`,
     [depositId]
@@ -1814,6 +1913,9 @@ app.get("/api/public/wifi-purchase/status/:depositId", rlWifiStatus, async (req,
   }
   if (row.status === "failed") {
     return res.json({ status: "failed" });
+  }
+  if (row.status === "pending_manual" || row.methodType !== "mobile_money") {
+    return res.json({ status: "pending_manual", methodType: row.methodType || "manual" });
   }
   try {
     const pw = await fetchPawapayDepositStatus(depositId);
@@ -6327,8 +6429,18 @@ app.get("/api/dashboard", authenticate, async (req, res) => {
 
   const faId = req.user.role === "field_agent" ? req.user.sub : null;
   const prev = previousInclusivePeriod(from, to);
+  const monthAnchor = new Date(`${to}T00:00:00Z`);
+  const monthFrom = Number.isFinite(monthAnchor.getTime())
+    ? new Date(Date.UTC(monthAnchor.getUTCFullYear(), monthAnchor.getUTCMonth(), 1)).toISOString().slice(0, 10)
+    : from;
+  const monthPrevTo = Number.isFinite(monthAnchor.getTime())
+    ? new Date(Date.UTC(monthAnchor.getUTCFullYear(), monthAnchor.getUTCMonth(), 0)).toISOString().slice(0, 10)
+    : to;
+  const monthPrevFrom = Number.isFinite(monthAnchor.getTime())
+    ? new Date(Date.UTC(monthAnchor.getUTCFullYear(), monthAnchor.getUTCMonth() - 1, 1)).toISOString().slice(0, 10)
+    : from;
 
-  const [customers, active, unpaid, revenue, sessionCount, cashbox, prevCashbox] = await Promise.all([
+  const [customers, active, unpaid, revenue, sessionCount, cashbox, prevCashbox, cashboxMonth, prevCashboxMonth] = await Promise.all([
     faId
       ? query(
           "SELECT COUNT(*)::int AS value FROM customers WHERE isp_id = $1 AND field_agent_id = $2",
@@ -6373,7 +6485,11 @@ app.get("/api/dashboard", authenticate, async (req, res) => {
 
     getCashboxSummary(ispId, from, to, faId),
 
-    prev ? getCashboxSummary(ispId, prev.from, prev.to, faId) : Promise.resolve(null)
+    prev ? getCashboxSummary(ispId, prev.from, prev.to, faId) : Promise.resolve(null),
+
+    getCashboxSummary(ispId, monthFrom, to, faId),
+
+    getCashboxSummary(ispId, monthPrevFrom, monthPrevTo, faId)
   ]);
 
   const comparison = prevCashbox
@@ -6382,12 +6498,30 @@ app.get("/api/dashboard", authenticate, async (req, res) => {
         cashUsd: comparisonTriple(cashbox.cashUsd, prevCashbox.cashUsd),
         tidUsd: comparisonTriple(cashbox.tidUsd, prevCashbox.tidUsd),
         mobileMoneyUsd: comparisonTriple(cashbox.mobileMoneyUsd, prevCashbox.mobileMoneyUsd),
+        bankTransferUsd: comparisonTriple(cashbox.bankTransferUsd, prevCashbox.bankTransferUsd),
+        visaCardUsd: comparisonTriple(cashbox.visaCardUsd, prevCashbox.visaCardUsd),
+        binancePayUsd: comparisonTriple(cashbox.binancePayUsd, prevCashbox.binancePayUsd),
+        cryptoWalletUsd: comparisonTriple(cashbox.cryptoWalletUsd, prevCashbox.cryptoWalletUsd),
         withdrawableMobileMoneyUsd: comparisonTriple(
           cashbox.withdrawableMobileMoneyUsd,
           prevCashbox.withdrawableMobileMoneyUsd
         )
       }
     : null;
+  const monthComparison = {
+    cashboxTotalUsd: comparisonTriple(cashboxMonth.totalUsd, prevCashboxMonth.totalUsd),
+    cashUsd: comparisonTriple(cashboxMonth.cashUsd, prevCashboxMonth.cashUsd),
+    tidUsd: comparisonTriple(cashboxMonth.tidUsd, prevCashboxMonth.tidUsd),
+    mobileMoneyUsd: comparisonTriple(cashboxMonth.mobileMoneyUsd, prevCashboxMonth.mobileMoneyUsd),
+    bankTransferUsd: comparisonTriple(cashboxMonth.bankTransferUsd, prevCashboxMonth.bankTransferUsd),
+    visaCardUsd: comparisonTriple(cashboxMonth.visaCardUsd, prevCashboxMonth.visaCardUsd),
+    binancePayUsd: comparisonTriple(cashboxMonth.binancePayUsd, prevCashboxMonth.binancePayUsd),
+    cryptoWalletUsd: comparisonTriple(cashboxMonth.cryptoWalletUsd, prevCashboxMonth.cryptoWalletUsd),
+    withdrawableMobileMoneyUsd: comparisonTriple(
+      cashboxMonth.withdrawableMobileMoneyUsd,
+      prevCashboxMonth.withdrawableMobileMoneyUsd
+    )
+  };
 
   const daysInclusive = inclusiveDaysBetween(from, to);
 
@@ -6400,6 +6534,8 @@ app.get("/api/dashboard", authenticate, async (req, res) => {
     networkSessionsWindowMinutes: sessionCount.windowMinutes,
     cashboxPeriod: { from, to, daysInclusive },
     cashbox,
+    cashboxMonthPeriod: { from: monthFrom, to, daysInclusive: inclusiveDaysBetween(monthFrom, to) },
+    cashboxMonth,
     meta: {
       computedAt: new Date().toISOString(),
       period: { from, to, daysInclusive },
@@ -6413,6 +6549,7 @@ app.get("/api/dashboard", authenticate, async (req, res) => {
         cashbox: "cashbox_by_method_period"
       },
       comparison,
+      monthComparison,
       quality: { flags: [] }
     }
   });

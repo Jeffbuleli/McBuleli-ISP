@@ -332,6 +332,18 @@ export async function initDb() {
   await query(
     "ALTER TABLE wifi_guest_purchases ADD COLUMN IF NOT EXISTS subscriber_setup_token TEXT NULL;"
   );
+  await query(
+    "ALTER TABLE wifi_guest_purchases ADD COLUMN IF NOT EXISTS method_type TEXT NOT NULL DEFAULT 'mobile_money';"
+  );
+  await query(
+    "ALTER TABLE wifi_guest_purchases ADD COLUMN IF NOT EXISTS external_ref TEXT NULL;"
+  );
+  await query(
+    "ALTER TABLE wifi_guest_purchases ADD COLUMN IF NOT EXISTS payer_contact TEXT NULL;"
+  );
+  await query(
+    "ALTER TABLE wifi_guest_purchases ADD COLUMN IF NOT EXISTS evidence_json JSONB NULL;"
+  );
 
   await query(`
     CREATE TABLE IF NOT EXISTS invoices (
@@ -386,7 +398,7 @@ export async function initDb() {
   await query(`
     ALTER TABLE wifi_guest_purchases
     ADD CONSTRAINT wifi_guest_purchases_status_check
-    CHECK (status IN ('pending', 'completed', 'failed'))
+    CHECK (status IN ('pending', 'pending_manual', 'completed', 'failed'))
   `);
 
   await query(`

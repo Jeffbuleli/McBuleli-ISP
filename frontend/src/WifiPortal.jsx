@@ -58,13 +58,17 @@ export default function WifiPortal() {
   const [activeIspId, setActiveIspId] = useState(ispIdFromQuery);
   const [branding, setBranding] = useState(null);
   const [plans, setPlans] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]);
   const [networks, setNetworks] = useState([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [checkout, setCheckout] = useState({
+    methodType: "mobile_money",
     phone: "",
-    networkKey: "orange"
+    networkKey: "orange",
+    externalRef: "",
+    payerContact: ""
   });
   const [depositId, setDepositId] = useState(null);
   const [redirectUrl, setRedirectUrl] = useState(null);
@@ -78,13 +82,18 @@ export default function WifiPortal() {
 
   const loadCatalog = useCallback(async (isp) => {
     setError("");
-    const [p, n] = await Promise.all([
+    const [p, n, methods] = await Promise.all([
       publicRequest(`/public/wifi-plans?ispId=${encodeURIComponent(isp)}`),
-      publicRequest("/public/wifi-networks")
+      publicRequest("/public/wifi-networks"),
+      publicRequest(`/public/wifi-payment-methods?ispId=${encodeURIComponent(isp)}`)
     ]);
     setBranding(p.branding || {});
     setPlans(p.plans || []);
     setNetworks(n || []);
+    const methodItems = Array.isArray(methods?.items) ? methods.items : [];
+    setPaymentMethods(methodItems);
+    const firstMethod = methodItems[0]?.methodType || "mobile_money";
+    setCheckout((prev) => ({ ...prev, methodType: firstMethod }));
     setActiveIspId(isp);
     const url = new URL(window.location.href);
     url.searchParams.set("ispId", isp);
@@ -131,9 +140,14 @@ export default function WifiPortal() {
     setError("");
     setNotice("");
     if (!selectedPlan || !activeIspId) return;
+    const methodType = String(checkout.methodType || "mobile_money").toLowerCase();
     const phone = checkout.phone.replace(/\s+/g, "").replace(/^\+/, "");
-    if (phone.length < 9) {
+    if (methodType === "mobile_money" && phone.length < 9) {
       setError(t("errPhone"));
+      return;
+    }
+    if (methodType !== "mobile_money" && !String(checkout.externalRef || "").trim()) {
+      setError(t("errRef"));
       return;
     }
     const sp = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
@@ -149,15 +163,22 @@ export default function WifiPortal() {
         body: JSON.stringify({
           ispId: activeIspId,
           planId: selectedPlan.id,
-          phoneNumber: phone,
-          networkKey: checkout.networkKey,
+          methodType,
+          phoneNumber: phone || undefined,
+          networkKey: methodType === "mobile_money" ? checkout.networkKey : undefined,
+          externalRef: methodType !== "mobile_money" ? checkout.externalRef : undefined,
+          payerContact: methodType !== "mobile_money" ? checkout.payerContact : undefined,
           ...(hasCap ? { captiveContext } : {})
         })
       });
       setDepositId(res.depositId);
       setRedirectUrl(res.redirectUrlAfterPayment || "https://www.google.com");
       setNotice(res.message || t("noticePhone"));
-      setPolling(true);
+      if (res.status === "pending_manual") {
+        setPolling(false);
+      } else {
+        setPolling(true);
+      }
     } catch (err) {
       setError(wifiErr(err.message || t("errPayStart")));
     }
@@ -212,6 +233,8 @@ export default function WifiPortal() {
     branding?.logoUrl != null && String(branding.logoUrl).trim()
       ? publicAssetUrl(branding.logoUrl)
       : mcbuleliLogoUrl;
+  const selectedMethodDetails =
+    paymentMethods.find((m) => String(m.methodType || "") === String(checkout.methodType || "")) || null;
 
   return (
     <main className="container wifi-portal-page wifi-portal-page--dark">
@@ -443,11 +466,32 @@ export default function WifiPortal() {
             </p>
           </div>
 
-          <div className="wifi-checkout-pay-head" role="group" aria-label={t("payMobileTitle")}>
+          <div className="wifi-checkout-pay-head" role="group" aria-label={t("payTitle")}>
             <IconWallet width={22} height={22} aria-hidden />
           </div>
 
           <form className="wifi-checkout-form" onSubmit={onStartPayment}>
+            <div className="wifi-input-row">
+              <span className="wifi-input-row__lead" aria-hidden="true">
+                <IconWallet width={20} height={20} />
+              </span>
+              <select
+                aria-label={t("method")}
+                value={checkout.methodType}
+                onChange={(e) => setCheckout({ ...checkout, methodType: e.target.value })}
+              >
+                {paymentMethods.map((m) => (
+                  <option key={m.id} value={m.methodType}>
+                    {m.providerName} ({m.methodType})
+                  </option>
+                ))}
+                {!paymentMethods.length ? (
+                  <option value="mobile_money">Mobile Money</option>
+                ) : null}
+              </select>
+            </div>
+            {checkout.methodType === "mobile_money" ? (
+              <>
             <div className="wifi-input-row">
               <span className="wifi-input-row__lead" aria-hidden="true">
                 <IconSmartphone width={20} height={20} />
@@ -478,11 +522,51 @@ export default function WifiPortal() {
                 ))}
               </select>
             </div>
-            <button type="submit" className="wifi-pay-submit" disabled={polling || !checkout.phone}>
+              </>
+            ) : (
+              <>
+                <div className="wifi-input-row">
+                  <span className="wifi-input-row__lead" aria-hidden="true">
+                    <IconSmartphone width={20} height={20} />
+                  </span>
+                  <input
+                    autoComplete="off"
+                    aria-label={t("reference")}
+                    placeholder={t("referencePh")}
+                    value={checkout.externalRef}
+                    onChange={(e) => setCheckout({ ...checkout, externalRef: e.target.value })}
+                  />
+                </div>
+                <div className="wifi-input-row">
+                  <span className="wifi-input-row__lead" aria-hidden="true">
+                    <IconPhone width={20} height={20} />
+                  </span>
+                  <input
+                    autoComplete="tel"
+                    aria-label={t("payerContact")}
+                    placeholder={t("payerContactPh")}
+                    value={checkout.payerContact}
+                    onChange={(e) => setCheckout({ ...checkout, payerContact: e.target.value })}
+                  />
+                </div>
+              </>
+            )}
+            <button
+              type="submit"
+              className="wifi-pay-submit"
+              disabled={polling || (checkout.methodType === "mobile_money" ? !checkout.phone : !checkout.externalRef)}
+            >
               <IconWallet width={18} height={18} aria-hidden />
               <span>{polling ? t("paying") : t("paySubmit")}</span>
             </button>
           </form>
+          {selectedMethodDetails ? (
+            <p className="wifi-checkout-foot">
+              <small>
+                {selectedMethodDetails.instructions?.collectionPoint || selectedMethodDetails.instructions?.mobileMoneyNumber || selectedMethodDetails.instructions?.bankName || selectedMethodDetails.instructions?.walletAddress || selectedMethodDetails.instructions?.processorName || selectedMethodDetails.instructions?.note || ""}
+              </small>
+            </p>
+          ) : null}
           <p className="wifi-checkout-foot">
             <small>{t("payFoot")}</small>
           </p>
