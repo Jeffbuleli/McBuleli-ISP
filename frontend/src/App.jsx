@@ -799,7 +799,17 @@ function App() {
   const [tidSubmissions, setTidSubmissions] = useState([]);
   const [tidConflicts, setTidConflicts] = useState([]);
   const [paymentIntents, setPaymentIntents] = useState([]);
+  const [unifiedPayments, setUnifiedPayments] = useState([]);
+  const [paymentNotifications, setPaymentNotifications] = useState([]);
+  const [paymentNotifUnread, setPaymentNotifUnread] = useState(0);
   const [paymentIntentTable, setPaymentIntentTable] = useState({
+    q: "",
+    status: "all",
+    page: 1,
+    pageSize: 10,
+    sort: { key: "createdAt", dir: "desc" }
+  });
+  const [unifiedPaymentTable, setUnifiedPaymentTable] = useState({
     q: "",
     status: "all",
     page: 1,
@@ -1050,6 +1060,46 @@ function App() {
     const pageRows = list.slice(start, start + pageSize);
     return { pageRows, total: list.length };
   }, [paymentIntents, paymentIntentTable.page, paymentIntentTable.pageSize, paymentIntentTable.q, paymentIntentTable.sort, paymentIntentTable.status]);
+
+  const unifiedPaymentTableView = useMemo(() => {
+    const q = String(unifiedPaymentTable.q || "").trim().toLowerCase();
+    const stFilter = String(unifiedPaymentTable.status || "all").toUpperCase();
+    let list = Array.isArray(unifiedPayments) ? unifiedPayments : [];
+    if (stFilter !== "all" && stFilter !== "ALL") {
+      list = list.filter((it) => String(it?.status || "PENDING").toUpperCase() === stFilter);
+    }
+    if (q) {
+      list = list.filter((it) => {
+        const hay = `${it?.scope || ""} ${it?.methodType || ""} ${it?.tid || ""} ${it?.status || ""} ${it?.amountUsd || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const sKey = unifiedPaymentTable.sort?.key;
+    const sDir = unifiedPaymentTable.sort?.dir === "asc" ? 1 : -1;
+    if (sKey) {
+      list = [...list].sort((a, b) => {
+        const av = a?.[sKey];
+        const bv = b?.[sKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * sDir;
+        return String(av).localeCompare(String(bv)) * sDir;
+      });
+    }
+    const pageSize = Number(unifiedPaymentTable.pageSize) || 10;
+    const page = Math.max(1, Number(unifiedPaymentTable.page) || 1);
+    const start = (page - 1) * pageSize;
+    const pageRows = list.slice(start, start + pageSize);
+    return { pageRows, total: list.length };
+  }, [
+    unifiedPayments,
+    unifiedPaymentTable.page,
+    unifiedPaymentTable.pageSize,
+    unifiedPaymentTable.q,
+    unifiedPaymentTable.sort,
+    unifiedPaymentTable.status
+  ]);
 
   const ledgerTableView = useMemo(() => {
     const q = String(ledgerTable.q || "").trim().toLowerCase();
@@ -1603,7 +1653,9 @@ function App() {
             api.getPlans(activeIspId),
             api.getSubscriptions(activeIspId),
             api.getInvoices(activeIspId),
-            api.getPaymentIntents(activeIspId)
+            api.getPaymentIntents(activeIspId),
+            api.getUnifiedPayments(activeIspId),
+            api.getPaymentNotifications(activeIspId)
           ]);
           dash = take(settled, 0, {}, "dashboard");
           c = take(settled, 1, [], "customers");
@@ -1611,7 +1663,12 @@ function App() {
           s = take(settled, 3, [], "subscriptions");
           i = take(settled, 4, [], "invoices");
           paymentIntentRows = take(settled, 5, [], "paymentIntents");
+          const unifiedRows = take(settled, 6, [], "unifiedPayments");
+          const notifPayload = take(settled, 7, { unreadCount: 0, items: [] }, "paymentNotifications");
           setPaymentIntents(Array.isArray(paymentIntentRows) ? paymentIntentRows : []);
+          setUnifiedPayments(Array.isArray(unifiedRows) ? unifiedRows : []);
+          setPaymentNotifications(Array.isArray(notifPayload?.items) ? notifPayload.items : []);
+          setPaymentNotifUnread(Number(notifPayload?.unreadCount || 0));
           setAccountingLedger([]);
           setAccountingLedgerTotals({ totalDebitUsd: 0, totalCreditUsd: 0 });
           setExpenses([]);
@@ -1649,7 +1706,9 @@ api.getExpenses(activeIspId, expenseFilter.from, expenseFilter.to),
 api.getAccountingPeriodClosures(activeIspId),
 api.getWithdrawals(activeIspId),
 api.getPaymentIntents(activeIspId),
-api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
+api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to),
+api.getUnifiedPayments(activeIspId),
+api.getPaymentNotifications(activeIspId)
         ]);
         dash = take(settled, 0, {}, "dashboard");
         c = take(settled, 1, [], "customers");
@@ -1684,11 +1743,16 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           { totals: { totalDebitUsd: 0, totalCreditUsd: 0 }, rows: [] },
           "accountingLedger"
         );
+        const unifiedRows = take(settled, 28, [], "unifiedPayments");
+        const notifPayload = take(settled, 29, { unreadCount: 0, items: [] }, "paymentNotifications");
         setExpenses(Array.isArray(expData?.items) ? expData.items : []);
         setExpenseSummary(expData?.summary || null);
         setAccountingPeriodClosures(Array.isArray(closuresList) ? closuresList : []);
         setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
         setPaymentIntents(Array.isArray(paymentIntentRows) ? paymentIntentRows : []);
+        setUnifiedPayments(Array.isArray(unifiedRows) ? unifiedRows : []);
+        setPaymentNotifications(Array.isArray(notifPayload?.items) ? notifPayload.items : []);
+        setPaymentNotifUnread(Number(notifPayload?.unreadCount || 0));
         setAccountingLedger(Array.isArray(ledgerPayload?.rows) ? ledgerPayload.rows : []);
         setAccountingLedgerTotals(ledgerPayload?.totals || { totalDebitUsd: 0, totalCreditUsd: 0 });
         if (withdrawalData?.cashbox) {
@@ -3246,6 +3310,18 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
     refresh();
   }
 
+  async function onReviewUnifiedPayment(paymentId, decision) {
+    const note = window.prompt(t("Note facultative (audit) :", "Optional note (audit trail):"), "");
+    if (note === null) return;
+    await api.reviewUnifiedPayment(selectedIspId, paymentId, { decision, note: note || "" });
+    refresh();
+  }
+
+  async function onMarkPaymentNotificationRead(notificationId) {
+    await api.markPaymentNotificationRead(selectedIspId, notificationId);
+    refresh();
+  }
+
   async function onCreatePaymentIntent(e) {
     e.preventDefault();
     const ev = {};
@@ -4044,7 +4120,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             user={user}
             isFieldAgent={isFieldAgent}
             dashboardChatIspId={dashboardChatIspId}
-            teamChatUnread={teamChatUnread}
+            teamChatUnread={teamChatUnread + paymentNotifUnread}
             onToggleChat={() => setTeamChatOpen((o) => !o)}
             onOpenSettings={() => {
               if (isMobileShell) {
@@ -5712,6 +5788,81 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               ))}
             </>
           )}
+        </section>
+
+        <section className="panel">
+          <h2>{t("Finance - Validation paiements (canonique)", "Finance - Canonical payment validation")}</h2>
+          <DataTable
+            t={t}
+            title={null}
+            rows={unifiedPaymentTableView.pageRows}
+            columns={[
+              { key: "createdAt", label: t("Date", "Date"), sortable: true, render: (r) => formatDateTime(r.createdAt) },
+              { key: "scope", label: t("Portée", "Scope"), sortable: true },
+              { key: "methodType", label: t("Méthode", "Method"), sortable: true },
+              { key: "tid", label: "TID/Ref", sortable: true },
+              { key: "amountUsd", label: "USD", sortable: true, align: "right" },
+              { key: "status", label: t("Statut", "Status"), sortable: true },
+              {
+                key: "actions",
+                label: t("Actions", "Actions"),
+                render: (r) =>
+                  r.status === "PENDING" || r.status === "UNDER_REVIEW" ? (
+                    <>
+                      {r.status === "PENDING" ? (
+                        <button type="button" className="btn-secondary-outline" onClick={() => onReviewUnifiedPayment(r.id, "UNDER_REVIEW")}>
+                          {t("Prendre en revue", "Take for review")}
+                        </button>
+                      ) : null}
+                      <button type="button" onClick={() => onReviewUnifiedPayment(r.id, "APPROVED")}>{t("Approuver", "Approve")}</button>
+                      <button type="button" className="btn-secondary-outline" onClick={() => onReviewUnifiedPayment(r.id, "REJECTED")}>{t("Rejeter", "Reject")}</button>
+                    </>
+                  ) : (
+                    <span className="app-meta">-</span>
+                  )
+              }
+            ]}
+            searchValue={unifiedPaymentTable.q}
+            onSearchChange={(q) => setUnifiedPaymentTable((prev) => ({ ...prev, q, page: 1 }))}
+            filters={
+              <select
+                value={unifiedPaymentTable.status}
+                onChange={(e) => setUnifiedPaymentTable((prev) => ({ ...prev, status: e.target.value, page: 1 }))}
+              >
+                <option value="all">{t("Tous statuts", "All statuses")}</option>
+                <option value="PENDING">PENDING</option>
+                <option value="UNDER_REVIEW">UNDER_REVIEW</option>
+                <option value="APPROVED">APPROVED</option>
+                <option value="REJECTED">REJECTED</option>
+                <option value="EXPIRED">EXPIRED</option>
+              </select>
+            }
+            page={unifiedPaymentTable.page}
+            pageSize={unifiedPaymentTable.pageSize}
+            totalRows={unifiedPaymentTableView.total}
+            onPageChange={(page) => setUnifiedPaymentTable((prev) => ({ ...prev, page }))}
+            onPageSizeChange={(pageSize) => setUnifiedPaymentTable((prev) => ({ ...prev, pageSize, page: 1 }))}
+            sort={unifiedPaymentTable.sort}
+            onSortChange={(sort) => setUnifiedPaymentTable((prev) => ({ ...prev, sort }))}
+            emptyLabel={t("Aucun paiement canonique.", "No canonical payment records.")}
+          />
+        </section>
+
+        <section className="panel">
+          <h2>
+            {t("Historique notifications paiements", "Payment notification history")}{" "}
+            {paymentNotifUnread > 0 ? <span className="badge">{paymentNotifUnread}</span> : null}
+          </h2>
+          {paymentNotifications.map((n) => (
+            <p key={n.id}>
+              <strong>{n.title}</strong> - {n.body} ({formatDateTime(n.createdAt)}){" "}
+              {!n.isRead ? (
+                <button type="button" className="btn-secondary-outline" onClick={() => onMarkPaymentNotificationRead(n.id)}>
+                  {t("Marquer lu", "Mark read")}
+                </button>
+              ) : null}
+            </p>
+          ))}
         </section>
 
         <section className="panel">

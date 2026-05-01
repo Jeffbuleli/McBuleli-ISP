@@ -790,6 +790,35 @@ export const api = {
       body: JSON.stringify({ ispId })
     }),
   getPaymentIntents: (ispId) => request(withIsp("/payments/intents", ispId)),
+  getUnifiedPayments: (ispId, opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.status) q.set("status", String(opts.status));
+    if (opts.methodType) q.set("methodType", String(opts.methodType));
+    if (opts.scope) q.set("scope", String(opts.scope));
+    const qs = q.toString();
+    return request(withIsp(`/payments${qs ? `?${qs}` : ""}`, ispId));
+  },
+  createUnifiedPayment: (ispId, payload) =>
+    request(withIsp("/payments/initiate", ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
+  submitUnifiedPaymentProof: (ispId, paymentId, payload) =>
+    request(withIsp(`/payments/${encodeURIComponent(paymentId)}/proof`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
+  reviewUnifiedPayment: (ispId, paymentId, payload) =>
+    request(withIsp(`/payments/${encodeURIComponent(paymentId)}/review`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
+  getPaymentNotifications: (ispId) => request(withIsp("/payments/notifications", ispId)),
+  markPaymentNotificationRead: (ispId, notificationId) =>
+    request(withIsp(`/payments/notifications/${encodeURIComponent(notificationId)}/read`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ispId })
+    }),
   createPaymentIntent: (ispId, payload) =>
     request(withIsp("/payments/intents", ispId), {
       method: "POST",

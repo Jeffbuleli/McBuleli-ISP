@@ -163,6 +163,105 @@ function paymentIntentChannelToMethod(channel) {
   return "other";
 }
 
+const UNIFIED_PAYMENT_STATUS = new Set(["PENDING", "UNDER_REVIEW", "APPROVED", "REJECTED", "EXPIRED"]);
+const UNIFIED_PAYMENT_SCOPE = new Set(["B2B_SUBSCRIPTION", "B2C_INVOICE", "B2C_GUEST_WIFI"]);
+
+function normalizeUnifiedStatus(value) {
+  const s = String(value || "").trim().toUpperCase();
+  return UNIFIED_PAYMENT_STATUS.has(s) ? s : "PENDING";
+}
+
+function normalizeUnifiedScope(value) {
+  const s = String(value || "").trim().toUpperCase();
+  return UNIFIED_PAYMENT_SCOPE.has(s) ? s : "B2C_INVOICE";
+}
+
+async function createUnifiedPaymentNotification({
+  ispId,
+  userId = null,
+  customerId = null,
+  paymentId = null,
+  kind = "payment_submitted",
+  title,
+  body
+}) {
+  await query(
+    `INSERT INTO user_payment_notifications
+      (id, isp_id, user_id, customer_id, payment_id, title, body, kind)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)`,
+    [ispId, userId || null, customerId || null, paymentId || null, String(title || "").slice(0, 255), String(body || "").slice(0, 3000), kind]
+  );
+}
+
+async function createUnifiedPaymentRecord({
+  ispId,
+  scope,
+  actorUserId = null,
+  customerId = null,
+  invoiceId = null,
+  subscriptionId = null,
+  sourceTable = null,
+  sourceId = null,
+  methodType = "tid",
+  amountUsd = 0,
+  currency = "USD",
+  tid,
+  proofUrl = null,
+  note = null,
+  status = "PENDING",
+  createdBy = null,
+  expiresAt = null
+}) {
+  const mt = normalizeMethodType(methodType);
+  const safeMethod = ["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card", "tid"].includes(mt)
+    ? mt
+    : "tid";
+  const created = await query(
+    `INSERT INTO unified_payments
+      (id, isp_id, scope, actor_user_id, customer_id, invoice_id, subscription_id, source_table, source_id, method_type,
+       amount_usd, currency, tid, proof_url, note, status, created_by, expires_at)
+     VALUES
+      (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9,
+       $10, $11, $12, $13, $14, $15, $16, $17)
+     RETURNING id, isp_id AS "ispId", scope, actor_user_id AS "actorUserId", customer_id AS "customerId",
+               invoice_id AS "invoiceId", subscription_id AS "subscriptionId", method_type AS "methodType",
+               amount_usd AS "amountUsd", currency, tid, proof_url AS "proofUrl", note, status,
+               created_at AS "createdAt", expires_at AS "expiresAt"`,
+    [
+      ispId,
+      normalizeUnifiedScope(scope),
+      actorUserId || null,
+      customerId || null,
+      invoiceId || null,
+      subscriptionId || null,
+      sourceTable || null,
+      sourceId || null,
+      safeMethod,
+      Number(amountUsd || 0),
+      String(currency || "USD").toUpperCase(),
+      String(tid || "").trim().slice(0, 255),
+      proofUrl || null,
+      note || null,
+      normalizeUnifiedStatus(status),
+      createdBy || null,
+      expiresAt || null
+    ]
+  );
+  return created.rows[0];
+}
+
+async function expireUnifiedPayments(ispId) {
+  await query(
+    `UPDATE unified_payments
+     SET status = 'EXPIRED', updated_at = NOW()
+     WHERE isp_id = $1
+       AND status IN ('PENDING', 'UNDER_REVIEW')
+       AND expires_at IS NOT NULL
+       AND expires_at < NOW()`,
+    [ispId]
+  );
+}
+
 function normalizePaymentMethodConfig(methodType, config) {
   const cfg = config && typeof config === "object" ? config : {};
   const note = String(cfg.note || "").trim().slice(0, 1500);
@@ -1804,10 +1903,11 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
     if (!activeMethod.rows[0]) {
       return res.status(400).json({ message: `No active payment method configured for ${resolvedMethodType}.` });
     }
-    await query(
+    const manualPurchase = await query(
       `INSERT INTO wifi_guest_purchases
        (id, isp_id, plan_id, deposit_id, phone, pawapay_provider, currency, amount, status, redirect_url, method_type, external_ref, payer_contact)
-       VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, 'USD', $6, 'pending_manual', $7, $8, $9, $10)`,
+       VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, 'USD', $6, 'pending_manual', $7, $8, $9, $10)
+       RETURNING id`,
       [ispId, planId, depositId, String(payerContact || phone || "manual").slice(0, 64), resolvedMethodType, amount, redirectUrl, resolvedMethodType, manualRef, String(payerContact || "").slice(0, 255)]
     );
     await logAudit({
@@ -1816,6 +1916,18 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
       entityType: "wifi_guest_purchase",
       entityId: depositId,
       details: { planId, methodType: resolvedMethodType, externalRef: manualRef }
+    });
+    await createUnifiedPaymentRecord({
+      ispId,
+      scope: "B2C_GUEST_WIFI",
+      sourceTable: "wifi_guest_purchases",
+      sourceId: manualPurchase.rows[0].id,
+      methodType: resolvedMethodType,
+      amountUsd: Number(amount || 0),
+      tid: manualRef,
+      note: "Guest Wi-Fi manual checkout",
+      status: "PENDING",
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
     });
     return res.status(201).json({
       depositId,
@@ -1856,12 +1968,25 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
       });
     }
     if (pw.status === "ACCEPTED") {
-      await query(
+      const mobilePurchase = await query(
         `INSERT INTO wifi_guest_purchases
          (id, isp_id, plan_id, deposit_id, phone, pawapay_provider, currency, amount, status, redirect_url, method_type)
-         VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, 'USD', $6, 'pending', $7, 'mobile_money')`,
+         VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, 'USD', $6, 'pending', $7, 'mobile_money')
+         RETURNING id`,
         [ispId, planId, depositId, phone, pawapayProvider, amount, redirectUrl]
       );
+      await createUnifiedPaymentRecord({
+        ispId,
+        scope: "B2C_GUEST_WIFI",
+        sourceTable: "wifi_guest_purchases",
+        sourceId: mobilePurchase.rows[0].id,
+        methodType: "mobile_money",
+        amountUsd: Number(amount || 0),
+        tid: depositId,
+        note: "Guest Wi-Fi mobile money checkout",
+        status: "PENDING",
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      });
     }
     await logAudit({
       ispId,
@@ -1922,6 +2047,12 @@ app.get("/api/public/wifi-purchase/status/:depositId", rlWifiStatus, async (req,
     if (pw.status === "COMPLETED") {
       try {
         const done = await completeWifiGuestPurchase(depositId);
+        await query(
+          `UPDATE unified_payments
+           SET status = 'APPROVED', approved_at = NOW(), updated_at = NOW()
+           WHERE source_table = 'wifi_guest_purchases' AND source_id = $1::uuid`,
+          [row.id]
+        );
         return res.json({
           status: "completed",
           pawapay: pw,
@@ -1935,6 +2066,12 @@ app.get("/api/public/wifi-purchase/status/:depositId", rlWifiStatus, async (req,
     }
     if (pw.status === "FAILED") {
       await markWifiGuestPurchaseFailed(depositId);
+      await query(
+        `UPDATE unified_payments
+         SET status = 'REJECTED', rejected_at = NOW(), updated_at = NOW()
+         WHERE source_table = 'wifi_guest_purchases' AND source_id = $1::uuid`,
+        [row.id]
+      );
       return res.json({ status: "failed", pawapay: pw });
     }
     return res.json({ status: "pending", pawapay: pw });
@@ -2151,6 +2288,27 @@ app.post("/api/portal/tid-submissions", authenticatePortal, async (req, res) => 
     entityId: inserted.rows[0].id,
     details: { invoiceId: invoice.id, tid, source: "customer_portal" }
   });
+  await createUnifiedPaymentRecord({
+    ispId: invoice.isp_id,
+    scope: "B2C_INVOICE",
+    customerId: invoice.customer_id,
+    invoiceId: invoice.id,
+    subscriptionId: invoice.subscription_id,
+    sourceTable: "payment_tid_submissions",
+    sourceId: inserted.rows[0].id,
+    methodType: "tid",
+    amountUsd: Number(amountUsd || invoice.amount_usd),
+    tid,
+    status: "PENDING"
+  });
+  await createUnifiedPaymentNotification({
+    ispId: invoice.isp_id,
+    customerId: invoice.customer_id,
+    paymentId: null,
+    kind: "payment_submitted",
+    title: "Paiement soumis",
+    body: `Votre reference ${String(tid).slice(0, 32)} est en attente de validation.`
+  });
   return res.status(201).json(inserted.rows[0]);
 });
 
@@ -2222,6 +2380,31 @@ app.post("/api/portal/mobile-money/initiate", authenticatePortal, async (req, re
   } catch (err) {
     return res.status(400).json({ message: err.message || "Pawapay initiation failed" });
   }
+});
+
+app.get("/api/portal/payment-notifications", authenticatePortal, async (req, res) => {
+  const { ispId, customerId } = req.portal;
+  const rows = await query(
+    `SELECT id, payment_id AS "paymentId", title, body, kind, is_read AS "isRead", created_at AS "createdAt", read_at AS "readAt"
+     FROM user_payment_notifications
+     WHERE isp_id = $1 AND customer_id = $2
+     ORDER BY created_at DESC
+     LIMIT 100`,
+    [ispId, customerId]
+  );
+  const unreadCount = rows.rows.reduce((acc, r) => acc + (r.isRead ? 0 : 1), 0);
+  return res.json({ unreadCount, items: rows.rows });
+});
+
+app.post("/api/portal/payment-notifications/:id/read", authenticatePortal, async (req, res) => {
+  const { ispId, customerId } = req.portal;
+  await query(
+    `UPDATE user_payment_notifications
+     SET is_read = TRUE, read_at = NOW()
+     WHERE id = $1::uuid AND isp_id = $2 AND customer_id = $3`,
+    [req.params.id, ispId, customerId]
+  );
+  return res.json({ ok: true });
 });
 
 app.get("/api/portal/mobile-money/status/:depositId", authenticatePortal, async (req, res) => {
@@ -3288,7 +3471,7 @@ app.post(
       `INSERT INTO platform_saas_deposit_sessions
        (id, isp_id, platform_subscription_id, target_package_id, deposit_id, amount, currency, provider, phone_number, method_type, external_ref, payer_contact, evidence_json, status, pawapay_init_status)
        VALUES (gen_random_uuid(), $1, $2, $3, $4::uuid, $5, 'USD', $6, $7, $8, $9, $10, $11::jsonb, 'initiated', NULL)
-       RETURNING deposit_id AS "depositId", method_type AS "methodType", amount, currency, status, created_at AS "createdAt"`,
+       RETURNING id AS "sessionId", deposit_id AS "depositId", method_type AS "methodType", amount, currency, status, created_at AS "createdAt"`,
       [
         ispId,
         sub.id,
@@ -3310,6 +3493,20 @@ app.post(
       entityType: "platform_saas_deposit",
       entityId: depositId,
       details: { methodType: sessionMethodType, targetPackageId, amountUsd: settledUsd }
+    });
+    await createUnifiedPaymentRecord({
+      ispId,
+      scope: "B2B_SUBSCRIPTION",
+      actorUserId: req.user.sub,
+      subscriptionId: sub.id,
+      sourceTable: "platform_saas_deposit_sessions",
+      sourceId: inserted.rows[0].sessionId,
+      methodType: sessionMethodType,
+      amountUsd: settledUsd,
+      tid: String(externalRef).slice(0, 255),
+      proofUrl: safeEvidence.proofUrl || null,
+      status: "PENDING",
+      createdBy: req.user.sub
     });
     return res.status(201).json({
       ...inserted.rows[0],
@@ -3340,6 +3537,15 @@ app.post(
     if (row.status !== "initiated") return res.status(409).json({ message: "Deposit session already finalized." });
     if (!confirmReceived) {
       await markSaasDepositFailed(depositId);
+      await query(
+        `UPDATE unified_payments
+         SET status = 'REJECTED', reviewed_by = $1, reviewed_at = NOW(), review_note = $2, rejected_at = NOW(), updated_at = NOW()
+         WHERE source_table = 'platform_saas_deposit_sessions'
+           AND source_id = (
+             SELECT id FROM platform_saas_deposit_sessions WHERE deposit_id = $3::uuid AND isp_id = $4 LIMIT 1
+           )`,
+        [req.user.sub, String(note || "").slice(0, 500), depositId, ispId]
+      );
       return res.json({ ok: true, status: "failed" });
     }
     const applied = await applySuccessfulSaasDeposit(depositId);
@@ -3348,6 +3554,15 @@ app.post(
        SET verified_by = $1, verified_at = NOW(), evidence_json = COALESCE(evidence_json, '{}'::jsonb) || jsonb_build_object('reviewNote', $2)
        WHERE deposit_id = $3::uuid`,
       [req.user.sub, String(note || "").slice(0, 1500), depositId]
+    );
+    await query(
+      `UPDATE unified_payments
+       SET status = 'APPROVED', reviewed_by = $1, reviewed_at = NOW(), review_note = $2, approved_at = NOW(), updated_at = NOW()
+       WHERE source_table = 'platform_saas_deposit_sessions'
+         AND source_id = (
+           SELECT id FROM platform_saas_deposit_sessions WHERE deposit_id = $3::uuid AND isp_id = $4 LIMIT 1
+         )`,
+      [req.user.sub, String(note || "").slice(0, 500), depositId, ispId]
     );
     await logAudit({
       ispId,
@@ -3508,8 +3723,22 @@ app.get(
       const pw = await fetchPawapayDepositStatus(depositId);
       if (pw.status === "COMPLETED") {
         await applySuccessfulSaasDeposit(depositId);
+        await query(
+          `UPDATE unified_payments
+           SET status = 'APPROVED', approved_at = NOW(), updated_at = NOW()
+           WHERE source_table = 'platform_saas_deposit_sessions'
+             AND source_id = (SELECT id FROM platform_saas_deposit_sessions WHERE deposit_id = $1::uuid LIMIT 1)`,
+          [depositId]
+        );
       } else if (pw.status === "FAILED") {
         await markSaasDepositFailed(depositId);
+        await query(
+          `UPDATE unified_payments
+           SET status = 'REJECTED', rejected_at = NOW(), updated_at = NOW()
+           WHERE source_table = 'platform_saas_deposit_sessions'
+             AND source_id = (SELECT id FROM platform_saas_deposit_sessions WHERE deposit_id = $1::uuid LIMIT 1)`,
+          [depositId]
+        );
       }
       return res.json({ pawapay: pw, local: local.rows[0] });
     } catch (err) {
@@ -5596,6 +5825,20 @@ app.post("/api/payments/tid-submissions", async (req, res) => {
     entityId: inserted.rows[0].id,
     details: { invoiceId: invoice.id, tid }
   });
+  await createUnifiedPaymentRecord({
+    ispId: invoice.isp_id,
+    scope: "B2C_INVOICE",
+    customerId: invoice.customer_id,
+    invoiceId: invoice.id,
+    subscriptionId: invoice.subscription_id,
+    sourceTable: "payment_tid_submissions",
+    sourceId: inserted.rows[0].id,
+    methodType: "tid",
+    amountUsd: Number(amountUsd || invoice.amount_usd),
+    tid,
+    status: "PENDING",
+    createdBy: null
+  });
   return res.status(201).json(inserted.rows[0]);
 });
 
@@ -5684,6 +5927,12 @@ app.post(
           entityId: submissionId,
           details: { note: note || null }
         });
+        await query(
+          `UPDATE unified_payments
+           SET status = 'REJECTED', reviewed_by = $1, reviewed_at = NOW(), review_note = $2, rejected_at = NOW(), updated_at = NOW()
+           WHERE source_table = 'payment_tid_submissions' AND source_id = $3::uuid`,
+          [req.user.sub, note || null, submissionId]
+        );
         return res.json({ message: "Submission rejected" });
       }
 
@@ -5714,6 +5963,12 @@ app.post(
           entityId: submissionId,
           details: { note: note || null, accreditationLevel: reviewerTier }
         });
+        await query(
+          `UPDATE unified_payments
+           SET status = 'UNDER_REVIEW', reviewed_by = $1, reviewed_at = NOW(), review_note = COALESCE($2, review_note), updated_at = NOW()
+           WHERE source_table = 'payment_tid_submissions' AND source_id = $3::uuid`,
+          [req.user.sub, note || null, submissionId]
+        );
         return res.json({ message: "First approval saved. Waiting for second approver.", pendingSecondApproval: true });
       }
 
@@ -5777,6 +6032,19 @@ app.post(
           requiredSecondApproval: needsL2
         }
       });
+      await query(
+        `UPDATE unified_payments
+         SET status = 'APPROVED', reviewed_by = $1, reviewed_at = NOW(), review_note = $2, approved_at = NOW(), updated_at = NOW()
+         WHERE source_table = 'payment_tid_submissions' AND source_id = $3::uuid`,
+        [req.user.sub, note || null, submissionId]
+      );
+      await createUnifiedPaymentNotification({
+        ispId,
+        customerId: submission.customer_id,
+        kind: "payment_approved",
+        title: "Paiement validé",
+        body: "Votre paiement a été validé."
+      });
       return res.json({
         message: "Submission approved",
         activated: Boolean(pay.activated),
@@ -5835,6 +6103,298 @@ app.post(
       details: { queued }
     });
     return res.json({ queued, totalPending: pending.rows.length });
+  }
+);
+
+app.get(
+  "/api/payments",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "field_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    await expireUnifiedPayments(ispId);
+    const status = String(req.query.status || "").trim().toUpperCase();
+    const methodType = normalizeMethodType(req.query.methodType || "");
+    const scope = String(req.query.scope || "").trim().toUpperCase();
+    const where = ["isp_id = $1"];
+    const params = [ispId];
+    if (UNIFIED_PAYMENT_STATUS.has(status)) {
+      params.push(status);
+      where.push(`status = $${params.length}`);
+    }
+    if (methodType) {
+      params.push(methodType);
+      where.push(`method_type = $${params.length}`);
+    }
+    if (UNIFIED_PAYMENT_SCOPE.has(scope)) {
+      params.push(scope);
+      where.push(`scope = $${params.length}`);
+    }
+    const rows = await query(
+      `SELECT id, isp_id AS "ispId", scope, actor_user_id AS "actorUserId", customer_id AS "customerId",
+              invoice_id AS "invoiceId", subscription_id AS "subscriptionId",
+              source_table AS "sourceTable", source_id AS "sourceId",
+              method_type AS "methodType", amount_usd AS "amountUsd", currency, tid,
+              proof_url AS "proofUrl", note, status, expires_at AS "expiresAt",
+              reviewed_by AS "reviewedBy", reviewed_at AS "reviewedAt", review_note AS "reviewNote",
+              approved_at AS "approvedAt", rejected_at AS "rejectedAt", created_by AS "createdBy",
+              created_at AS "createdAt", updated_at AS "updatedAt"
+       FROM unified_payments
+       WHERE ${where.join(" AND ")}
+       ORDER BY created_at DESC
+       LIMIT 500`,
+      params
+    );
+    return res.json(rows.rows);
+  }
+);
+
+app.post(
+  "/api/payments/initiate",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "field_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const {
+      scope,
+      methodType,
+      amountUsd,
+      invoiceId,
+      subscriptionId,
+      customerId,
+      sourceTable,
+      sourceId,
+      tid,
+      proofUrl,
+      note,
+      expiresAt
+    } = req.body || {};
+    if (!scope || !methodType || !tid) {
+      return res.status(400).json({ message: "scope, methodType and tid are required." });
+    }
+    if (!UNIFIED_PAYMENT_SCOPE.has(String(scope).toUpperCase())) {
+      return res.status(400).json({ message: "Invalid scope." });
+    }
+    const amount = Number(amountUsd || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ message: "Invalid amountUsd." });
+    }
+    const created = await createUnifiedPaymentRecord({
+      ispId,
+      scope,
+      actorUserId: req.user.sub,
+      customerId,
+      invoiceId,
+      subscriptionId,
+      sourceTable: sourceTable || null,
+      sourceId: sourceId || null,
+      methodType,
+      amountUsd: amount,
+      tid,
+      proofUrl: proofUrl || null,
+      note: note || null,
+      status: "PENDING",
+      createdBy: req.user.sub,
+      expiresAt: expiresAt || null
+    });
+    await createUnifiedPaymentNotification({
+      ispId,
+      userId: req.user.sub,
+      customerId: created.customerId,
+      paymentId: created.id,
+      kind: "payment_submitted",
+      title: "Paiement soumis",
+      body: `Votre paiement (${created.methodType}, ref ${created.tid}) est en attente de validation.`
+    });
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "payment.unified_created",
+      entityType: "unified_payment",
+      entityId: created.id,
+      details: { scope: created.scope, methodType: created.methodType, tid: created.tid }
+    });
+    return res.status(201).json(created);
+  }
+);
+
+app.post(
+  "/api/payments/:paymentId/proof",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "field_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { paymentId } = req.params;
+    const { tid, proofUrl, note, amountUsd } = req.body || {};
+    if (!tid) return res.status(400).json({ message: "tid is required." });
+    const updated = await query(
+      `UPDATE unified_payments
+       SET tid = $1, proof_url = $2, note = COALESCE($3, note),
+           amount_usd = COALESCE($4, amount_usd),
+           status = CASE WHEN status = 'PENDING' THEN 'UNDER_REVIEW' ELSE status END,
+           updated_at = NOW()
+       WHERE id = $5::uuid AND isp_id = $6
+       RETURNING id, status, tid, proof_url AS "proofUrl", note, amount_usd AS "amountUsd", customer_id AS "customerId"`,
+      [String(tid).slice(0, 255), proofUrl || null, note || null, Number(amountUsd || 0) > 0 ? Number(amountUsd) : null, paymentId, ispId]
+    );
+    const row = updated.rows[0];
+    if (!row) return res.status(404).json({ message: "Payment not found." });
+    await createUnifiedPaymentNotification({
+      ispId,
+      userId: req.user.sub,
+      customerId: row.customerId,
+      paymentId: row.id,
+      kind: "payment_submitted",
+      title: "Preuve reçue",
+      body: `La preuve du paiement ${row.tid} a été soumise.`
+    });
+    return res.json(row);
+  }
+);
+
+app.post(
+  "/api/payments/:paymentId/review",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { paymentId } = req.params;
+    const { decision, note } = req.body || {};
+    const normalizedDecision = String(decision || "").toUpperCase();
+    if (!["UNDER_REVIEW", "APPROVED", "REJECTED"].includes(normalizedDecision)) {
+      return res.status(400).json({ message: "decision must be UNDER_REVIEW, APPROVED or REJECTED." });
+    }
+    const got = await query(
+      `SELECT * FROM unified_payments WHERE id = $1::uuid AND isp_id = $2 LIMIT 1`,
+      [paymentId, ispId]
+    );
+    const payment = got.rows[0];
+    if (!payment) return res.status(404).json({ message: "Payment not found." });
+    if (!["PENDING", "UNDER_REVIEW"].includes(payment.status)) {
+      return res.status(409).json({ message: "Payment already finalized." });
+    }
+    if (normalizedDecision === "UNDER_REVIEW") {
+      await query(
+        `UPDATE unified_payments
+         SET status = 'UNDER_REVIEW', reviewed_by = $1, reviewed_at = NOW(), review_note = COALESCE($2, review_note), updated_at = NOW()
+         WHERE id = $3::uuid`,
+        [req.user.sub, note || null, paymentId]
+      );
+      return res.json({ message: "Payment moved to UNDER_REVIEW." });
+    }
+    if (normalizedDecision === "REJECTED") {
+      await query(
+        `UPDATE unified_payments
+         SET status = 'REJECTED', reviewed_by = $1, reviewed_at = NOW(), review_note = $2, rejected_at = NOW(), updated_at = NOW()
+         WHERE id = $3::uuid`,
+        [req.user.sub, note || null, paymentId]
+      );
+      await createUnifiedPaymentNotification({
+        ispId,
+        customerId: payment.customer_id,
+        paymentId,
+        kind: "payment_rejected",
+        title: "Paiement refusé",
+        body: "Votre paiement a été refusé. Vérifiez la référence et réessayez."
+      });
+      return res.json({ message: "Payment rejected." });
+    }
+
+    let activation = { activated: false, duplicate: false };
+    if (payment.scope === "B2C_INVOICE" && payment.invoice_id) {
+      const applied = await applyInvoicePayment({
+        ispId,
+        invoiceId: payment.invoice_id,
+        providerRef: payment.tid,
+        amountUsd: payment.amount_usd,
+        status: "confirmed",
+        methodType: payment.method_type === "tid" ? "manual_mobile_money" : payment.method_type
+      });
+      if (!applied.ok) return res.status(applied.code || 400).json({ message: applied.message || "Payment apply failed." });
+      activation = { activated: Boolean(applied.activated), duplicate: Boolean(applied.duplicate) };
+    } else if (payment.scope === "B2B_SUBSCRIPTION" && payment.source_table === "platform_saas_deposit_sessions" && payment.source_id) {
+      const deposit = await query(
+        `SELECT deposit_id AS "depositId"
+         FROM platform_saas_deposit_sessions
+         WHERE id = $1::uuid AND isp_id = $2`,
+        [payment.source_id, ispId]
+      );
+      const depositId = deposit.rows[0]?.depositId;
+      if (!depositId) return res.status(404).json({ message: "Linked SaaS deposit session not found." });
+      const done = await applySuccessfulSaasDeposit(depositId);
+      if (!done.ok) return res.status(400).json({ message: "Unable to apply SaaS payment." });
+      activation = { activated: true, duplicate: Boolean(done.duplicate) };
+    } else if (payment.scope === "B2C_GUEST_WIFI" && payment.source_table === "wifi_guest_purchases" && payment.source_id) {
+      const deposit = await query(
+        `SELECT deposit_id AS "depositId"
+         FROM wifi_guest_purchases
+         WHERE id = $1::uuid AND isp_id = $2`,
+        [payment.source_id, ispId]
+      );
+      const depositId = deposit.rows[0]?.depositId;
+      if (!depositId) return res.status(404).json({ message: "Linked guest purchase not found." });
+      const done = await completeWifiGuestPurchase(depositId);
+      if (!done.ok) return res.status(400).json({ message: "Unable to activate guest purchase." });
+      activation = { activated: true, duplicate: Boolean(done.duplicate) };
+    }
+
+    await query(
+      `UPDATE unified_payments
+       SET status = 'APPROVED', reviewed_by = $1, reviewed_at = NOW(), review_note = $2,
+           approved_at = NOW(), updated_at = NOW()
+       WHERE id = $3::uuid`,
+      [req.user.sub, note || null, paymentId]
+    );
+    await createUnifiedPaymentNotification({
+      ispId,
+      customerId: payment.customer_id,
+      paymentId,
+      kind: "payment_approved",
+      title: "Paiement validé",
+      body: "Votre paiement a été validé et vos services sont activés."
+    });
+    return res.json({ message: "Payment approved.", ...activation });
+  }
+);
+
+app.get(
+  "/api/payments/notifications",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "field_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const rows = await query(
+      `SELECT id, payment_id AS "paymentId", title, body, kind, is_read AS "isRead", created_at AS "createdAt", read_at AS "readAt"
+       FROM user_payment_notifications
+       WHERE isp_id = $1 AND (user_id = $2 OR user_id IS NULL)
+       ORDER BY created_at DESC
+       LIMIT 120`,
+      [ispId, req.user.sub]
+    );
+    const unreadCount = rows.rows.reduce((acc, r) => acc + (r.isRead ? 0 : 1), 0);
+    return res.json({ unreadCount, items: rows.rows });
+  }
+);
+
+app.post(
+  "/api/payments/notifications/:notificationId/read",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent", "field_agent"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    await query(
+      `UPDATE user_payment_notifications
+       SET is_read = TRUE, read_at = NOW()
+       WHERE id = $1::uuid AND isp_id = $2 AND (user_id = $3 OR user_id IS NULL)`,
+      [req.params.notificationId, ispId, req.user.sub]
+    );
+    return res.json({ ok: true });
   }
 );
 
@@ -5982,6 +6542,22 @@ app.post(
       entityId: created.rows[0].id,
       details: { invoiceId: invoice.id, channel, externalRef: String(externalRef).slice(0, 255), amountUsd: amount }
     });
+    await createUnifiedPaymentRecord({
+      ispId,
+      scope: "B2C_INVOICE",
+      actorUserId: req.user.sub,
+      customerId: invoice.customer_id,
+      invoiceId: invoice.id,
+      subscriptionId: invoice.subscription_id,
+      sourceTable: "payment_intents",
+      sourceId: created.rows[0].id,
+      methodType: paymentIntentChannelToMethod(channel),
+      amountUsd: amount,
+      tid: String(externalRef).slice(0, 255),
+      proofUrl: safeEvidence.proofUrl || null,
+      status: "PENDING",
+      createdBy: req.user.sub
+    });
     return res.status(201).json(created.rows[0]);
   }
 );
@@ -6031,6 +6607,12 @@ app.post(
           entityId: intentId,
           details: { note: note || null }
         });
+        await query(
+          `UPDATE unified_payments
+           SET status = 'REJECTED', reviewed_by = $1, reviewed_at = NOW(), review_note = $2, rejected_at = NOW(), updated_at = NOW()
+           WHERE source_table = 'payment_intents' AND source_id = $3::uuid`,
+          [req.user.sub, note || null, intentId]
+        );
         return res.json({ message: "Payment intent rejected." });
       }
       const methodType = paymentIntentChannelToMethod(intent.channel);
@@ -6056,6 +6638,12 @@ app.post(
           entityId: intentId,
           details: { note: note || null, accreditationLevel: reviewerTier }
         });
+        await query(
+          `UPDATE unified_payments
+           SET status = 'UNDER_REVIEW', reviewed_by = $1, reviewed_at = NOW(), review_note = COALESCE($2, review_note), updated_at = NOW()
+           WHERE source_table = 'payment_intents' AND source_id = $3::uuid`,
+          [req.user.sub, note || null, intentId]
+        );
         return res.json({ message: "First approval saved. Waiting for second approver.", pendingSecondApproval: true });
       }
       if (needsL2 && intent.status === "approved_l1") {
@@ -6106,6 +6694,19 @@ app.post(
         entityType: "payment_intent",
         entityId: intentId,
         details: { accreditationLevel: reviewerTier, requiredSecondApproval: needsL2, duplicate: Boolean(pay.duplicate) }
+      });
+      await query(
+        `UPDATE unified_payments
+         SET status = 'APPROVED', reviewed_by = $1, reviewed_at = NOW(), review_note = $2, approved_at = NOW(), updated_at = NOW()
+         WHERE source_table = 'payment_intents' AND source_id = $3::uuid`,
+        [req.user.sub, note || null, intentId]
+      );
+      await createUnifiedPaymentNotification({
+        ispId,
+        customerId: intent.customer_id,
+        kind: "payment_approved",
+        title: "Paiement validé",
+        body: "Votre paiement a été validé."
       });
       return res.json({ message: "Payment intent approved.", activated: Boolean(pay.activated), duplicate: Boolean(pay.duplicate) });
     } catch (err) {

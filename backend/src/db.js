@@ -443,6 +443,48 @@ export async function initDb() {
   `);
   await query("CREATE INDEX IF NOT EXISTS idx_payment_intents_isp_created ON payment_intents (isp_id, created_at DESC);");
   await query("CREATE INDEX IF NOT EXISTS idx_payment_intents_isp_status ON payment_intents (isp_id, status);");
+  await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_intents_isp_external_ref ON payment_intents (isp_id, external_ref);");
+  await query(`
+    CREATE TABLE IF NOT EXISTS unified_payments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      scope TEXT NOT NULL CHECK (scope IN ('B2B_SUBSCRIPTION', 'B2C_INVOICE', 'B2C_GUEST_WIFI')),
+      actor_user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      customer_id UUID NULL REFERENCES customers(id) ON DELETE SET NULL,
+      invoice_id UUID NULL REFERENCES invoices(id) ON DELETE SET NULL,
+      subscription_id UUID NULL REFERENCES subscriptions(id) ON DELETE SET NULL,
+      source_table TEXT NULL,
+      source_id UUID NULL,
+      method_type TEXT NOT NULL CHECK (
+        method_type IN ('cash', 'mobile_money', 'binance_pay', 'bank_transfer', 'crypto_wallet', 'visa_card', 'tid')
+      ),
+      amount_usd NUMERIC(12,2) NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      tid TEXT NOT NULL,
+      proof_url TEXT NULL,
+      note TEXT NULL,
+      status TEXT NOT NULL CHECK (status IN ('PENDING', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'EXPIRED')) DEFAULT 'PENDING',
+      expires_at TIMESTAMP NULL,
+      reviewed_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_at TIMESTAMP NULL,
+      review_note TEXT NULL,
+      approved_at TIMESTAMP NULL,
+      rejected_at TIMESTAMP NULL,
+      created_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_unified_payments_isp_created ON unified_payments (isp_id, created_at DESC);");
+  await query("CREATE INDEX IF NOT EXISTS idx_unified_payments_isp_status ON unified_payments (isp_id, status, created_at DESC);");
+  await query("CREATE INDEX IF NOT EXISTS idx_unified_payments_scope_status ON unified_payments (scope, status, created_at DESC);");
+  await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_unified_payments_isp_tid ON unified_payments (isp_id, lower(tid));");
+  await query(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_unified_payments_active_invoice ON unified_payments (isp_id, invoice_id) WHERE invoice_id IS NOT NULL AND status IN ('PENDING', 'UNDER_REVIEW');"
+  );
+  await query(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_unified_payments_active_subscription ON unified_payments (isp_id, subscription_id) WHERE subscription_id IS NOT NULL AND scope = 'B2B_SUBSCRIPTION' AND status IN ('PENDING', 'UNDER_REVIEW');"
+  );
 
   await query(`
     CREATE TABLE IF NOT EXISTS accounting_ledger_entries (
@@ -671,6 +713,92 @@ export async function initDb() {
     await query(
       "INSERT INTO app_runtime_flags (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING",
       [wifiZoneBackfillFlag, "done"]
+    );
+  }
+  const unifiedBackfillFlag = "unified_payments_backfill_2026_05_02";
+  const unifiedBackfillDone = await query("SELECT key FROM app_runtime_flags WHERE key = $1", [unifiedBackfillFlag]);
+  if (!unifiedBackfillDone.rows[0]) {
+    await query(
+      `INSERT INTO unified_payments
+        (isp_id, scope, actor_user_id, customer_id, invoice_id, subscription_id, source_table, source_id, method_type, amount_usd, currency, tid, proof_url, note, status, reviewed_by, reviewed_at, approved_at, rejected_at, created_by, created_at, updated_at)
+       SELECT
+        pi.isp_id,
+        'B2C_INVOICE',
+        pi.created_by,
+        pi.customer_id,
+        pi.invoice_id,
+        pi.subscription_id,
+        'payment_intents',
+        pi.id,
+        CASE
+          WHEN pi.channel = 'cash_agent' THEN 'cash'
+          WHEN pi.channel = 'mobile_money_manual' THEN 'tid'
+          WHEN pi.channel = 'bank_transfer' THEN 'bank_transfer'
+          WHEN pi.channel = 'card_manual' THEN 'visa_card'
+          WHEN pi.channel = 'crypto_wallet' THEN 'crypto_wallet'
+          ELSE 'tid'
+        END,
+        pi.amount_usd,
+        'USD',
+        pi.external_ref,
+        COALESCE(NULLIF(pi.evidence_json->>'proofUrl',''), NULL),
+        pi.review_note,
+        CASE
+          WHEN pi.status IN ('pending', 'approved_l1') THEN 'PENDING'
+          WHEN pi.status = 'approved' THEN 'APPROVED'
+          WHEN pi.status = 'rejected' THEN 'REJECTED'
+          ELSE 'EXPIRED'
+        END,
+        pi.reviewed_by,
+        pi.reviewed_at,
+        CASE WHEN pi.status = 'approved' THEN pi.reviewed_at ELSE NULL END,
+        CASE WHEN pi.status = 'rejected' THEN pi.reviewed_at ELSE NULL END,
+        pi.created_by,
+        pi.created_at,
+        COALESCE(pi.reviewed_at, pi.created_at)
+       FROM payment_intents pi
+       WHERE NOT EXISTS (
+         SELECT 1 FROM unified_payments up WHERE up.source_table = 'payment_intents' AND up.source_id = pi.id
+       )
+       ON CONFLICT DO NOTHING`
+    );
+    await query(
+      `INSERT INTO unified_payments
+        (isp_id, scope, customer_id, invoice_id, subscription_id, source_table, source_id, method_type, amount_usd, currency, tid, note, status, reviewed_by, reviewed_at, approved_at, rejected_at, created_at, updated_at)
+       SELECT
+        ts.isp_id,
+        'B2C_INVOICE',
+        ts.customer_id,
+        ts.invoice_id,
+        ts.subscription_id,
+        'payment_tid_submissions',
+        ts.id,
+        'tid',
+        ts.amount_usd,
+        'USD',
+        ts.tid,
+        ts.review_note,
+        CASE
+          WHEN ts.status IN ('pending', 'approved_l1') THEN 'PENDING'
+          WHEN ts.status = 'approved' THEN 'APPROVED'
+          WHEN ts.status = 'rejected' THEN 'REJECTED'
+          ELSE 'EXPIRED'
+        END,
+        ts.reviewed_by,
+        ts.reviewed_at,
+        CASE WHEN ts.status = 'approved' THEN ts.reviewed_at ELSE NULL END,
+        CASE WHEN ts.status = 'rejected' THEN ts.reviewed_at ELSE NULL END,
+        ts.created_at,
+        COALESCE(ts.reviewed_at, ts.created_at)
+       FROM payment_tid_submissions ts
+       WHERE NOT EXISTS (
+         SELECT 1 FROM unified_payments up WHERE up.source_table = 'payment_tid_submissions' AND up.source_id = ts.id
+       )
+       ON CONFLICT DO NOTHING`
+    );
+    await query(
+      "INSERT INTO app_runtime_flags (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING",
+      [unifiedBackfillFlag, "done"]
     );
   }
 
@@ -949,6 +1077,27 @@ export async function initDb() {
   );
   await query(
     "ALTER TABLE notification_outbox ADD COLUMN IF NOT EXISTS provider_message_id TEXT NULL;"
+  );
+  await query(`
+    CREATE TABLE IF NOT EXISTS user_payment_notifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      user_id UUID NULL REFERENCES users(id) ON DELETE CASCADE,
+      customer_id UUID NULL REFERENCES customers(id) ON DELETE CASCADE,
+      payment_id UUID NULL REFERENCES unified_payments(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('payment_approved', 'payment_rejected', 'payment_expired', 'payment_submitted')),
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      read_at TIMESTAMP NULL
+    );
+  `);
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_user_payment_notifications_user ON user_payment_notifications (user_id, is_read, created_at DESC);"
+  );
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_user_payment_notifications_customer ON user_payment_notifications (customer_id, is_read, created_at DESC);"
   );
   await query(`
     CREATE TABLE IF NOT EXISTS isp_notification_providers (
