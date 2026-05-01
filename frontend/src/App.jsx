@@ -461,6 +461,42 @@ function paymentMethodConfigFromForm(form) {
   return base;
 }
 
+const ROLE_PROFILE_OPTIONS = [
+  { key: "field_agent", fr: "Agent terrain", en: "Field agent" },
+  { key: "billing_agent", fr: "Agent facturation", en: "Billing agent" },
+  { key: "noc_operator", fr: "Opérateur NOC", en: "NOC operator" },
+  { key: "isp_admin", fr: "Administrateur FAI", en: "ISP administrator" },
+  { key: "company_manager", fr: "Dirigeant entreprise", en: "Company manager" }
+];
+
+const ROLE_PERMISSION_OPTIONS = [
+  { key: "collect_payment", fr: "Collecter paiements", en: "Collect payments" },
+  { key: "review_payment_intent", fr: "Valider encaissements", en: "Review payment intents" },
+  { key: "manage_customers", fr: "Gérer clients", en: "Manage customers" },
+  { key: "manage_subscriptions", fr: "Gérer abonnements", en: "Manage subscriptions" }
+];
+
+function roleProfileLabel(roleKey, t) {
+  const row = ROLE_PROFILE_OPTIONS.find((x) => x.key === roleKey);
+  if (!row) return roleKey || "—";
+  return t(row.fr, row.en);
+}
+
+function rolePermissionLabel(permissionKey, t) {
+  const row = ROLE_PERMISSION_OPTIONS.find((x) => x.key === permissionKey);
+  if (!row) return permissionKey || "—";
+  return t(row.fr, row.en);
+}
+
+function accreditationLabel(level, t) {
+  const k = String(level || "").toLowerCase();
+  if (k === "basic") return t("Basique", "Basic");
+  if (k === "standard") return t("Standard", "Standard");
+  if (k === "senior") return t("Senior", "Senior");
+  if (k === "manager") return t("Manager", "Manager");
+  return level || "—";
+}
+
 function CsvImportResultBlock({ createdCount, skipped, errors, maxRows = 40, onDismiss, t }) {
   const tr = typeof t === "function" ? t : (_, en) => en;
   const sk = skipped || [];
@@ -1252,7 +1288,7 @@ function App() {
   const [roleProfileForm, setRoleProfileForm] = useState({
     roleKey: "field_agent",
     accreditationLevel: "basic",
-    permissionsText: "[\"collect_payment\"]"
+    permissions: ["collect_payment"]
   });
   const [platformSubForm, setPlatformSubForm] = useState({
     packageId: "",
@@ -3154,7 +3190,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
     await api.upsertRoleProfile(selectedIspId, {
       roleKey: roleProfileForm.roleKey,
       accreditationLevel: roleProfileForm.accreditationLevel,
-      permissions: JSON.parse(roleProfileForm.permissionsText || "[]")
+      permissions: Array.isArray(roleProfileForm.permissions) ? roleProfileForm.permissions : []
     });
     refresh();
   }
@@ -4966,11 +5002,16 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         {(isPlatformSuperRole(user.role) || user.role === "company_manager") && (
           <form className="panel" onSubmit={onUpsertRoleProfile}>
             <h2>{t("Profils d'habilitation", "Accreditation profiles")}</h2>
-            <input
-              placeholder={t("Clé de rôle (ex. field_agent)", "Role key (e.g. field_agent)")}
+            <select
               value={roleProfileForm.roleKey}
               onChange={(e) => setRoleProfileForm({ ...roleProfileForm, roleKey: e.target.value })}
-            />
+            >
+              {ROLE_PROFILE_OPTIONS.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {t(r.fr, r.en)}
+                </option>
+              ))}
+            </select>
             <select
               value={roleProfileForm.accreditationLevel}
               onChange={(e) =>
@@ -4982,20 +5023,36 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               <option value="senior">{t("Senior", "Senior")}</option>
               <option value="manager">{t("Manager", "Manager")}</option>
             </select>
-            <input
-              placeholder={t('Permissions JSON (ex : ["collect_payment"])', 'Permissions JSON (e.g. ["collect_payment"])')}
-              value={roleProfileForm.permissionsText}
-              onChange={(e) =>
-                setRoleProfileForm({ ...roleProfileForm, permissionsText: e.target.value })
-              }
-            />
+            <fieldset style={{ border: "1px solid var(--mb-border, rgba(255,255,255,0.12))", borderRadius: 10, padding: 10 }}>
+              <legend className="app-meta">{t("Droits accordés", "Granted permissions")}</legend>
+              {ROLE_PERMISSION_OPTIONS.map((p) => {
+                const checked = Array.isArray(roleProfileForm.permissions) && roleProfileForm.permissions.includes(p.key);
+                return (
+                  <label key={p.key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const next = new Set(Array.isArray(roleProfileForm.permissions) ? roleProfileForm.permissions : []);
+                        if (e.target.checked) next.add(p.key);
+                        else next.delete(p.key);
+                        setRoleProfileForm({ ...roleProfileForm, permissions: Array.from(next) });
+                      }}
+                    />
+                    <span>{t(p.fr, p.en)}</span>
+                  </label>
+                );
+              })}
+            </fieldset>
             <button type="submit" disabled={!selectedIspId}>
               {t("Enregistrer le profil de rôle", "Save role profile")}
             </button>
             {roleProfiles.map((profile) => (
               <p key={profile.id}>
-                {profile.roleKey} — {profile.accreditationLevel} —{" "}
-                {Array.isArray(profile.permissions) ? profile.permissions.join(", ") : ""}
+                {roleProfileLabel(profile.roleKey, t)} — {accreditationLabel(profile.accreditationLevel, t)} —{" "}
+                {Array.isArray(profile.permissions)
+                  ? profile.permissions.map((perm) => rolePermissionLabel(perm, t)).join(", ")
+                  : ""}
               </p>
             ))}
           </form>
