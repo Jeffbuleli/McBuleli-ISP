@@ -84,12 +84,43 @@ export default function Signup() {
       return;
     }
     try {
+      const previousToken =
+        typeof window !== "undefined" ? String(window.localStorage.getItem("token") || "").trim() : "";
+      const hadActiveSession = Boolean(previousToken);
       const res = await api.signupTenant(form);
-      setAuthToken(res.token);
-      setNotice(
-        isEn ? "Account created. Redirecting to your dashboard..." : "Compte créé. Redirection vers votre tableau de bord…"
+      if (!hadActiveSession) {
+        setAuthToken(res.token);
+        setNotice(
+          isEn ? "Account created. Redirecting to your dashboard..." : "Compte créé. Redirection vers votre tableau de bord…"
+        );
+        window.location.href = "/";
+        return;
+      }
+
+      const switchToNewAccount = window.confirm(
+        isEn
+          ? "Your new company has been created. Do you want to switch now to the new account? Your current session will be signed out."
+          : "Votre nouvelle entreprise a été créée. Voulez-vous vous connecter maintenant avec le nouveau compte ? Votre session actuelle sera déconnectée."
       );
-      window.location.href = "/";
+
+      if (switchToNewAccount) {
+        setAuthToken(res.token);
+        setNotice(
+          isEn
+            ? "Current session closed. Redirecting to the new workspace..."
+            : "Session actuelle fermée. Redirection vers le nouvel espace…"
+        );
+        window.location.href = "/";
+        return;
+      }
+
+      setAuthToken(previousToken);
+      setNotice(
+        isEn
+          ? "New company created. You are still on your current session."
+          : "Nouvelle entreprise créée. Vous restez connecté sur la session en cours."
+      );
+      window.location.href = "/?site=public";
     } catch (err) {
       setError(
         sanitizeApiErrorForAudience(err.message || (isEn ? "Could not create account" : "Inscription impossible"), null, isEn)

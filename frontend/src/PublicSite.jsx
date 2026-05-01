@@ -377,6 +377,8 @@ export default function PublicSite() {
     faqAds: []
   });
   const isEn = uiLang === "en";
+  const hasActiveSession =
+    typeof window !== "undefined" && Boolean(window.localStorage.getItem("token"));
   const t = (fr, en) => (isEn ? en : fr);
   const publicNavLabeled = useMemo(
     () => PUBLIC_NAV_LINKS.map((item) => ({ href: item.href, label: t(item.fr, item.en) })),
@@ -550,8 +552,8 @@ export default function PublicSite() {
               <a className="btn-primary" href="/signup">
                 {t("Commencer", "Get started")}
               </a>
-              <a className="btn-secondary" href="/login">
-                {t("Se connecter", "Sign in")}
+              <a className="btn-secondary" href={hasActiveSession ? "/" : "/login"}>
+                {hasActiveSession ? t("Ouvrir ma session", "Open my session") : t("Se connecter", "Sign in")}
               </a>
               <a className="btn-secondary" href="/wifi-zone">
                 {t("Zone WiFi", "WiFi Zone")}
