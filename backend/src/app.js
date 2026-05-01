@@ -436,6 +436,23 @@ function mapPublicBrandingRow(row) {
   return out;
 }
 
+/** Guest Wi‑Fi / directory: allow if no platform subscription row yet, or at least one non‑expired trialing/active row. */
+async function ispGuestWifiPubliclyAllowed(ispId) {
+  const countRes = await query(
+    "SELECT COUNT(*)::int AS c FROM isp_platform_subscriptions WHERE isp_id = $1::uuid",
+    [ispId]
+  );
+  const c = Number(countRes.rows[0]?.c ?? 0);
+  if (c === 0) return true;
+  const live = await query(
+    `SELECT 1 FROM isp_platform_subscriptions s
+     WHERE s.isp_id = $1::uuid AND s.status IN ('trialing', 'active') AND s.ends_at >= NOW()
+     LIMIT 1`,
+    [ispId]
+  );
+  return Boolean(live.rows[0]);
+}
+
 function mapPlatformBannerSlideRow(row) {
   if (!row) return null;
   const mime = row.image_mime ?? row.imageMime;
@@ -1459,13 +1476,15 @@ app.get("/api/public/wifi-zones", rlPublicRead, async (_req, res) => {
             b.wifi_portal_redirect_url AS "wifiPortalRedirectUrl"
      FROM isps i
      INNER JOIN isp_branding b ON b.isp_id = i.id
-     WHERE COALESCE(b.wifi_zone_public, FALSE) = TRUE
-     AND EXISTS (
-       SELECT 1
-       FROM plans p
-       WHERE p.isp_id = i.id
-         AND p.is_published = TRUE
-         AND p.availability_status = 'available'
+     WHERE COALESCE(b.wifi_zone_public, TRUE) = TRUE
+     AND (
+       NOT EXISTS (SELECT 1 FROM isp_platform_subscriptions s0 WHERE s0.isp_id = i.id)
+       OR EXISTS (
+         SELECT 1 FROM isp_platform_subscriptions s1
+         WHERE s1.isp_id = i.id
+           AND s1.status IN ('trialing', 'active')
+           AND s1.ends_at >= NOW()
+       )
      )
      ORDER BY LOWER(COALESCE(b.display_name, i.name)) ASC`
   );
@@ -1498,6 +1517,12 @@ app.get("/api/public/wifi-plans", rlPublicRead, async (req, res) => {
   if (!ispId) return res.status(400).json({ message: "ispId query parameter is required" });
   const isp = await query("SELECT id FROM isps WHERE id = $1", [ispId]);
   if (!isp.rows[0]) return res.status(404).json({ message: "ISP not found" });
+  if (!(await ispGuestWifiPubliclyAllowed(ispId))) {
+    return res.status(403).json({
+      message:
+        "Cet opérateur n'a pas d'abonnement plateforme McBuleli actif. Les offres Wi‑Fi invité ne sont pas disponibles pour le moment."
+    });
+  }
   const brand = await query(
     `SELECT display_name AS "displayName", logo_url AS "logoUrl", logo_bytes AS "logoBytes", logo_mime AS "logoMime",
             primary_color AS "primaryColor", secondary_color AS "secondaryColor",
@@ -1526,6 +1551,12 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
   const { ispId, planId, phoneNumber, networkKey, captiveContext } = req.body || {};
   if (!ispId || !planId || !phoneNumber || !networkKey) {
     return res.status(400).json({ message: "ispId, planId, phoneNumber and networkKey are required" });
+  }
+  if (!(await ispGuestWifiPubliclyAllowed(String(ispId)))) {
+    return res.status(403).json({
+      message:
+        "Cet opérateur n'a pas d'abonnement plateforme McBuleli actif. L'achat Wi‑Fi invité n'est pas disponible pour le moment."
+    });
   }
   const captive =
     captiveContext && typeof captiveContext === "object"

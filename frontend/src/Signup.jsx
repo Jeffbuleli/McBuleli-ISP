@@ -4,6 +4,7 @@ import { mcbuleliLogoUrl } from "./brandAssets.js";
 import PoweredByMcBuleli from "./PoweredByMcBuleli.jsx";
 import { IconArrowLeft } from "./icons.jsx";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
+import { setIndependentPublicPageTitle } from "./pageTitle.js";
 
 function resolveSignupTitle(displayName) {
   const s = displayName != null ? String(displayName).trim() : "";
@@ -49,6 +50,10 @@ export default function Signup() {
         if (row?.matched) setTenantContext(row);
       })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setIndependentPublicPageTitle();
   }, []);
 
   useEffect(() => {

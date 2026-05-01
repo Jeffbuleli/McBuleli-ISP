@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import LangSwitch from "./LangSwitch.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
+import { setIndependentPublicPageTitle } from "./pageTitle.js";
 import { UI_LANG_SYNC_EVENT, getStoredUiLang } from "./uiLangSync.js";
 
 export default function PrivacyPolicy() {
@@ -13,6 +14,10 @@ export default function PrivacyPolicy() {
       window.dispatchEvent(new Event(UI_LANG_SYNC_EVENT));
     }
   }, [uiLang]);
+
+  useEffect(() => {
+    setIndependentPublicPageTitle();
+  }, []);
 
   const year = new Date().getFullYear();
 

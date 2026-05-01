@@ -9,6 +9,7 @@ import PublicMarketingSlot from "./PublicMarketingSlot.jsx";
 import PublicCeoSection from "./PublicCeoSection.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import { COMPANY_CONTACT } from "./companyContact.js";
+import { setIndependentPublicPageTitle } from "./pageTitle.js";
 import {
   IconBuilding,
   IconMail,
@@ -435,6 +436,10 @@ export default function PublicSite() {
       window.dispatchEvent(new Event(UI_LANG_SYNC_EVENT));
     }
   }, [uiLang]);
+
+  useEffect(() => {
+    setIndependentPublicPageTitle();
+  }, []);
 
   useEffect(() => {
     if (!publicMenuOpen) return undefined;

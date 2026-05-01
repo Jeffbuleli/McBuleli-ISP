@@ -623,6 +623,7 @@ export async function initDb() {
   await query(
     "ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS wifi_zone_public BOOLEAN NOT NULL DEFAULT FALSE;"
   );
+  await query("ALTER TABLE isp_branding ALTER COLUMN wifi_zone_public SET DEFAULT TRUE;");
 
   await query(`
     CREATE TABLE IF NOT EXISTS isp_expenses (

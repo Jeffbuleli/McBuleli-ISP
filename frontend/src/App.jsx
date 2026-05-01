@@ -20,6 +20,7 @@ import { formatStaffRole } from "./staffRoleLabels.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 import { clearPwaTeamChatBadge, onTeamChatUnreadTick } from "./teamChatAlerts.js";
 import { UI_LANG_SYNC_EVENT, getStoredUiLang } from "./uiLangSync.js";
+import { setIndependentPublicPageTitle, setWorkspaceTabTitle } from "./pageTitle.js";
 import {
   IconArrowLeft,
   IconHome,
@@ -1172,7 +1173,7 @@ function App() {
     wifiPortalRedirectUrl: "",
     portalFooterText: "",
     portalClientRefPrefix: "",
-    wifiZonePublic: false
+    wifiZonePublic: true
   });
   /** Local object URL for logo file picker preview (revoked when replaced or after upload). */
   const [brandingLogoPickPreview, setBrandingLogoPickPreview] = useState(null);
@@ -1623,7 +1624,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           wifiPortalRedirectUrl: brand.wifiPortalRedirectUrl || "",
           portalFooterText: brand.portalFooterText || "",
           portalClientRefPrefix: brand.portalClientRefPrefix || "",
-          wifiZonePublic: brand.wifiZonePublic === true
+          wifiZonePublic: brand.wifiZonePublic !== false
         });
       }
     } catch (err) {
@@ -2451,7 +2452,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           wifiPortalRedirectUrl: saved.wifiPortalRedirectUrl || "",
           portalFooterText: saved.portalFooterText || "",
           portalClientRefPrefix: saved.portalClientRefPrefix || "",
-          wifiZonePublic: saved.wifiZonePublic === true
+          wifiZonePublic: saved.wifiZonePublic !== false
         }));
       }
       setNotice(t("Image de marque enregistrée.", "Branding saved."));
@@ -3220,6 +3221,15 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
     () => (user ? buildDashboardNavCategories(t, user, Boolean(isFieldAgentForPwaNav)) : []),
     [t, user, isFieldAgentForPwaNav]
   );
+
+  useEffect(() => {
+    if (!user) {
+      setIndependentPublicPageTitle();
+      return;
+    }
+    const name = workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user).trim();
+    setWorkspaceTabTitle(name);
+  }, [user, branding, tenantContext, isps, selectedIspId]);
 
   if (!user) {
     const forgotHintPlain = (isEn ? publicAuthCopyForgot.en : publicAuthCopyForgot.fr).trim();
@@ -4185,8 +4195,8 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                 onChange={(e) => setBrandingForm({ ...brandingForm, wifiZonePublic: e.target.checked })}
               />{" "}
               {t(
-                "FAI public sur la Zone WiFi McBuleli : afficher mon entreprise sur la page /wifi-zone (logo, région, téléphone, lien Wi‑Fi invité). Décochez pour rester privé et masquer du public.",
-                "Public ISP on McBuleli WiFi Zone: show my company on the /wifi-zone page (logo, region, phone, guest Wi-Fi link). Uncheck to stay private and hidden from the public directory."
+                "Afficher mon entreprise sur la Zone WiFi publique McBuleli (/wifi-zone : logo, région, téléphone, lien Wi‑Fi invité). Décochez pour masquer l’annuaire public.",
+                "List my company on McBuleli’s public WiFi Zone (/wifi-zone: logo, region, phone, guest Wi-Fi link). Uncheck to hide from the public directory."
               )}
             </label>
             <input

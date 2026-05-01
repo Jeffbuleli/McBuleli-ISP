@@ -9,6 +9,7 @@ import { IconPhone } from "./icons.jsx";
 import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { portalBrandTitle, portalInvoiceStatusLabel, portalT } from "./portalCopy.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
+import { setIndependentPublicPageTitle, setWorkspaceTabTitle } from "./pageTitle.js";
 
 const SUBSCRIBER_JWT_KEY = "subscriberJwt";
 const DEFAULT_PAWAPAY_NETWORKS = [
@@ -184,6 +185,15 @@ export default function Portal() {
     const d = session.branding?.displayName;
     const title = d != null ? String(d).trim() : "";
     applyWorkspacePwaManifest(title && title !== "AA" ? title : "");
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) {
+      setIndependentPublicPageTitle();
+      return;
+    }
+    const d = session.branding?.displayName;
+    setWorkspaceTabTitle(d != null ? String(d).trim() : "");
   }, [session]);
 
   async function onOpenPortal(e) {

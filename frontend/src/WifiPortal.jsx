@@ -15,6 +15,7 @@ import {
 } from "./icons.jsx";
 import { wifiT } from "./wifiCopy.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
+import { setIndependentPublicPageTitle } from "./pageTitle.js";
 
 function wifiDisplayName(name, lang) {
   const s = name != null ? String(name).trim() : "";
@@ -95,6 +96,10 @@ export default function WifiPortal() {
     publicRequest("/public/wifi-networks")
       .then(setNetworks)
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setIndependentPublicPageTitle();
   }, []);
 
   useEffect(() => {

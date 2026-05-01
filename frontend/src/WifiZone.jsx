@@ -6,6 +6,7 @@ import HomeShortcut from "./HomeShortcut.jsx";
 import LangSwitch from "./LangSwitch.jsx";
 import { DataTable } from "./ui/DataTable.jsx";
 import { UI_LANG_SYNC_EVENT, getStoredUiLang } from "./uiLangSync.js";
+import { setIndependentPublicPageTitle } from "./pageTitle.js";
 
 function norm(value) {
   return String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -31,6 +32,10 @@ export default function WifiZone() {
       window.dispatchEvent(new Event(UI_LANG_SYNC_EVENT));
     }
   }, [uiLang]);
+
+  useEffect(() => {
+    setIndependentPublicPageTitle();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -161,8 +166,8 @@ export default function WifiZone() {
         <h1>{t("Zone WiFi", "WiFi Zone")}</h1>
         <p>
           {t(
-            "Liste des FAI qui ont choisi d’apparaître publiquement sur McBuleli : retrouvez leur zone, appelez-les pour des infos, puis ouvrez le portail Wi‑Fi invité pour acheter un pass.",
-            "ISPs that opted into McBuleli’s public directory: find their area, call them for details, then open the guest Wi-Fi portal to buy a pass."
+            "Les entreprises inscrites sur McBuleli apparaissent ici tant que leur abonnement plateforme est actif ; un administrateur peut retirer l’affichage à tout moment. Sans renouvellement, l’annuaire et les achats Wi‑Fi invité publics sont suspendus jusqu’au rétablissement de l’abonnement.",
+            "Workspaces on McBuleli are listed here while their platform subscription is active; an admin can hide the listing anytime. If the subscription lapses, public directory presence and guest Wi‑Fi purchases pause until billing is current again."
           )}
         </p>
       </section>
