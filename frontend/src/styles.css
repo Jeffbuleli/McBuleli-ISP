@@ -5896,6 +5896,10 @@ a.public-footer-card:hover {
   margin-inline: auto;
 }
 
+.privacy-page-toolbar {
+  margin-left: auto;
+}
+
 .privacy-policy-h1 {
   margin: 8px 0 6px;
   font-size: clamp(1.6rem, 3.6vw, 2.05rem);

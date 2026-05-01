@@ -1,9 +1,18 @@
+import { useEffect, useState } from "react";
+import LangSwitch from "./LangSwitch.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
-import { useReadOnlyUiLang } from "./uiLangSync.js";
+import { UI_LANG_SYNC_EVENT, getStoredUiLang } from "./uiLangSync.js";
 
 export default function PrivacyPolicy() {
-  const uiLang = useReadOnlyUiLang();
+  const [uiLang, setUiLang] = useState(getStoredUiLang);
   const isEn = uiLang === "en";
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("ui_lang", uiLang);
+      window.dispatchEvent(new Event(UI_LANG_SYNC_EVENT));
+    }
+  }, [uiLang]);
 
   const year = new Date().getFullYear();
 
@@ -15,6 +24,9 @@ export default function PrivacyPolicy() {
             <img className="public-logo-img" src={mcbuleliLogoUrl} alt="" width={40} height={40} loading="eager" />
             <span>McBuleli</span>
           </a>
+          <div className="privacy-page-toolbar">
+            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="privacy" compact />
+          </div>
         </div>
       </div>
       <article className="public-section privacy-policy-article">
