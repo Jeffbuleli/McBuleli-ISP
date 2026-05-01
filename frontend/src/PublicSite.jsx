@@ -28,7 +28,7 @@ const PUBLIC_NAV_LINKS = [
   { href: "#pricing", fr: "Tarifs", en: "Pricing" },
   { href: "#testimonials", fr: "Témoignages", en: "Testimonials" },
   { href: "#faq", fr: "FAQ", en: "FAQ" },
-  { href: "/buy/packages", fr: "Wi‑Fi invité", en: "Guest Wi‑Fi" },
+  { href: "/wifi-zone", fr: "Zone WiFi", en: "WiFi Zone" },
   { href: "#contact", fr: "Contact", en: "Contact" }
 ];
 
@@ -548,8 +548,8 @@ export default function PublicSite() {
               <a className="btn-secondary" href="/login">
                 {t("Se connecter", "Sign in")}
               </a>
-              <a className="btn-secondary" href="/buy/packages">
-                {t("Achat pass Wi‑Fi", "Buy Wi‑Fi pass")}
+              <a className="btn-secondary" href="/wifi-zone">
+                {t("Zone WiFi", "WiFi Zone")}
               </a>
             </div>
             <div className="public-stats">

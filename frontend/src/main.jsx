@@ -9,6 +9,7 @@ const Portal = lazy(() => import("./Portal.jsx"));
 const Signup = lazy(() => import("./Signup.jsx"));
 const WifiPortal = lazy(() => import("./WifiPortal.jsx"));
 const PrivacyPolicy = lazy(() => import("./PrivacyPolicy.jsx"));
+const WifiZone = lazy(() => import("./WifiZone.jsx"));
 
 registerServiceWorker();
 
@@ -41,6 +42,9 @@ function Root() {
   }
   if (path === "/privacy") {
     return <Suspense fallback={<LazyFallback />}><PrivacyPolicy /></Suspense>;
+  }
+  if (path === "/wifi-zone") {
+    return <Suspense fallback={<LazyFallback />}><WifiZone /></Suspense>;
   }
   if (path === "/login" || path.startsWith("/login/")) {
     return <Suspense fallback={<LazyFallback />}><App /></Suspense>;

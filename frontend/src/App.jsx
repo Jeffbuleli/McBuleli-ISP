@@ -1171,7 +1171,8 @@ function App() {
     subdomain: "",
     wifiPortalRedirectUrl: "",
     portalFooterText: "",
-    portalClientRefPrefix: ""
+    portalClientRefPrefix: "",
+    wifiZonePublic: false
   });
   /** Local object URL for logo file picker preview (revoked when replaced or after upload). */
   const [brandingLogoPickPreview, setBrandingLogoPickPreview] = useState(null);
@@ -1621,7 +1622,8 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           subdomain: brand.subdomain || "",
           wifiPortalRedirectUrl: brand.wifiPortalRedirectUrl || "",
           portalFooterText: brand.portalFooterText || "",
-          portalClientRefPrefix: brand.portalClientRefPrefix || ""
+          portalClientRefPrefix: brand.portalClientRefPrefix || "",
+          wifiZonePublic: brand.wifiZonePublic === true
         });
       }
     } catch (err) {
@@ -2448,7 +2450,8 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           subdomain: saved.subdomain || "",
           wifiPortalRedirectUrl: saved.wifiPortalRedirectUrl || "",
           portalFooterText: saved.portalFooterText || "",
-          portalClientRefPrefix: saved.portalClientRefPrefix || ""
+          portalClientRefPrefix: saved.portalClientRefPrefix || "",
+          wifiZonePublic: saved.wifiZonePublic === true
         }));
       }
       setNotice(t("Image de marque enregistrée.", "Branding saved."));
@@ -4175,6 +4178,17 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               value={brandingForm.contactPhone}
               onChange={(e) => setBrandingForm({ ...brandingForm, contactPhone: e.target.value })}
             />
+            <label style={{ display: "block", marginTop: 12, maxWidth: "62ch" }}>
+              <input
+                type="checkbox"
+                checked={Boolean(brandingForm.wifiZonePublic)}
+                onChange={(e) => setBrandingForm({ ...brandingForm, wifiZonePublic: e.target.checked })}
+              />{" "}
+              {t(
+                "FAI public sur la Zone WiFi McBuleli : afficher mon entreprise sur la page /wifi-zone (logo, région, téléphone, lien Wi‑Fi invité). Décochez pour rester privé et masquer du public.",
+                "Public ISP on McBuleli WiFi Zone: show my company on the /wifi-zone page (logo, region, phone, guest Wi-Fi link). Uncheck to stay private and hidden from the public directory."
+              )}
+            </label>
             <input
               placeholder="Redirection après paiement Wi‑Fi (https://…)"
               value={brandingForm.wifiPortalRedirectUrl}

@@ -274,6 +274,7 @@ export const api = {
   getPublicPlatformPackages: () => publicRequest("/public/platform-packages"),
   getPublicHomeMarketing: () => publicRequest("/public/home-marketing"),
   getPublicAuthCopy: () => publicRequest("/public/auth-copy"),
+  getPublicWifiZones: () => publicRequest("/public/wifi-zones"),
   signupTenant: (payload) =>
     publicRequest("/public/signup", { method: "POST", body: JSON.stringify(payload) }),
   forgotPassword: (email) =>

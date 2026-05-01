@@ -620,6 +620,9 @@ export async function initDb() {
   await query("ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS logo_mime TEXT NULL;");
   await query("ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS wifi_portal_banner_bytes BYTEA NULL;");
   await query("ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS wifi_portal_banner_mime TEXT NULL;");
+  await query(
+    "ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS wifi_zone_public BOOLEAN NOT NULL DEFAULT FALSE;"
+  );
 
   await query(`
     CREATE TABLE IF NOT EXISTS isp_expenses (
