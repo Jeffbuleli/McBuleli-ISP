@@ -937,7 +937,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ...payload, ispId })
     }),
-  getDashboard: (ispId) => request(withIsp("/dashboard", ispId)),
+  getDashboard: (ispId, opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.from) q.set("from", String(opts.from));
+    if (opts.to) q.set("to", String(opts.to));
+    if (opts.sessionWindowMinutes != null && opts.sessionWindowMinutes !== "") {
+      q.set("sessionWindowMinutes", String(opts.sessionWindowMinutes));
+    }
+    const qs = q.toString();
+    return request(withIsp(`/dashboard${qs ? `?${qs}` : ""}`, ispId));
+  },
   getSuperDashboard: () => request("/super/dashboard"),
   getCustomers: (ispId) => request(withIsp("/customers", ispId)),
   downloadCustomersCsv: async (ispId) => {

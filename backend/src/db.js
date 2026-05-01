@@ -1131,11 +1131,11 @@ export async function initDb() {
       gen_random_uuid(),
       i.id,
       CURRENT_DATE,
-      5,
-      12,
-      19,
-      48.5,
-      12.2
+      0,
+      0,
+      0,
+      0,
+      0
     FROM isps i
     LEFT JOIN network_usage_daily n ON n.isp_id = i.id AND n.metric_date = CURRENT_DATE
     WHERE n.id IS NULL;

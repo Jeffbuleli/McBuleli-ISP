@@ -49,6 +49,7 @@ import { WIFI_GUEST_NETWORK_OPTIONS, resolveWifiGuestPawapayProvider } from "./w
 import { createPublicRateLimiter } from "./publicRateLimit.js";
 import { insertRadiusAccountingRecord } from "./radiusAccountingIngest.js";
 import { countOnlineSubscriberSessions, listOnlineSubscriberSessions } from "./networkOnlineSessions.js";
+import { inclusiveDaysBetween, previousInclusivePeriod } from "./statsPeriod.js";
 import { generateTotpSecret, totpAuthUrl, verifyTotpCode } from "./totp.js";
 import fs from "fs";
 import path from "path";
@@ -1061,6 +1062,66 @@ async function getCashboxSummary(
     ...breakdown,
     withdrawnMobileMoneyUsd: withdrawnUsd,
     withdrawableMobileMoneyUsd: Math.max(0, breakdown.mobileMoneyUsd - withdrawnUsd)
+  };
+}
+
+function comparisonTriple(cur, prev) {
+  const c = Number(cur) || 0;
+  const p = prev === undefined || prev === null ? null : Number(prev) || 0;
+  if (p === null) {
+    return { current: c, previous: null, deltaAbs: null, deltaPct: null };
+  }
+  const deltaAbs = c - p;
+  let deltaPct = null;
+  if (p !== 0) deltaPct = (deltaAbs / p) * 100;
+  else if (c === 0) deltaPct = 0;
+  return { current: c, previous: p, deltaAbs, deltaPct };
+}
+
+async function fetchNetworkStatsBundle(ispId, from, to) {
+  const usage = await query(
+    `SELECT COALESCE(SUM(hotspot_users),0)::int AS "hotspotUsers",
+            COALESCE(SUM(pppoe_users),0)::int AS "pppoeUsers",
+            COALESCE(MAX(connected_devices),0)::int AS "connectedDevices",
+            COALESCE(SUM(bandwidth_down_gb + bandwidth_up_gb),0)::float AS "bandwidthTotalGb"
+     FROM network_usage_daily
+     WHERE isp_id = $1 AND metric_date BETWEEN $2::date AND $3::date`,
+    [ispId, from, to]
+  );
+  const revenue = await query(
+    `SELECT COALESCE(SUM(amount_usd),0)::float AS "revenueCollectedUsd"
+     FROM payments
+     WHERE isp_id = $1 AND status = 'confirmed' AND paid_at::date BETWEEN $2::date AND $3::date`,
+    [ispId, from, to]
+  );
+  const cashbox = await getCashboxSummary(ispId, from, to);
+  const dailyUsage = await query(
+    `SELECT metric_date::text AS date, hotspot_users AS "hotspotUsers", pppoe_users AS "pppoeUsers",
+            connected_devices AS "connectedDevices",
+            (bandwidth_down_gb + bandwidth_up_gb)::float AS "bandwidthGb"
+     FROM network_usage_daily
+     WHERE isp_id = $1 AND metric_date BETWEEN $2::date AND $3::date
+     ORDER BY metric_date ASC`,
+    [ispId, from, to]
+  );
+  const paymentsDaily = await query(
+    `SELECT paid_at::date::text AS date, COALESCE(SUM(amount_usd),0)::float AS "amountUsd"
+     FROM payments
+     WHERE isp_id = $1 AND status = 'confirmed' AND paid_at::date BETWEEN $2::date AND $3::date
+     GROUP BY paid_at::date
+     ORDER BY paid_at::date ASC`,
+    [ispId, from, to]
+  );
+  const ur = usage.rows[0];
+  return {
+    hotspotUsers: ur.hotspotUsers,
+    pppoeUsers: ur.pppoeUsers,
+    connectedDevices: ur.connectedDevices,
+    bandwidthTotalGb: ur.bandwidthTotalGb,
+    revenueCollectedUsd: revenue.rows[0].revenueCollectedUsd,
+    cashbox,
+    dailyUsage: dailyUsage.rows,
+    paymentsDaily: paymentsDaily.rows
   };
 }
 
@@ -5902,102 +5963,173 @@ app.get("/api/network/stats", authenticate, async (req, res) => {
   const from = req.query.from || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   const to = req.query.to || new Date().toISOString().slice(0, 10);
 
-  const usage = await query(
-    "SELECT COALESCE(SUM(hotspot_users),0)::int AS \"hotspotUsers\", COALESCE(SUM(pppoe_users),0)::int AS \"pppoeUsers\", COALESCE(MAX(connected_devices),0)::int AS \"connectedDevices\", COALESCE(SUM(bandwidth_down_gb + bandwidth_up_gb),0)::float AS \"bandwidthTotalGb\" FROM network_usage_daily WHERE isp_id = $1 AND metric_date BETWEEN $2::date AND $3::date",
-    [ispId, from, to]
-  );
-  const revenue = await query(
-    "SELECT COALESCE(SUM(amount_usd),0)::float AS \"revenueCollectedUsd\" FROM payments WHERE isp_id = $1 AND status = 'confirmed' AND paid_at::date BETWEEN $2::date AND $3::date",
-    [ispId, from, to]
-  );
-  const cashbox = await getCashboxSummary(ispId, from, to);
-  const dailyUsage = await query(
-    `SELECT metric_date::text AS date, hotspot_users AS "hotspotUsers", pppoe_users AS "pppoeUsers",
-            connected_devices AS "connectedDevices",
-            (bandwidth_down_gb + bandwidth_up_gb)::float AS "bandwidthGb"
-     FROM network_usage_daily
-     WHERE isp_id = $1 AND metric_date BETWEEN $2::date AND $3::date
-     ORDER BY metric_date ASC`,
-    [ispId, from, to]
-  );
+  const prev = previousInclusivePeriod(from, to);
+  const [current, previousBundle] = await Promise.all([
+    fetchNetworkStatsBundle(ispId, from, to),
+    prev ? fetchNetworkStatsBundle(ispId, prev.from, prev.to) : Promise.resolve(null)
+  ]);
+
+  const expectedDays = inclusiveDaysBetween(from, to);
+  const dailyRowsObserved = current.dailyUsage.length;
+  const coverageRatio = expectedDays > 0 ? Math.min(1, dailyRowsObserved / expectedDays) : 1;
+  const flags = [];
+  if (coverageRatio < 0.85 && expectedDays > 2) flags.push("partial_daily_rollups");
+
+  const comparison = previousBundle
+    ? {
+        hotspotUsers: comparisonTriple(current.hotspotUsers, previousBundle.hotspotUsers),
+        pppoeUsers: comparisonTriple(current.pppoeUsers, previousBundle.pppoeUsers),
+        connectedDevices: comparisonTriple(current.connectedDevices, previousBundle.connectedDevices),
+        bandwidthTotalGb: comparisonTriple(current.bandwidthTotalGb, previousBundle.bandwidthTotalGb),
+        revenueCollectedUsd: comparisonTriple(current.revenueCollectedUsd, previousBundle.revenueCollectedUsd),
+        cashboxTotalUsd: comparisonTriple(current.cashbox.totalUsd, previousBundle.cashbox.totalUsd),
+        cashUsd: comparisonTriple(current.cashbox.cashUsd, previousBundle.cashbox.cashUsd),
+        tidUsd: comparisonTriple(current.cashbox.tidUsd, previousBundle.cashbox.tidUsd),
+        mobileMoneyUsd: comparisonTriple(current.cashbox.mobileMoneyUsd, previousBundle.cashbox.mobileMoneyUsd),
+        withdrawableMobileMoneyUsd: comparisonTriple(
+          current.cashbox.withdrawableMobileMoneyUsd,
+          previousBundle.cashbox.withdrawableMobileMoneyUsd
+        )
+      }
+    : null;
+
   return res.json({
-    period: { from, to },
-    hotspotUsers: usage.rows[0].hotspotUsers,
-    pppoeUsers: usage.rows[0].pppoeUsers,
-    connectedDevices: usage.rows[0].connectedDevices,
-    bandwidthTotalGb: usage.rows[0].bandwidthTotalGb,
-    revenueCollectedUsd: revenue.rows[0].revenueCollectedUsd,
-    cashbox,
-    dailyUsage: dailyUsage.rows
+    period: { from, to, daysInclusive: expectedDays },
+    previousPeriod: prev,
+    computedAt: new Date().toISOString(),
+    quality: {
+      coverageRatio,
+      dailyRowsObserved,
+      expectedDays,
+      flags
+    },
+    aggregationNotes: {
+      hotspotUsers: "sum_daily_snapshots",
+      pppoeUsers: "sum_daily_snapshots",
+      connectedDevices: "peak_connected_devices_max_over_days",
+      bandwidthTotalGb: "sum_daily_download_plus_upload_gb",
+      revenueCollectedUsd: "sum_confirmed_payments_by_paid_at_date",
+      paymentsDaily: "sum_confirmed_payments_grouped_by_paid_at_day"
+    },
+    comparison,
+    hotspotUsers: current.hotspotUsers,
+    pppoeUsers: current.pppoeUsers,
+    connectedDevices: current.connectedDevices,
+    bandwidthTotalGb: current.bandwidthTotalGb,
+    revenueCollectedUsd: current.revenueCollectedUsd,
+    cashbox: current.cashbox,
+    dailyUsage: current.dailyUsage,
+    paymentsDaily: current.paymentsDaily
   });
 });
 
 app.get("/api/dashboard", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
-const sessionWindowMinutes = Math.min(
-  Math.max(Number(req.query.sessionWindowMinutes) || 30, 1),
-  24 * 60
-);
+  const sessionWindowMinutes = Math.min(
+    Math.max(Number(req.query.sessionWindowMinutes) || 30, 1),
+    24 * 60
+  );
 
-const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-const to = new Date().toISOString().slice(0, 10);
-const faId = req.user.role === "field_agent" ? req.user.sub : null;
+  const from =
+    typeof req.query.from === "string" && req.query.from.trim()
+      ? req.query.from.trim().slice(0, 10)
+      : new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const to =
+    typeof req.query.to === "string" && req.query.to.trim()
+      ? req.query.to.trim().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
 
-const [customers, active, unpaid, revenue, sessionCount, cashbox] = await Promise.all([
-  faId
-    ? query(
-        "SELECT COUNT(*)::int AS value FROM customers WHERE isp_id = $1 AND field_agent_id = $2",
-        [ispId, faId]
-      )
-    : query("SELECT COUNT(*)::int AS value FROM customers WHERE isp_id = $1", [ispId]),
+  const faId = req.user.role === "field_agent" ? req.user.sub : null;
+  const prev = previousInclusivePeriod(from, to);
 
-  faId
-    ? query(
-        `SELECT COUNT(*)::int AS value FROM subscriptions s
-         INNER JOIN customers c ON c.id = s.customer_id AND c.isp_id = s.isp_id
-         WHERE s.isp_id = $1 AND s.status = 'active' AND c.field_agent_id = $2`,
-        [ispId, faId]
-      )
-    : query("SELECT COUNT(*)::int AS value FROM subscriptions WHERE isp_id = $1 AND status = 'active'", [ispId]),
+  const [customers, active, unpaid, revenue, sessionCount, cashbox, prevCashbox] = await Promise.all([
+    faId
+      ? query(
+          "SELECT COUNT(*)::int AS value FROM customers WHERE isp_id = $1 AND field_agent_id = $2",
+          [ispId, faId]
+        )
+      : query("SELECT COUNT(*)::int AS value FROM customers WHERE isp_id = $1", [ispId]),
 
-  faId
-    ? query(
-        `SELECT COUNT(*)::int AS value FROM invoices i
-         INNER JOIN customers c ON c.id = i.customer_id AND c.isp_id = i.isp_id
-         WHERE i.isp_id = $1 AND i.status IN ('unpaid', 'overdue') AND c.field_agent_id = $2`,
-        [ispId, faId]
-      )
-    : query(
-        "SELECT COUNT(*)::int AS value FROM invoices WHERE isp_id = $1 AND status IN ('unpaid', 'overdue')",
-        [ispId]
-      ),
+    faId
+      ? query(
+          `SELECT COUNT(*)::int AS value FROM subscriptions s
+           INNER JOIN customers c ON c.id = s.customer_id AND c.isp_id = s.isp_id
+           WHERE s.isp_id = $1 AND s.status = 'active' AND c.field_agent_id = $2`,
+          [ispId, faId]
+        )
+      : query("SELECT COUNT(*)::int AS value FROM subscriptions WHERE isp_id = $1 AND status = 'active'", [ispId]),
 
-  faId
-    ? query(
-        `SELECT COALESCE(SUM(i.amount_usd), 0)::float AS value FROM invoices i
-         INNER JOIN customers c ON c.id = i.customer_id AND c.isp_id = i.isp_id
-         WHERE i.isp_id = $1 AND i.status = 'paid' AND c.field_agent_id = $2`,
-        [ispId, faId]
-      )
-    : query(
-        "SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE isp_id = $1 AND status = 'paid'",
-        [ispId]
-      ),
+    faId
+      ? query(
+          `SELECT COUNT(*)::int AS value FROM invoices i
+           INNER JOIN customers c ON c.id = i.customer_id AND c.isp_id = i.isp_id
+           WHERE i.isp_id = $1 AND i.status IN ('unpaid', 'overdue') AND c.field_agent_id = $2`,
+          [ispId, faId]
+        )
+      : query(
+          "SELECT COUNT(*)::int AS value FROM invoices WHERE isp_id = $1 AND status IN ('unpaid', 'overdue')",
+          [ispId]
+        ),
 
-  countOnlineSubscriberSessions({ ispId, windowMinutes: sessionWindowMinutes }),
+    faId
+      ? query(
+          `SELECT COALESCE(SUM(i.amount_usd), 0)::float AS value FROM invoices i
+           INNER JOIN customers c ON c.id = i.customer_id AND c.isp_id = i.isp_id
+           WHERE i.isp_id = $1 AND i.status = 'paid' AND c.field_agent_id = $2`,
+          [ispId, faId]
+        )
+      : query(
+          "SELECT COALESCE(SUM(amount_usd), 0)::float AS value FROM invoices WHERE isp_id = $1 AND status = 'paid'",
+          [ispId]
+        ),
 
-  getCashboxSummary(ispId, from, to, faId)
-]);
+    countOnlineSubscriberSessions({ ispId, windowMinutes: sessionWindowMinutes }),
+
+    getCashboxSummary(ispId, from, to, faId),
+
+    prev ? getCashboxSummary(ispId, prev.from, prev.to, faId) : Promise.resolve(null)
+  ]);
+
+  const comparison = prevCashbox
+    ? {
+        cashboxTotalUsd: comparisonTriple(cashbox.totalUsd, prevCashbox.totalUsd),
+        cashUsd: comparisonTriple(cashbox.cashUsd, prevCashbox.cashUsd),
+        tidUsd: comparisonTriple(cashbox.tidUsd, prevCashbox.tidUsd),
+        mobileMoneyUsd: comparisonTriple(cashbox.mobileMoneyUsd, prevCashbox.mobileMoneyUsd),
+        withdrawableMobileMoneyUsd: comparisonTriple(
+          cashbox.withdrawableMobileMoneyUsd,
+          prevCashbox.withdrawableMobileMoneyUsd
+        )
+      }
+    : null;
+
+  const daysInclusive = inclusiveDaysBetween(from, to);
+
   res.json({
     totalCustomers: customers.rows[0].value,
     activeSubscriptions: active.rows[0].value,
     unpaidInvoices: unpaid.rows[0].value,
     revenueUsd: revenue.rows[0].value,
-networkSessions: sessionCount.count,
-networkSessionsWindowMinutes: sessionCount.windowMinutes,
-cashboxPeriod: { from, to },
-cashbox
+    networkSessions: sessionCount.count,
+    networkSessionsWindowMinutes: sessionCount.windowMinutes,
+    cashboxPeriod: { from, to, daysInclusive },
+    cashbox,
+    meta: {
+      computedAt: new Date().toISOString(),
+      period: { from, to, daysInclusive },
+      previousPeriod: prev,
+      definitions: {
+        totalCustomers: "stock_snapshot_count",
+        activeSubscriptions: "stock_snapshot_count",
+        unpaidInvoices: "open_unpaid_invoice_count",
+        revenueUsd: "cumulative_paid_invoice_amount_all_time",
+        networkSessions: "radius_live_correlated_window",
+        cashbox: "cashbox_by_method_period"
+      },
+      comparison,
+      quality: { flags: [] }
+    }
   });
 });
 

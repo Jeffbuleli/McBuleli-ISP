@@ -2,6 +2,9 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
 import PublicHomePromos from "./PublicHomePromos.jsx";
 import TeamChatPanel from "./TeamChatPanel.jsx";
+import AnalyticMetricCard from "./AnalyticMetricCard.jsx";
+import { DEFINITION_GLOSSARY } from "./dashboardMetricCatalog.js";
+import { formatUsd, formatGb, formatCount, formatIsoRange } from "./dashboardFormat.js";
 import DashboardSideNav from "./DashboardSideNav.jsx";
 import DashboardMobileSheetMenu from "./DashboardMobileSheetMenu.jsx";
 import DashboardScreenGate from "./DashboardScreenGate.jsx";
@@ -610,6 +613,12 @@ expenses: "dépenses",
 accountingPeriodClosures: "clôtures comptables"
 };
 
+function glossaryTooltip(isEn, token) {
+  const row = DEFINITION_GLOSSARY[token];
+  if (!row) return undefined;
+  return isEn ? row.en : row.fr;
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [tenantContext, setTenantContext] = useState(null);
@@ -753,6 +762,7 @@ function App() {
   );
   const [uiLang, setUiLang] = useState(getStoredUiLang);
   const isEn = uiLang === "en";
+  const dashLocale = isEn ? "en-US" : "fr-FR";
   const t = (fr, en) => (isEn ? en : fr);
   const audienceErr = useCallback(
     (msg) => sanitizeApiErrorForAudience(String(msg ?? ""), user, isEn),
@@ -1420,9 +1430,14 @@ function App() {
       let ledgerPayload = { totals: { totalDebitUsd: 0, totalCreditUsd: 0 }, rows: [] };
 
       if (activeIspId) {
+        const dashOpts = {
+          from: statsPeriod.from,
+          to: statsPeriod.to,
+          sessionWindowMinutes: 30
+        };
         if (currentUser.role === "field_agent") {
           const settled = await Promise.allSettled([
-            api.getDashboard(activeIspId),
+            api.getDashboard(activeIspId, dashOpts),
             api.getCustomers(activeIspId),
             api.getPlans(activeIspId),
             api.getSubscriptions(activeIspId),
@@ -1444,7 +1459,7 @@ function App() {
           setWithdrawals([]);
         } else {
         const settled = await Promise.allSettled([
-          api.getDashboard(activeIspId),
+          api.getDashboard(activeIspId, dashOpts),
           api.getCustomers(activeIspId),
           api.getUsers(activeIspId),
           api.getPlans(activeIspId),
@@ -2425,11 +2440,6 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
     e.preventDefault();
     await api.createSubscription(selectedIspId, subForm);
     setSubForm({ customerId: "", planId: "", accessType: "pppoe" });
-    refresh();
-  }
-
-  async function onRefreshStats(e) {
-    e.preventDefault();
     refresh();
   }
 
@@ -3757,18 +3767,299 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
       {!isFieldAgent ? (
         <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="dashboard">
           <>
-            <section className="grid metrics dashboard-section-anchor" id="dashboard-overview">
-              <Card title={t("FAI", "ISPs")} value={superDashboard?.totalIsps ?? 0} />
-              <Card title={t("Clients (tous FAI)", "All Customers")} value={superDashboard?.totalCustomers ?? 0} />
-              <Card
-                title={t("Abonnements actifs (tous)", "All Active Subscriptions")}
-                value={superDashboard?.totalActiveSubscriptions ?? 0}
-              />
-              <Card
-                title={t("Chiffre d'affaires global (USD)", "Global Revenue (USD)")}
-                value={superDashboard?.totalRevenueUsd ?? 0}
-              />
+            {user.role === "system_owner" ? (
+              <section className="grid metrics dashboard-section-anchor" id="dashboard-overview">
+                <Card title={t("FAI", "ISPs")} value={superDashboard?.totalIsps ?? 0} />
+                <Card title={t("Clients (tous FAI)", "All Customers")} value={superDashboard?.totalCustomers ?? 0} />
+                <Card
+                  title={t("Abonnements actifs (tous)", "All Active Subscriptions")}
+                  value={superDashboard?.totalActiveSubscriptions ?? 0}
+                />
+                <Card
+                  title={t("CA factures payées cumulé (tous FAI)", "Lifetime paid-invoice revenue (all ISPs)")}
+                  value={formatUsd(superDashboard?.totalRevenueUsd ?? 0, dashLocale)}
+                />
+              </section>
+            ) : null}
+
+            <section className="panel dashboard-analytics-period" id="reports">
+              <h2>{t("Analyse — fenêtre temporelle", "Analytics — time window")}</h2>
+              <p className="app-meta dashboard-analytics-period__lead">
+                {t(
+                  "Les indicateurs « flux » et caisse utilisent strictement l’intervalle ci‑dessous (paiements confirmés par date `paid_at`). Les stocks (clients, abonnements, facturation cumulée) sont des instantanés au dernier chargement.",
+                  "Flow KPIs and cashbox use strictly the interval below (confirmed payments by `paid_at` date). Stock KPIs (customers, subscriptions, lifetime billed revenue) are snapshots from the latest refresh."
+                )}
+              </p>
+              <div className="dashboard-analytics-period__controls">
+                <label className="app-meta dashboard-analytics-period__control">
+                  <span>{t("Du", "From")}</span>
+                  <input
+                    type="date"
+                    value={statsPeriod.from}
+                    onChange={(e) => setStatsPeriod((s) => ({ ...s, from: e.target.value }))}
+                  />
+                </label>
+                <label className="app-meta dashboard-analytics-period__control">
+                  <span>{t("Au", "To")}</span>
+                  <input
+                    type="date"
+                    value={statsPeriod.to}
+                    onChange={(e) => setStatsPeriod((s) => ({ ...s, to: e.target.value }))}
+                  />
+                </label>
+                <button type="button" className="btn-secondary-outline" onClick={() => refresh()} disabled={!selectedIspId}>
+                  {t("Mettre à jour les données", "Refresh data")}
+                </button>
+              </div>
+              {networkStats?.computedAt ? (
+                <p className="app-meta dashboard-analytics-period__fresh">
+                  {t("Calcul agrégats réseau / paiements :", "Network / payments aggregates computed:")}{" "}
+                  <time dateTime={networkStats.computedAt}>
+                    {new Date(networkStats.computedAt).toLocaleString(dashLocale)}
+                  </time>
+                  {networkStats?.previousPeriod ? (
+                    <>
+                      {" "}
+                      ·{" "}
+                      {t("Comparaison Δ — fenêtre précédente :", "Δ comparison — previous window:")}{" "}
+                      <span className="dashboard-analytics-period__iso-range">
+                        {formatIsoRange(networkStats.previousPeriod.from, networkStats.previousPeriod.to)}
+                      </span>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+              {networkStats?.quality?.flags?.includes("partial_daily_rollups") ? (
+                <p className="dashboard-quality-flag" role="status">
+                  {glossaryTooltip(isEn, "partial_daily_rollups")}
+                </p>
+              ) : null}
+              <details className="dashboard-roadmap-details">
+                <summary>{t("Feuille de route rapports avancés", "Advanced reporting roadmap")}</summary>
+                <p className="app-meta">
+                  {t(
+                    "Exports CSV planifiés, seuils d’alerte, diagnostics qualité données — extensions prévues hors de ce tableau synthétique.",
+                    "Scheduled CSV exports, alert thresholds, data-quality diagnostics — extensions planned beyond this executive summary."
+                  )}
+                </p>
+              </details>
             </section>
+
+            {selectedIspId ? (
+              <>
+                <h3 className="dashboard-analytics-block-title">{t("A — Stocks", "A — Stock")}</h3>
+                <section className="grid analytic-metric-grid">
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Clients", "Customers")}
+                    value={formatCount(dashboard?.totalCustomers ?? 0, dashLocale)}
+                    timeframe={t("Instantané", "Snapshot")}
+                    definitionTitle={glossaryTooltip(isEn, "stock_snapshot_count")}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Abonnements actifs", "Active subscriptions")}
+                    value={formatCount(dashboard?.activeSubscriptions ?? 0, dashLocale)}
+                    timeframe={t("Instantané", "Snapshot")}
+                    definitionTitle={glossaryTooltip(isEn, "stock_snapshot_count")}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Factures ouvertes", "Open invoices")}
+                    value={formatCount(dashboard?.unpaidInvoices ?? 0, dashLocale)}
+                    timeframe={t("Instantané", "Snapshot")}
+                    definitionTitle={glossaryTooltip(isEn, "open_unpaid_invoice_count")}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("CA factures « payées » (cumul historique)", "Lifetime paid invoice revenue")}
+                    value={formatUsd(dashboard?.revenueUsd ?? 0, dashLocale)}
+                    timeframe={t("Cumul tout temps", "All-time cumulative")}
+                    definitionTitle={glossaryTooltip(isEn, "cumulative_paid_invoice_amount_all_time")}
+                  />
+                </section>
+
+                <h3 className="dashboard-analytics-block-title">{t("B — Flux réseau & encaissements", "B — Network & collections")}</h3>
+                <p className="app-meta dashboard-aggregation-notes">
+                  {t(
+                    "Agrégations réseau : Hotspot & PPPoE = somme des relevés journaliers ; appareils connectés = pic journalier maximal ; bande passante = somme Go/j sur la période.",
+                    "Network aggregation: Hotspot & PPPoE = sum of daily rollups; connected devices = maximum daily peak; bandwidth = sum of GB/day over the interval."
+                  )}
+                </p>
+                <section className="grid analytic-metric-grid">
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Utilisateurs hotspot (somme journalière)", "Hotspot users (sum of daily)")}
+                    value={formatCount(networkStats?.hotspotUsers ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+                    comparison={networkStats?.comparison?.hotspotUsers}
+                    deltaHint="up_good"
+                    definitionTitle={glossaryTooltip(isEn, "network_daily_rollup_sum")}
+                    locale={dashLocale}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Utilisateurs PPPoE (somme journalière)", "PPPoE users (sum of daily)")}
+                    value={formatCount(networkStats?.pppoeUsers ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+                    comparison={networkStats?.comparison?.pppoeUsers}
+                    deltaHint="up_good"
+                    definitionTitle={glossaryTooltip(isEn, "network_daily_rollup_sum")}
+                    locale={dashLocale}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Appareils connectés (pic journalier)", "Connected devices (daily peak)")}
+                    value={formatCount(networkStats?.connectedDevices ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+                    comparison={networkStats?.comparison?.connectedDevices}
+                    deltaHint="up_good"
+                    definitionTitle={glossaryTooltip(isEn, "peak_connected_devices_max_over_days")}
+                    locale={dashLocale}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Bande passante agrégée", "Aggregated bandwidth")}
+                    value={formatGb(networkStats?.bandwidthTotalGb ?? 0, 2, dashLocale)}
+                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+                    comparison={networkStats?.comparison?.bandwidthTotalGb}
+                    deltaHint="neutral"
+                    definitionTitle={glossaryTooltip(isEn, "bandwidth_sum_daily_gb")}
+                    locale={dashLocale}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Encaissements confirmés", "Confirmed collections")}
+                    value={formatUsd(networkStats?.revenueCollectedUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+                    comparison={networkStats?.comparison?.revenueCollectedUsd}
+                    deltaHint="up_good"
+                    definitionTitle={glossaryTooltip(isEn, "confirmed_payments_by_paid_at_in_period")}
+                    locale={dashLocale}
+                  />
+                </section>
+
+                <h3 className="dashboard-analytics-block-title">{t("C — Caisse par canal", "C — Cashbox by channel")}</h3>
+                <section className="grid analytic-metric-grid">
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Cash", "Cash")}
+                    value={formatUsd(dashboard?.cashbox?.cashUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+                    comparison={dashboard?.meta?.comparison?.cashUsd}
+                    deltaHint="up_good"
+                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+                    locale={dashLocale}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("TID validés", "Validated TID")}
+                    value={formatUsd(dashboard?.cashbox?.tidUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+                    comparison={dashboard?.meta?.comparison?.tidUsd}
+                    deltaHint="up_good"
+                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+                    locale={dashLocale}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Mobile Money", "Mobile Money")}
+                    value={formatUsd(dashboard?.cashbox?.mobileMoneyUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+                    comparison={dashboard?.meta?.comparison?.mobileMoneyUsd}
+                    deltaHint="up_good"
+                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+                    locale={dashLocale}
+                  />
+                  <AnalyticMetricCard
+                    t={t}
+                    title={t("Retirable Mobile Money", "Withdrawable Mobile Money")}
+                    value={formatUsd(dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0, dashLocale)}
+                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+                    comparison={dashboard?.meta?.comparison?.withdrawableMobileMoneyUsd}
+                    deltaHint="up_good"
+                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+                    locale={dashLocale}
+                  />
+                </section>
+
+                <h3 className="dashboard-analytics-block-title">{t("D — Temps quasi réel RADIUS", "D — Near-real-time RADIUS")}</h3>
+                <section className="panel dashboard-online-radar">
+                  <div className="dashboard-online-radar__summary">
+                    <p className="dashboard-online-radar__count-line">
+                      <strong>{formatCount(dashboard?.networkSessions ?? onlineSessions.length, dashLocale)}</strong>{" "}
+                      {t("sessions corrélées abonnés", "subscriber-correlated sessions")}
+                    </p>
+                    <p className="app-meta">
+                      {t(
+                        `Fenêtre active : ${dashboard?.networkSessionsWindowMinutes || onlineSessionsWindowMinutes} minutes.`,
+                        `Active window: ${dashboard?.networkSessionsWindowMinutes || onlineSessionsWindowMinutes} minutes.`
+                      )}{" "}
+                      <span title={glossaryTooltip(isEn, "radius_live_correlated_window")}>ⓘ</span>
+                    </p>
+                  </div>
+                  <h4>{t("Détail des sessions récentes", "Recent session rows")}</h4>
+                  <p className="app-meta">
+                    {t(
+                      "Corrélation username RADIUS → client → abonnement actif (extrait).",
+                      "Maps RADIUS username → customer → active subscription (sample)."
+                    )}
+                  </p>
+                  {onlineSessions.length === 0 ? (
+                    <p>
+                      {t(
+                        "Aucune session détectée dans la fenêtre courante.",
+                        "No sessions detected in the current window."
+                      )}
+                    </p>
+                  ) : (
+                    onlineSessions.slice(0, 25).map((row) => (
+                      <p key={row.ingestId}>
+                        {new Date(row.seenAt).toLocaleString(dashLocale)} —{" "}
+                        {row.customerName || row.customerPhone || row.username} ({row.username})
+                        {row.planName ? ` · ${row.planName}` : ""}
+                        {row.accessType ? ` · ${row.accessType}` : ""}
+                        {row.framedIpAddress ? ` · IP ${row.framedIpAddress}` : ""}
+                      </p>
+                    ))
+                  )}
+                </section>
+
+                <section className="panel dashboard-ratio-panel">
+                  <h4>{t("Ratios indicatifs", "Indicative ratios")}</h4>
+                  <ul className="dashboard-ratio-list">
+                    <li>
+                      {t("Factures ouvertes / client", "Open invoices / customer")}:{" "}
+                      <strong>
+                        {(
+                          (dashboard?.unpaidInvoices ?? 0) / Math.max(dashboard?.totalCustomers ?? 0, 1)
+                        ).toLocaleString(dashLocale, { maximumFractionDigits: 3 })}
+                      </strong>
+                    </li>
+                    <li>
+                      {t("Encaissements confirmés / client (période)", "Confirmed collections / customer (period)")}:{" "}
+                      <strong>
+                        {formatUsd(
+                          (networkStats?.revenueCollectedUsd ?? 0) / Math.max(dashboard?.totalCustomers ?? 0, 1),
+                          dashLocale
+                        )}
+                      </strong>
+                    </li>
+                    <li>
+                      {t("Sessions en ligne / abonnement actif", "Online sessions / active subscription")}:{" "}
+                      <strong>
+                        {(
+                          (dashboard?.networkSessions ?? onlineSessions.length) /
+                          Math.max(dashboard?.activeSubscriptions ?? 0, 1)
+                        ).toLocaleString(dashLocale, { maximumFractionDigits: 3 })}
+                      </strong>
+                    </li>
+                  </ul>
+                </section>
+              </>
+            ) : (
+              <p className="app-meta">{t("Choisissez un espace FAI pour afficher les analyses.", "Pick an ISP workspace to load analytics.")}</p>
+            )}
 
             {!loading && selectedIspId ? (
               <Suspense
@@ -3782,10 +4073,8 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                   t={t}
                   isEn={isEn}
                   globalSummary={user.role === "system_owner" ? superDashboard : null}
-                  tenantDashboard={dashboard}
                   networkStats={networkStats}
                   users={users}
-                  invoices={invoices}
                   telemetrySnapshots={telemetrySnapshots}
                 />
               </Suspense>
@@ -3958,99 +4247,6 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         </section>
       ) : null}
 
-      <section className="panel" id="reports">
-        <h2>{t("Rapports / analyses", "Reports / analytics")}</h2>
-        <div className="app-meta" style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
-          <span>{t("Trend (line chart)", "Trend (line chart)")}</span>
-          <span>·</span>
-          <span>{t("Graph (real-time)", "Graph (real-time)")}</span>
-          <span>·</span>
-          <span>{t("Metrics", "Metrics")}</span>
-          <span>·</span>
-          <span>{t("Payment success/failure (bar chart)", "Payment success/failure (bar chart)")}</span>
-          <span>·</span>
-          <span>{t("Bandwidth (line or area)", "Bandwidth (line or area)")}</span>
-          <span>·</span>
-          <span>{t("Top users (bar ranking)", "Top users (bar ranking)")}</span>
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
-          <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-            <span>{t("Du", "From")}</span>
-            <input
-              type="date"
-              value={statsPeriod.from}
-              onChange={(e) => setStatsPeriod((s) => ({ ...s, from: e.target.value }))}
-            />
-          </label>
-          <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-            <span>{t("Au", "To")}</span>
-            <input
-              type="date"
-              value={statsPeriod.to}
-              onChange={(e) => setStatsPeriod((s) => ({ ...s, to: e.target.value }))}
-            />
-          </label>
-          <button type="button" className="btn-secondary-outline" onClick={() => refresh()} disabled={!selectedIspId}>
-            {t("Appliquer les filtres", "Apply filters")}
-          </button>
-        </div>
-      </section>
-
-            <section className="grid metrics">
-              <Card title={t("Utilisateurs hotspot", "Hotspot Users")} value={networkStats?.hotspotUsers ?? 0} />
-              <Card title={t("Utilisateurs PPPoE", "PPPoE Users")} value={networkStats?.pppoeUsers ?? 0} />
-              <Card
-                title={t("Appareils connectés", "Connected Devices")}
-                value={networkStats?.connectedDevices ?? 0}
-              />
-              <Card title={t("Bande passante (Go)", "Bandwidth (GB)")} value={networkStats?.bandwidthTotalGb ?? 0} />
-              <Card
-                title={t("Encaissements sur la période (USD)", "Revenue In Period (USD)")}
-                value={networkStats?.revenueCollectedUsd ?? 0}
-              />
-            </section>
-
-            <section className="grid metrics">
-              <Card
-                title={t("Caisse cash (USD)", "Cash till (USD)")}
-                value={networkStats?.cashbox?.cashUsd ?? dashboard?.cashbox?.cashUsd ?? 0}
-              />
-              <Card
-                title={t("Caisse TID (USD)", "TID till (USD)")}
-                value={networkStats?.cashbox?.tidUsd ?? dashboard?.cashbox?.tidUsd ?? 0}
-              />
-              <Card
-                title={t("Mobile Money (USD)", "Mobile Money (USD)")}
-                value={networkStats?.cashbox?.mobileMoneyUsd ?? dashboard?.cashbox?.mobileMoneyUsd ?? 0}
-              />
-              <Card
-                title={t("Retirable Mobile Money (USD)", "Withdrawable Mobile Money (USD)")}
-                value={
-                  networkStats?.cashbox?.withdrawableMobileMoneyUsd ??
-                  dashboard?.cashbox?.withdrawableMobileMoneyUsd ??
-                  0
-                }
-              />
-            </section>
-
-            <section className="panel">
-              <h2>{t("Période des statistiques", "Statistics Period")}</h2>
-              <form onSubmit={onRefreshStats}>
-                <input
-                  type="date"
-                  value={statsPeriod.from}
-                  onChange={(e) => setStatsPeriod({ ...statsPeriod, from: e.target.value })}
-                />
-                <input
-                  type="date"
-                  value={statsPeriod.to}
-                  onChange={(e) => setStatsPeriod({ ...statsPeriod, to: e.target.value })}
-                />
-                <button type="submit" disabled={!selectedIspId}>
-                  {t("Actualiser les stats", "Refresh stats")}
-                </button>
-              </form>
-            </section>
           </>
         </DashboardScreenGate>
       ) : null}
@@ -5583,72 +5779,91 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         </>
       )}
 
-      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="dashboard">
-      <section className="grid metrics">
-        <Card title={t("Clients", "Customers")} value={dashboard?.totalCustomers ?? 0} />
-        <Card title={t("Abonnements actifs", "Active subscriptions")} value={dashboard?.activeSubscriptions ?? 0} />
-        <Card title={t("Factures impayées", "Unpaid invoices")} value={dashboard?.unpaidInvoices ?? 0} />
-        <Card title={t("Chiffre d'affaires (USD)", "Revenue (USD)")} value={dashboard?.revenueUsd ?? 0} />
-      </section>
-
-      <section className="grid metrics">
-<section className="panel">
-  <Card title={t("Clients", "Customers")} value={dashboard?.totalCustomers ?? 0} />
-  <Card title={t("Abonnements actifs", "Active subscriptions")} value={dashboard?.activeSubscriptions ?? 0} />
-  <Card title={t("Factures impayées", "Unpaid invoices")} value={dashboard?.unpaidInvoices ?? 0} />
-  <Card title={t("Chiffre d'affaires (USD)", "Revenue (USD)")} value={dashboard?.revenueUsd ?? 0} />
-
-  <Card
-    title={t("Sessions en ligne", "Online sessions")}
-    value={dashboard?.networkSessions ?? onlineSessions.length}
-    subtitle={t(
-      `Fenêtre ${dashboard?.networkSessionsWindowMinutes || onlineSessionsWindowMinutes} min`,
-      `${dashboard?.networkSessionsWindowMinutes || onlineSessionsWindowMinutes}-min window`
-    )}
-  />
-</section>
-
-<section className="panel">
-  <h2>{t("Abonnés en ligne (corrélation RADIUS)", "Online subscribers (RADIUS-correlated)")}</h2>
-
-  <p>
-    {t(
-      `Fenêtre active: ${onlineSessionsWindowMinutes} minutes. Les lignes ci-dessous lient username RADIUS -> client -> abonnement actif.`,
-      `Active window: ${onlineSessionsWindowMinutes} minutes. The rows below map RADIUS username -> customer -> active subscription.`
-    )}
-  </p>
-
-  {onlineSessions.length === 0 ? (
-    <p>
-      {t(
-        "Aucun abonné actif détecté dans la fenêtre actuelle.",
-        "No active subscribers detected in the current window."
-      )}
-    </p>
-  ) : (
-    onlineSessions.slice(0, 25).map((row) => (
-      <p key={row.ingestId}>
-        {new Date(row.seenAt).toLocaleString()} — {row.customerName || row.customerPhone || row.username} (
-        {row.username})
-        {row.planName ? ` · ${row.planName}` : ""}
-        {row.accessType ? ` · ${row.accessType}` : ""}
-        {row.framedIpAddress ? ` · IP ${row.framedIpAddress}` : ""}
-      </p>
-    ))
-  )}
-</section>
-
-<section className="panel">
-  <Card title={t("Cash encaissé (USD)", "Cash collected (USD)")} value={dashboard?.cashbox?.cashUsd ?? 0} />
-  <Card title={t("TID validés (USD)", "Validated TID (USD)")} value={dashboard?.cashbox?.tidUsd ?? 0} />
-  <Card title={t("Mobile Money Pawapay (USD)", "Mobile Money Pawapay (USD)")} value={dashboard?.cashbox?.mobileMoneyUsd ?? 0} />
-  <Card
-    title={t("Retirable Mobile Money (USD)", "Withdrawable Mobile Money (USD)")}
-    value={dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0}
-  />
-</section>
-      </section>
-      </DashboardScreenGate>
+      {isFieldAgent ? (
+        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="dashboard">
+          <section className="panel dashboard-field-agent-dash">
+            <h2>{t("Synthèse terrain", "Field snapshot")}</h2>
+            <p className="app-meta">
+              {t(
+                "Les graphiques multi‑sources et la vue réseau détaillée sont réservés aux rôles d’administration ; vos filtres de période alignent toutefois la caisse sur vos clients attribués.",
+                "Multi-source charts and the detailed network view are for administrator roles; your period filters still align cashbox totals to your assigned customers."
+              )}
+            </p>
+          </section>
+          <section className="grid analytic-metric-grid">
+            <AnalyticMetricCard
+              t={t}
+              title={t("Clients (attribués)", "Customers (assigned)")}
+              value={formatCount(dashboard?.totalCustomers ?? 0, dashLocale)}
+              timeframe={t("Instantané", "Snapshot")}
+              definitionTitle={glossaryTooltip(isEn, "stock_snapshot_count")}
+            />
+            <AnalyticMetricCard
+              t={t}
+              title={t("Abonnements actifs", "Active subscriptions")}
+              value={formatCount(dashboard?.activeSubscriptions ?? 0, dashLocale)}
+              timeframe={t("Instantané", "Snapshot")}
+              definitionTitle={glossaryTooltip(isEn, "stock_snapshot_count")}
+            />
+            <AnalyticMetricCard
+              t={t}
+              title={t("Factures ouvertes", "Open invoices")}
+              value={formatCount(dashboard?.unpaidInvoices ?? 0, dashLocale)}
+              timeframe={t("Instantané", "Snapshot")}
+              definitionTitle={glossaryTooltip(isEn, "open_unpaid_invoice_count")}
+            />
+            <AnalyticMetricCard
+              t={t}
+              title={t("CA factures payées (cumul)", "Paid invoice revenue (cumulative)")}
+              value={formatUsd(dashboard?.revenueUsd ?? 0, dashLocale)}
+              timeframe={t("Cumul tout temps", "All-time cumulative")}
+              definitionTitle={glossaryTooltip(isEn, "cumulative_paid_invoice_amount_all_time")}
+            />
+          </section>
+          <section className="grid analytic-metric-grid">
+            <AnalyticMetricCard
+              t={t}
+              title={t("Cash (période)", "Cash (period)")}
+              value={formatUsd(dashboard?.cashbox?.cashUsd ?? 0, dashLocale)}
+              timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+              comparison={dashboard?.meta?.comparison?.cashUsd}
+              deltaHint="up_good"
+              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+              locale={dashLocale}
+            />
+            <AnalyticMetricCard
+              t={t}
+              title={t("TID (période)", "TID (period)")}
+              value={formatUsd(dashboard?.cashbox?.tidUsd ?? 0, dashLocale)}
+              timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+              comparison={dashboard?.meta?.comparison?.tidUsd}
+              deltaHint="up_good"
+              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+              locale={dashLocale}
+            />
+            <AnalyticMetricCard
+              t={t}
+              title={t("Mobile Money (période)", "Mobile Money (period)")}
+              value={formatUsd(dashboard?.cashbox?.mobileMoneyUsd ?? 0, dashLocale)}
+              timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+              comparison={dashboard?.meta?.comparison?.mobileMoneyUsd}
+              deltaHint="up_good"
+              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+              locale={dashLocale}
+            />
+            <AnalyticMetricCard
+              t={t}
+              title={t("Retirable MM", "Withdrawable MM")}
+              value={formatUsd(dashboard?.cashbox?.withdrawableMobileMoneyUsd ?? 0, dashLocale)}
+              timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
+              comparison={dashboard?.meta?.comparison?.withdrawableMobileMoneyUsd}
+              deltaHint="up_good"
+              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
+              locale={dashLocale}
+            />
+          </section>
+        </DashboardScreenGate>
+      ) : null}
 
       {isFieldAgent ? (
         <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="network">

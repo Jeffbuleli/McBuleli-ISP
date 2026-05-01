@@ -2169,6 +2169,143 @@ button.btn-secondary-outline:hover:not(:disabled) {
   max-width: 62ch;
 }
 
+.dash-hist-meta {
+  margin: -6px 0 14px;
+  font-size: 0.85rem;
+}
+
+.dashboard-analytics-period__lead {
+  max-width: 56rem;
+}
+
+.dashboard-analytics-period__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 10px;
+}
+
+.dashboard-analytics-period__control {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.dashboard-analytics-period__fresh {
+  margin-bottom: 8px;
+}
+
+.dashboard-analytics-period__iso-range {
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-quality-flag {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(230, 162, 60, 0.45);
+  background: rgba(230, 162, 60, 0.08);
+  margin-bottom: 12px;
+}
+
+.dashboard-roadmap-details {
+  margin-top: 8px;
+}
+
+.dashboard-analytics-block-title {
+  margin: 18px 0 8px;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mb-muted);
+}
+
+.analytic-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.analytic-metric-card {
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--mb-panel-bg, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--mb-border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+.analytic-metric-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.analytic-metric-card__title {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.analytic-metric-card__time {
+  font-size: 0.75rem;
+  color: var(--mb-muted);
+  white-space: nowrap;
+}
+
+.analytic-metric-card__value {
+  margin: 8px 0 0;
+  font-size: 1.32rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.analytic-metric-card__delta {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--mb-muted);
+}
+
+.analytic-metric-card__delta--up_good {
+  color: var(--mb-success-text, #81c784);
+}
+
+.analytic-metric-card__delta--down_good {
+  color: var(--mb-success-text, #81c784);
+}
+
+.analytic-metric-card__quality {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+}
+
+.dashboard-aggregation-notes {
+  max-width: 56rem;
+  margin-bottom: 8px;
+}
+
+.dashboard-online-radar__summary {
+  margin-bottom: 12px;
+}
+
+.dashboard-online-radar__count-line {
+  margin: 0 0 4px;
+  font-size: 1.08rem;
+}
+
+.dashboard-ratio-panel h4 {
+  margin-top: 0;
+}
+
+.dashboard-ratio-list {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.dashboard-field-agent-dash h2 {
+  margin-top: 0;
+}
+
 .dash-hist-grid {
   display: grid;
   gap: 20px;

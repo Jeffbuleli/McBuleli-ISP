@@ -5,6 +5,7 @@
  */
 
 import { formatStaffRole } from "./staffRoleLabels.js";
+import { formatGb, formatUsd } from "./dashboardFormat.js";
 
 function maxOf(arr, pick) {
   let m = 0;
@@ -129,12 +130,11 @@ export default function DashboardHistograms({
   t,
   isEn,
   globalSummary,
-  tenantDashboard,
   networkStats,
   users,
-  invoices,
   telemetrySnapshots
 }) {
+  const loc = isEn ? "en-US" : "fr-FR";
   const daily = Array.isArray(networkStats?.dailyUsage) ? networkStats.dailyUsage : [];
   /** Au plus 7 jours affichés : évite les histogrammes illisibles si la période stats couvre un mois ou plus. */
   const dailyWindow = daily.slice(-7);
@@ -145,7 +145,7 @@ export default function DashboardHistograms({
   const tel = [...(telemetrySnapshots || [])]
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
     .slice(-7);
-  const telLabels = tel.map((r, i) => `${i + 1}`);
+  const telLabels = tel.map((r) => formatShortDate(r.createdAt));
   const telVals = tel.map((r) => {
     if (r.connectedDevices != null) return r.connectedDevices;
     return (r.pppoeActive || 0) + (r.hotspotActive || 0);
@@ -159,19 +159,10 @@ export default function DashboardHistograms({
   const roleKeys = Object.keys(roleBuckets);
   const roleVals = roleKeys.map((k) => roleBuckets[k]);
 
-  const inv = [...(invoices || [])]
-    .filter((x) => x.status === "paid")
-    .sort((a, b) => new Date(a.createdAt || a.dueDate) - new Date(b.createdAt || b.dueDate))
-    .slice(-10);
-  const invByDay = {};
-  for (const row of inv) {
-    const day = String(row.createdAt || row.dueDate || "").slice(0, 10);
-    if (!day) continue;
-    invByDay[day] = (invByDay[day] || 0) + Number(row.amountUsd || 0);
-  }
-  const invDays = Object.keys(invByDay).sort().slice(-7);
-  const invLabels = invDays.map(formatShortDate);
-  const invVals = invDays.map((d) => invByDay[d]);
+  const payDaily = Array.isArray(networkStats?.paymentsDaily) ? networkStats.paymentsDaily : [];
+  const payWindow = payDaily.slice(-7);
+  const payLabels = payWindow.map((r) => formatShortDate(r.date));
+  const payVals = payWindow.map((r) => Number(r.amountUsd) || 0);
 
   const gVals = globalSummary
     ? [
@@ -187,10 +178,18 @@ export default function DashboardHistograms({
       <h2>{t("Performance & activité", "Performance & activity")}</h2>
       <p className="dash-hist-lead">
         {t(
-          "Vue synthétique : réseau, finances et équipe. Les séries jour par jour et la télémétrie montrent au plus 7 points (fin de la période sélectionnée dans les filtres stats). Le détail complet reste dans les sections du menu.",
-          "At-a-glance network, revenue, and team view. Day-by-day series and telemetry show at most 7 points (the end of your selected stats period). Full detail lives under each menu section."
+          "Histogrammes relatifs : chaque graphique normalise ses barres au maximum affiché dans ce graphique uniquement — ce n’est pas un jugement absolu de santé métier. Séries journalières limitées aux 7 derniers points ; encaissements = paiements confirmés par jour (`paid_at`).",
+          "Relative histograms: each chart scales bars to that chart’s own maximum — not an absolute business-health verdict. Daily series show at most the last seven points; collections chart uses confirmed payments grouped by `paid_at` day."
         )}
       </p>
+      {networkStats?.quality?.coverageRatio != null && networkStats?.quality?.expectedDays > 2 ? (
+        <p className="dash-hist-meta app-meta">
+          {t(
+            `Couverture des agrégats réseau sur la période : ${Math.round(Number(networkStats.quality.coverageRatio) * 100)} % (${networkStats.quality.dailyRowsObserved}/${networkStats.quality.expectedDays} jours observés).`,
+            `Daily rollup coverage over this window: ${Math.round(Number(networkStats.quality.coverageRatio) * 100)} % (${networkStats.quality.dailyRowsObserved}/${networkStats.quality.expectedDays} days observed).`
+          )}
+        </p>
+      ) : null}
       <div className="dash-hist-grid">
         {gVals ? (
           <BarGroup
@@ -204,7 +203,7 @@ export default function DashboardHistograms({
               t("CA payé (USD)", "Paid revenue (USD)")
             ]}
             values={gVals}
-            format={(v, i) => (i === 3 ? Number(v).toFixed(2) : String(Math.round(v)))}
+            format={(v, i) => (i === 3 ? formatUsd(v, loc) : String(Math.round(v)))}
           />
         ) : null}
         {dailyWindow.length ? (
@@ -231,51 +230,36 @@ export default function DashboardHistograms({
           />
         ) : (
           <BarGroup
-            title={t("Réseau", "Network")}
+            title={t("Réseau (agrégats de période)", "Network (period aggregates)")}
             subtitle={t(
-              "Collectez la télémétrie ou attendez l’agrégation quotidienne.",
-              "Collect telemetry or wait for daily rollups."
+              "PPPoE/Hotspot = sommes des relevés journaliers ; Appareils = pic journalier max — ne pas additionner ces trois séries comme une seule métrique.",
+              "PPPoE/Hotspot = sums of daily rollups; Devices = maximum daily peak — do not sum these three into one headline metric."
             )}
             tierMode="share"
-            labels={[t("PPPoE", "PPPoE"), t("Hotspot", "Hotspot"), t("Sessions", "Sessions")]}
-            values={[
-              networkStats?.pppoeUsers ?? tenantDashboard?.networkSessions ?? 0,
-              networkStats?.hotspotUsers ?? 0,
-              networkStats?.connectedDevices ?? 0
-            ]}
+            labels={[t("PPPoE Σ jour", "PPPoE Σ days"), t("Hotspot Σ jour", "Hotspot Σ days"), t("Appareils pic", "Devices peak")]}
+            values={[networkStats?.pppoeUsers ?? 0, networkStats?.hotspotUsers ?? 0, networkStats?.connectedDevices ?? 0]}
           />
         )}
         {dailyWindow.length ? (
           <BarGroup
-            title={t("Volume trafic agrégé (Go / jour)", "Aggregated traffic (GB / day)")}
+            title={t("Volume trafic agrégé (GB / jour)", "Aggregated traffic (GB / day)")}
             tierMode="temporal"
             labels={dLabels}
             values={dBw}
-            format={(v) => `${Number(v).toFixed(2)} Go`}
+            format={(v) => formatGb(v, 2, loc)}
           />
         ) : null}
-        <BarGroup
-          title={t("Structure commerciale (espace courant)", "Commercial snapshot (current workspace)")}
-          tierMode="share"
-          labels={[
-            t("Clients", "Customers"),
-            t("Abonnements actifs", "Active subs"),
-            t("Factures impayées", "Unpaid inv.")
-          ]}
-          values={[
-            tenantDashboard?.totalCustomers ?? 0,
-            tenantDashboard?.activeSubscriptions ?? 0,
-            tenantDashboard?.unpaidInvoices ?? 0
-          ]}
-        />
-        {invVals.length ? (
+        {payVals.length ? (
           <BarGroup
-            title={t("Encaissements (factures payées)", "Collections (paid invoices)")}
-            subtitle={t("Montants groupés par date", "Amounts grouped by date")}
+            title={t("Encaissements confirmés par jour", "Confirmed collections per day")}
+            subtitle={t(
+              "Somme des paiements confirmés par date payeur (`paid_at`).",
+              "Sum of confirmed payments grouped by payer-settled day (`paid_at`)."
+            )}
             tierMode="temporal"
-            labels={invLabels}
-            values={invVals}
-            format={(v) => `${Number(v).toFixed(2)} $`}
+            labels={payLabels}
+            values={payVals}
+            format={(v) => formatUsd(v, loc)}
           />
         ) : null}
         {roleKeys.length ? (
@@ -294,8 +278,8 @@ export default function DashboardHistograms({
       </div>
       <p className="dash-hist-tier-legend dash-hist-tier-legend--global">
         {t(
-          "Légende des couleurs (tous ces histogrammes) : vert — niveau fort (proche du maximum de la période ou en hausse nette récente ; comparez aussi les derniers à la veille), orange — niveau moyen, rouge — niveau fragile ou à surveiller (loin du pic récent ou en baisse par rapport aux jours précédents). Sur une série jour par jour (flèche « récent »), le dernier point se lit contre les deux précédents.",
-          "Color legend for every chart above: green — strong performance (near the peak of what’s shown here, or sharply up lately; compare recent bars vs the day before); orange — in the middle; red — weaker or slipping vs recent days. Day-by-day series: read the rightmost bars against yesterday and the day before."
+          "Échelle intra-graphique uniquement : les couleurs classent les barres les unes par rapport aux autres dans CE graphique (proximité du max affiché et dynamique courte vs veille). Ne pas les interpréter comme seuils SLA ou scores absolus sans définition métier explicite.",
+          "Within-chart scaling only: colors rank bars relative to each other inside THIS chart (nearness to that chart’s displayed peak and short momentum vs yesterday). Do not read them as SLA thresholds or absolute scores unless your business defines them explicitly."
         )}
       </p>
     </section>
