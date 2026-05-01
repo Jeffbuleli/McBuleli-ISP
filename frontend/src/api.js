@@ -1040,9 +1040,20 @@ export const api = {
       body: JSON.stringify({ ...payload, ispId })
     }),
   getPlatformBillingStatus: (ispId) => request(withIsp("/platform/billing/status", ispId)),
+  getPlatformBillingPaymentMethods: (ispId) => request(withIsp("/platform/billing/payment-methods", ispId)),
   getPawapayNetworks: () => publicRequest("/public/mobile-money-networks"),
   initiatePlatformDeposit: (ispId, payload) =>
     request(withIsp("/platform/billing/initiate-deposit", ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
+  createPlatformManualBillingIntent: (ispId, payload) =>
+    request(withIsp("/platform/billing/manual-intent", ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
+  confirmPlatformManualBillingIntent: (ispId, depositId, payload = {}) =>
+    request(withIsp(`/platform/billing/manual-intent/${encodeURIComponent(depositId)}/confirm`, ispId), {
       method: "POST",
       body: JSON.stringify({ ...payload, ispId })
     }),

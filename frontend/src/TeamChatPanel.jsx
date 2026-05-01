@@ -4,6 +4,7 @@ import { IconSend, IconX } from "./icons.jsx";
 import { formatStaffRole } from "./staffRoleLabels.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 import { isTeamChatPingSoundEnabled, setTeamChatPingSoundEnabled } from "./teamChatAlerts.js";
+import { getStoredProfilePhotoDataUrl } from "./profilePhotoStorage.js";
 
 const URL_RE = /(https?:\/\/[^\s]+)/gi;
 
@@ -130,15 +131,18 @@ export default function TeamChatPanel({
   const [mentionMembers, setMentionMembers] = useState([]);
   const [mentionHl, setMentionHl] = useState(0);
   const textareaRef = useRef(null);
-  const chatAvatarInputRef = useRef(null);
 
   /** Compact chat handle editor when still on default backend username */
   const [handleDraft, setHandleDraft] = useState("");
   const [handleBusy, setHandleBusy] = useState(false);
-  const [chatAvatarBusy, setChatAvatarBusy] = useState(false);
   /** Desktop: position panel under measured sticky header (see updateDesktopDock). */
   const [desktopDock, setDesktopDock] = useState(null);
   const showHandleBanner = user && isDefaultChatUsername(user.chatUsername);
+  const profilePhotoDataUrl = useMemo(
+    () => getStoredProfilePhotoDataUrl(user?.id || user?.email || ""),
+    [user?.id, user?.email]
+  );
+  const effectiveOwnChatPhoto = user?.chatAvatarUrl || profilePhotoDataUrl || "";
 
   /** After first successful load, failed polls no longer plaster a red banner */
   const loadOkRef = useRef(false);
@@ -412,50 +416,6 @@ export default function TeamChatPanel({
     }
   }
 
-  async function onChatAvatarFileChange(e) {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f || chatAvatarBusy) return;
-    if (!f.type.startsWith("image/")) {
-      setErr(isEn ? "Please choose an image file." : "Choisissez un fichier image.");
-      return;
-    }
-    if (f.size > 512 * 1024) {
-      setErr(isEn ? "Image too large (max 512 KB)." : "Image trop volumineuse (max 512 Ko).");
-      return;
-    }
-    setChatAvatarBusy(true);
-    setErr("");
-    try {
-      const out = await api.uploadChatAvatar(f);
-      onChatProfileSaved?.({
-        chatUsername: out.chatUsername,
-        chatAvatarUrl: out.chatAvatarUrl ?? null
-      });
-    } catch (err) {
-      setErr(sanitizeApiErrorForAudience(String(err?.message || ""), user, isEn));
-    } finally {
-      setChatAvatarBusy(false);
-    }
-  }
-
-  async function onClearChatAvatarClick() {
-    if (chatAvatarBusy) return;
-    setChatAvatarBusy(true);
-    setErr("");
-    try {
-      const out = await api.deleteChatAvatar();
-      onChatProfileSaved?.({
-        chatUsername: out.chatUsername,
-        chatAvatarUrl: out.chatAvatarUrl ?? null
-      });
-    } catch (err) {
-      setErr(sanitizeApiErrorForAudience(String(err?.message || ""), user, isEn));
-    } finally {
-      setChatAvatarBusy(false);
-    }
-  }
-
   if (!open) return null;
 
   const desktopPopoverStyle =
@@ -500,18 +460,9 @@ export default function TeamChatPanel({
 
       {user ? (
         <div className="dashboard-team-chat-profile-photo">
-          <input
-            ref={chatAvatarInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            className="visually-hidden"
-            aria-hidden
-            tabIndex={-1}
-            onChange={(e) => void onChatAvatarFileChange(e)}
-          />
           <div className="dashboard-team-chat-profile-photo__preview" aria-hidden>
             <TeamChatAvatar
-              photoUrl={user.chatAvatarUrl}
+              photoUrl={effectiveOwnChatPhoto}
               chatUsername={user.chatUsername}
               fullName={user.fullName}
               isMe
@@ -521,32 +472,10 @@ export default function TeamChatPanel({
           <div className="dashboard-team-chat-profile-photo__body">
             <p className="dashboard-team-chat-profile-photo__hint">
               {t(
-                "Photo visible dans la discussion équipe. Sans photo, vos initiales sont affichées.",
-                "Photo shown in team chat. Without a photo, your initials are shown."
+                "La photo principale de votre profil est utilisée automatiquement dans le chat équipe. Sans photo, vos initiales sont affichées.",
+                "Your main profile photo is automatically reused in team chat. Without a photo, your initials are shown."
               )}
             </p>
-            <div className="dashboard-team-chat-profile-photo__actions">
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                disabled={chatAvatarBusy}
-                onClick={() => chatAvatarInputRef.current?.click()}
-              >
-                {chatAvatarBusy
-                  ? t("Envoi…", "Uploading…")
-                  : t("Ajouter ou changer la photo", "Add or change photo")}
-              </button>
-              {user.chatAvatarUrl ? (
-                <button
-                  type="button"
-                  className="btn btn-secondary-outline btn-sm"
-                  disabled={chatAvatarBusy}
-                  onClick={() => void onClearChatAvatarClick()}
-                >
-                  {t("Retirer la photo", "Remove photo")}
-                </button>
-              ) : null}
-            </div>
           </div>
         </div>
       ) : null}
@@ -632,7 +561,7 @@ export default function TeamChatPanel({
                     {!groupSame ? (
                       isMe ? (
                         <TeamChatAvatar
-                          photoUrl={user?.chatAvatarUrl}
+                          photoUrl={effectiveOwnChatPhoto}
                           chatUsername={user?.chatUsername}
                           fullName={user?.fullName}
                           isMe

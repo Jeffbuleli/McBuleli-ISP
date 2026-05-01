@@ -106,6 +106,7 @@ const PAYMENT_METHOD_TYPES = new Set([
   "crypto_wallet",
   "visa_card"
 ]);
+const STANDARD_PAYMENT_METHOD_TYPES = ["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card"];
 
 function normalizeMethodType(value) {
   return String(value || "")
@@ -217,6 +218,17 @@ function normalizePaymentMethodConfig(methodType, config) {
     };
   }
   return base;
+}
+
+function mapSaasMethodToSessionType(methodType) {
+  const mt = normalizeMethodType(methodType);
+  if (mt === "mobile_money") return "mobile_money";
+  if (mt === "cash") return "cash";
+  if (mt === "bank_transfer") return "bank_transfer";
+  if (mt === "visa_card") return "visa_card";
+  if (mt === "binance_pay") return "binance_pay";
+  if (mt === "crypto_wallet") return "crypto_wallet";
+  return null;
 }
 
 function resolvePublicApiBase(req) {
@@ -2983,6 +2995,24 @@ app.get("/api/platform/billing/networks", authenticate, (_req, res) => {
   return res.json(WIFI_GUEST_NETWORK_OPTIONS.map(({ key, label }) => ({ key, label })));
 });
 
+app.get(
+  "/api/platform/billing/payment-methods",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const rows = await query(
+      `SELECT id, method_type AS "methodType", provider_name AS "providerName", is_active AS "isActive", config_json AS "config"
+       FROM isp_payment_methods
+       WHERE isp_id = $1 AND is_active = TRUE AND method_type = ANY($2::text[])
+       ORDER BY created_at DESC`,
+      [ispId, STANDARD_PAYMENT_METHOD_TYPES]
+    );
+    return res.json(rows.rows);
+  }
+);
+
 app.post(
   "/api/platform/billing/initiate-deposit",
   authenticate,
@@ -2990,10 +3020,23 @@ app.post(
   async (req, res) => {
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
-    const { currency, phoneNumber, networkKey, provider, packageId } = req.body;
+    const { currency, phoneNumber, networkKey, provider, packageId, methodType = "mobile_money" } = req.body;
+    const sessionMethodType = mapSaasMethodToSessionType(methodType);
+    if (!sessionMethodType || sessionMethodType !== "mobile_money") {
+      return res.status(400).json({ message: "Use /api/platform/billing/manual-intent for non-mobile-money methods." });
+    }
     const pawapayProvider = provider ? String(provider).trim() : resolveWifiGuestPawapayProvider(networkKey);
     if (!currency || !phoneNumber || !pawapayProvider) {
       return res.status(400).json({ message: "currency, phoneNumber and networkKey are required" });
+    }
+    const configured = await query(
+      `SELECT id FROM isp_payment_methods
+       WHERE isp_id = $1 AND is_active = TRUE AND method_type = 'mobile_money'
+       LIMIT 1`,
+      [ispId]
+    );
+    if (!configured.rows[0]) {
+      return res.status(400).json({ message: "Configure an active Mobile Money payment method first." });
     }
     const cur = String(currency).toUpperCase();
     if (cur !== "USD" && cur !== "CDF") {
@@ -3038,8 +3081,8 @@ app.post(
       if (pw.status === "ACCEPTED" || pw.status === "DUPLICATE_IGNORED") {
         await query(
           `INSERT INTO platform_saas_deposit_sessions
-           (id, isp_id, platform_subscription_id, target_package_id, deposit_id, amount, currency, provider, phone_number, status, pawapay_init_status)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4::uuid, $5, $6, $7, $8, 'initiated', $9)
+           (id, isp_id, platform_subscription_id, target_package_id, deposit_id, amount, currency, provider, phone_number, method_type, status, pawapay_init_status)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4::uuid, $5, $6, $7, $8, 'mobile_money', 'initiated', $9)
            ON CONFLICT (deposit_id) DO NOTHING`,
           [ispId, sub.id, targetPackageId, depositId, amount, cur, pawapayProvider, phone, pw.status || null]
         );
@@ -3065,6 +3108,154 @@ app.post(
     } catch (err) {
       return res.status(400).json({ message: err.message || "Pawapay initiation failed" });
     }
+  }
+);
+
+app.post(
+  "/api/platform/billing/manual-intent",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { packageId, methodType, externalRef, payerContact, amountUsd, evidence = {} } = req.body || {};
+    const sessionMethodType = mapSaasMethodToSessionType(methodType);
+    if (!sessionMethodType || sessionMethodType === "mobile_money") {
+      return res.status(400).json({ message: "methodType must be one of: cash, bank_transfer, visa_card, crypto_wallet, binance_pay" });
+    }
+    if (!externalRef) {
+      return res.status(400).json({ message: "externalRef is required." });
+    }
+    const cfg = await query(
+      `SELECT id FROM isp_payment_methods
+       WHERE isp_id = $1 AND is_active = TRUE AND method_type = $2
+       LIMIT 1`,
+      [ispId, sessionMethodType]
+    );
+    if (!cfg.rows[0]) {
+      return res.status(400).json({ message: `No active ${sessionMethodType} method configured for this workspace.` });
+    }
+    const safeEvidence = evidence && typeof evidence === "object" ? evidence : {};
+    if (sessionMethodType === "cash") {
+      if (!String(safeEvidence.collectorName || "").trim() || !String(safeEvidence.receiptNumber || "").trim()) {
+        return res.status(400).json({ message: "cash requires evidence.collectorName and evidence.receiptNumber." });
+      }
+    }
+    if (sessionMethodType === "bank_transfer") {
+      if (
+        !String(safeEvidence.bankName || "").trim() ||
+        !String(safeEvidence.accountName || "").trim() ||
+        !String(safeEvidence.accountNumber || "").trim()
+      ) {
+        return res.status(400).json({ message: "bank_transfer requires evidence.bankName, evidence.accountName and evidence.accountNumber." });
+      }
+    }
+    if (sessionMethodType === "visa_card") {
+      if (
+        !String(safeEvidence.processorName || "").trim() ||
+        !/^\d{4}$/.test(String(safeEvidence.cardLast4 || "").trim()) ||
+        !String(safeEvidence.authCode || "").trim()
+      ) {
+        return res.status(400).json({ message: "visa_card requires evidence.processorName, evidence.cardLast4, and evidence.authCode." });
+      }
+    }
+    if (sessionMethodType === "crypto_wallet" || sessionMethodType === "binance_pay") {
+      if (!String(safeEvidence.walletNetwork || "").trim() || !String(safeEvidence.walletAddress || "").trim()) {
+        return res.status(400).json({ message: "crypto_wallet/binance_pay requires evidence.walletNetwork and evidence.walletAddress." });
+      }
+    }
+
+    const sub = await getLatestPlatformSubscription(ispId);
+    if (!sub) return res.status(400).json({ message: "No platform subscription on file for this workspace" });
+    const targetPackageId = packageId || sub.packageId;
+    const pkgRow = await query(
+      `SELECT id, code, monthly_price_usd AS "monthlyPriceUsd"
+       FROM platform_packages
+       WHERE id = $1 AND code = ANY($2::text[])`,
+      [targetPackageId, SAAS_PLAN_CODES]
+    );
+    const monthlyUsd = pkgRow.rows[0]?.monthlyPriceUsd;
+    if (monthlyUsd == null) return res.status(400).json({ message: "Package not found" });
+    const settledUsd = Number(amountUsd || monthlyUsd);
+    if (!Number.isFinite(settledUsd) || settledUsd <= 0) {
+      return res.status(400).json({ message: "amountUsd must be greater than 0." });
+    }
+
+    const depositId = uuidv4();
+    const inserted = await query(
+      `INSERT INTO platform_saas_deposit_sessions
+       (id, isp_id, platform_subscription_id, target_package_id, deposit_id, amount, currency, provider, phone_number, method_type, external_ref, payer_contact, evidence_json, status, pawapay_init_status)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4::uuid, $5, 'USD', $6, $7, $8, $9, $10, $11::jsonb, 'initiated', NULL)
+       RETURNING deposit_id AS "depositId", method_type AS "methodType", amount, currency, status, created_at AS "createdAt"`,
+      [
+        ispId,
+        sub.id,
+        targetPackageId,
+        depositId,
+        usdAmountString(settledUsd),
+        sessionMethodType,
+        String(payerContact || "").slice(0, 255),
+        sessionMethodType,
+        String(externalRef).slice(0, 255),
+        String(payerContact || "").slice(0, 255),
+        JSON.stringify(safeEvidence)
+      ]
+    );
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "platform.billing.manual_intent_created",
+      entityType: "platform_saas_deposit",
+      entityId: depositId,
+      details: { methodType: sessionMethodType, targetPackageId, amountUsd: settledUsd }
+    });
+    return res.status(201).json({
+      ...inserted.rows[0],
+      message:
+        "Manual billing intent saved. Finalize with confirm-manual once your finance team verifies incoming funds."
+    });
+  }
+);
+
+app.post(
+  "/api/platform/billing/manual-intent/:depositId/confirm",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const { depositId } = req.params;
+    if (!isUuidString(depositId)) return res.status(400).json({ message: "Invalid depositId." });
+    const { confirmReceived = true, note = "" } = req.body || {};
+    const got = await query(
+      `SELECT deposit_id AS "depositId", method_type AS "methodType", status
+       FROM platform_saas_deposit_sessions
+       WHERE deposit_id = $1::uuid AND isp_id = $2`,
+      [depositId, ispId]
+    );
+    const row = got.rows[0];
+    if (!row) return res.status(404).json({ message: "Deposit session not found." });
+    if (row.status !== "initiated") return res.status(409).json({ message: "Deposit session already finalized." });
+    if (!confirmReceived) {
+      await markSaasDepositFailed(depositId);
+      return res.json({ ok: true, status: "failed" });
+    }
+    const applied = await applySuccessfulSaasDeposit(depositId);
+    await query(
+      `UPDATE platform_saas_deposit_sessions
+       SET verified_by = $1, verified_at = NOW(), evidence_json = COALESCE(evidence_json, '{}'::jsonb) || jsonb_build_object('reviewNote', $2)
+       WHERE deposit_id = $3::uuid`,
+      [req.user.sub, String(note || "").slice(0, 1500), depositId]
+    );
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "platform.billing.manual_intent_confirmed",
+      entityType: "platform_saas_deposit",
+      entityId: depositId,
+      details: { methodType: row.methodType, appliedOk: Boolean(applied?.ok), note: String(note || "").slice(0, 500) }
+    });
+    return res.json({ ok: true, status: "completed", subscription: applied?.subscription || null });
   }
 );
 
@@ -3207,7 +3398,7 @@ app.get(
     if (!ispId) return;
     const { depositId } = req.params;
     const local = await query(
-      "SELECT id, deposit_id AS \"depositId\", status, amount, currency, provider FROM platform_saas_deposit_sessions WHERE deposit_id = $1::uuid AND isp_id = $2",
+      "SELECT id, deposit_id AS \"depositId\", status, amount, currency, provider, method_type AS \"methodType\" FROM platform_saas_deposit_sessions WHERE deposit_id = $1::uuid AND isp_id = $2",
       [depositId, ispId]
     );
     if (!local.rows[0]) return res.status(404).json({ message: "Deposit session not found" });

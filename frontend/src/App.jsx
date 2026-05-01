@@ -1354,12 +1354,28 @@ function App() {
   const [teamImportReport, setTeamImportReport] = useState(null);
   const [lastPortalIssue, setLastPortalIssue] = useState(null);
   const [saasPayForm, setSaasPayForm] = useState({
+    methodType: "mobile_money",
     currency: "CDF",
     phoneNumber: "",
     networkKey: "orange",
-    packageId: ""
+    packageId: "",
+    externalRef: "",
+    payerContact: "",
+    amountUsd: "",
+    collectorName: "",
+    receiptNumber: "",
+    collectionLocation: "",
+    bankName: "",
+    accountName: "",
+    accountNumber: "",
+    processorName: "",
+    cardLast4: "",
+    authCode: "",
+    walletNetwork: "",
+    walletAddress: ""
   });
   const [saasDepositResult, setSaasDepositResult] = useState(null);
+  const [platformBillingMethods, setPlatformBillingMethods] = useState([]);
   const [pawapayNetworks, setPawapayNetworks] = useState(DEFAULT_PAWAPAY_NETWORKS);
   const [withdrawalForm, setWithdrawalForm] = useState({
     amountUsd: "",
@@ -1391,6 +1407,16 @@ function App() {
     message: "Message de test McBuleli."
   });
   const availablePawapayNetworks = pawapayNetworks.length ? pawapayNetworks : DEFAULT_PAWAPAY_NETWORKS;
+  useEffect(() => {
+    if (!platformBillingMethods.length) return;
+    const allowed = platformBillingMethods
+      .map((m) => m.methodType)
+      .filter((mt) => ["mobile_money", "cash", "bank_transfer", "visa_card", "crypto_wallet", "binance_pay"].includes(mt));
+    if (!allowed.length) return;
+    if (!allowed.includes(saasPayForm.methodType)) {
+      setSaasPayForm((prev) => ({ ...prev, methodType: allowed[0] }));
+    }
+  }, [platformBillingMethods, saasPayForm.methodType]);
 
   const dashboardLayoutStacked = useMediaQuery("(max-width: 1200px)");
   const isMobileShell = useMediaQuery("(max-width: 899px)");
@@ -1438,18 +1464,20 @@ function App() {
         setIsps([]);
         setSelectedIspId(sid);
         try {
-          const [packages, platformSubs, snap, networks, withdrawalData] = await Promise.all([
+          const [packages, platformSubs, snap, networks, withdrawalData, billingMethodsData] = await Promise.all([
             api.getPlatformPackages(),
             api.getPlatformSubscriptions(sid),
             api.getPlatformBillingStatus(sid),
             api.getPawapayNetworks(),
-            api.getWithdrawals(sid)
+            api.getWithdrawals(sid),
+            api.getPlatformBillingPaymentMethods(sid).catch(() => [])
           ]);
           setPlatformPackages(packages);
           setPlatformSubscriptions(platformSubs);
           setPlatformBillingStatus(snap);
           setPawapayNetworks(Array.isArray(networks) && networks.length ? networks : DEFAULT_PAWAPAY_NETWORKS);
           setWithdrawals(Array.isArray(withdrawalData?.items) ? withdrawalData.items : []);
+          setPlatformBillingMethods(Array.isArray(billingMethodsData) ? billingMethodsData : []);
         } catch (_e) {
           /* billing endpoints stay reachable */
         }
@@ -1719,8 +1747,15 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         } catch (_e) {
           setPlatformBillingStatus(null);
         }
+        try {
+          const methods = await api.getPlatformBillingPaymentMethods(activeIspId);
+          setPlatformBillingMethods(Array.isArray(methods) ? methods : []);
+        } catch (_e) {
+          setPlatformBillingMethods([]);
+        }
       } else {
         setPlatformBillingStatus(null);
+        setPlatformBillingMethods([]);
       }
       if (brand) {
         setBrandingForm({
@@ -2391,16 +2426,64 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
       return;
     }
     try {
-      const data = await api.initiatePlatformDeposit(selectedIspId, {
-        currency: saasPayForm.currency,
-        phoneNumber: saasPayForm.phoneNumber,
-        networkKey: saasPayForm.networkKey,
-        packageId: saasPayForm.packageId || undefined
-      });
+      let data;
+      if (saasPayForm.methodType === "mobile_money") {
+        data = await api.initiatePlatformDeposit(selectedIspId, {
+          methodType: "mobile_money",
+          currency: saasPayForm.currency,
+          phoneNumber: saasPayForm.phoneNumber,
+          networkKey: saasPayForm.networkKey,
+          packageId: saasPayForm.packageId || undefined
+        });
+      } else {
+        const evidence = {};
+        if (saasPayForm.methodType === "cash") {
+          evidence.collectorName = saasPayForm.collectorName;
+          evidence.receiptNumber = saasPayForm.receiptNumber;
+          evidence.collectionLocation = saasPayForm.collectionLocation;
+        }
+        if (saasPayForm.methodType === "bank_transfer") {
+          evidence.bankName = saasPayForm.bankName;
+          evidence.accountName = saasPayForm.accountName;
+          evidence.accountNumber = saasPayForm.accountNumber;
+        }
+        if (saasPayForm.methodType === "visa_card") {
+          evidence.processorName = saasPayForm.processorName;
+          evidence.cardLast4 = saasPayForm.cardLast4;
+          evidence.authCode = saasPayForm.authCode;
+        }
+        if (saasPayForm.methodType === "crypto_wallet" || saasPayForm.methodType === "binance_pay") {
+          evidence.walletNetwork = saasPayForm.walletNetwork;
+          evidence.walletAddress = saasPayForm.walletAddress;
+        }
+        data = await api.createPlatformManualBillingIntent(selectedIspId, {
+          packageId: saasPayForm.packageId || undefined,
+          methodType: saasPayForm.methodType,
+          externalRef: saasPayForm.externalRef,
+          payerContact: saasPayForm.payerContact || undefined,
+          amountUsd: saasPayForm.amountUsd || undefined,
+          evidence
+        });
+      }
       setSaasDepositResult(data);
       setNotice(data.message || "Dépôt initié.");
     } catch (err) {
       setError(audienceErr(err.message || "Échec du démarrage du dépôt."));
+    }
+  }
+
+  async function onConfirmManualPlatformDeposit() {
+    setError("");
+    setNotice("");
+    if (!selectedIspId || !saasDepositResult?.depositId) return;
+    try {
+      await api.confirmPlatformManualBillingIntent(selectedIspId, saasDepositResult.depositId, {
+        confirmReceived: true
+      });
+      setNotice(t("Paiement confirmé manuellement. Abonnement mis à jour.", "Manual payment confirmed. Subscription updated."));
+      await refresh();
+    } catch (err) {
+      setError(audienceErr(err.message || "Impossible de confirmer ce paiement manuel."));
     }
   }
 
@@ -3791,12 +3874,12 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
         return (
           <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
             <section className={`panel ${locked ? "error" : ""}`} id="mcbuleli-billing">
-            <h2>{t("Abonnement McBuleli (Mobile Money)", "McBuleli subscription (Mobile Money)")}</h2>
+            <h2>{t("Abonnement McBuleli (paiements standards)", "McBuleli subscription (standard payments)")}</h2>
             {locked ? (
               <p>
                 {t(
-                  "Cet espace est verrouillé jusqu'au paiement mensuel. Utilisez le formulaire ci-dessous (CDF ou USD), puis cliquez sur « Vérifier le paiement » après avoir payé.",
-                  "This workspace is locked until monthly payment is received. Use the form below (CDF or USD), then click \"Check payment status\" after payment."
+                  "Cet espace est verrouillé jusqu'au paiement mensuel. Choisissez une méthode de paiement configurée, puis suivez la validation étape par étape.",
+                  "This workspace is locked until monthly payment is received. Choose a configured payment method, then follow the step-by-step validation."
                 )}
               </p>
             ) : null}
@@ -3818,7 +3901,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               user.role === "company_manager" ||
               user.role === "isp_admin") && (
               <>
-                <h3>{t("Payer par Mobile Money", "Pay with Mobile Money")}</h3>
+                <h3>{t("Initier le paiement de renouvellement", "Start renewal payment")}</h3>
                 <form onSubmit={onInitiatePlatformDeposit}>
                   <select
                     value={saasPayForm.packageId}
@@ -3837,6 +3920,29 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                         </option>
                       ))}
                   </select>
+                  <select
+                    value={saasPayForm.methodType}
+                    onChange={(e) => setSaasPayForm({ ...saasPayForm, methodType: e.target.value })}
+                  >
+                    {platformBillingMethods
+                      .filter((m) =>
+                        ["mobile_money", "cash", "bank_transfer", "visa_card", "crypto_wallet", "binance_pay"].includes(
+                          m.methodType
+                        )
+                      )
+                      .map((m) => (
+                        <option key={`${m.methodType}-${m.providerName}`} value={m.methodType}>
+                          {paymentMethodTypeText(m.methodType, t)} — {m.providerName}
+                        </option>
+                      ))}
+                    {!platformBillingMethods.length ? (
+                      <option value="mobile_money">
+                        {t("Aucune méthode active (configurer dans Facturation)", "No active method (configure in Billing)")}
+                      </option>
+                    ) : null}
+                  </select>
+                  {saasPayForm.methodType === "mobile_money" ? (
+                    <>
                   <select
                     value={saasPayForm.currency}
                     onChange={(e) => setSaasPayForm({ ...saasPayForm, currency: e.target.value })}
@@ -3859,16 +3965,68 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                       </option>
                     ))}
                   </select>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        placeholder={t("Référence transaction / reçu", "Transaction / receipt reference")}
+                        value={saasPayForm.externalRef}
+                        onChange={(e) => setSaasPayForm({ ...saasPayForm, externalRef: e.target.value })}
+                      />
+                      <input
+                        placeholder={t("Contact payeur (facultatif)", "Payer contact (optional)")}
+                        value={saasPayForm.payerContact}
+                        onChange={(e) => setSaasPayForm({ ...saasPayForm, payerContact: e.target.value })}
+                      />
+                      <input
+                        placeholder={t("Montant USD (facultatif)", "Amount USD (optional)")}
+                        value={saasPayForm.amountUsd}
+                        onChange={(e) => setSaasPayForm({ ...saasPayForm, amountUsd: e.target.value })}
+                      />
+                      {saasPayForm.methodType === "cash" ? (
+                        <>
+                          <input placeholder={t("Nom agent collecteur", "Collector name")} value={saasPayForm.collectorName} onChange={(e) => setSaasPayForm({ ...saasPayForm, collectorName: e.target.value })} />
+                          <input placeholder={t("N° reçu", "Receipt number")} value={saasPayForm.receiptNumber} onChange={(e) => setSaasPayForm({ ...saasPayForm, receiptNumber: e.target.value })} />
+                        </>
+                      ) : null}
+                      {saasPayForm.methodType === "bank_transfer" ? (
+                        <>
+                          <input placeholder={t("Banque", "Bank")} value={saasPayForm.bankName} onChange={(e) => setSaasPayForm({ ...saasPayForm, bankName: e.target.value })} />
+                          <input placeholder={t("Titulaire", "Account owner")} value={saasPayForm.accountName} onChange={(e) => setSaasPayForm({ ...saasPayForm, accountName: e.target.value })} />
+                          <input placeholder={t("N° compte", "Account number")} value={saasPayForm.accountNumber} onChange={(e) => setSaasPayForm({ ...saasPayForm, accountNumber: e.target.value })} />
+                        </>
+                      ) : null}
+                      {saasPayForm.methodType === "visa_card" ? (
+                        <>
+                          <input placeholder={t("Acquéreur / PSP", "Processor / PSP")} value={saasPayForm.processorName} onChange={(e) => setSaasPayForm({ ...saasPayForm, processorName: e.target.value })} />
+                          <input placeholder={t("4 derniers chiffres carte", "Card last 4 digits")} value={saasPayForm.cardLast4} onChange={(e) => setSaasPayForm({ ...saasPayForm, cardLast4: e.target.value })} />
+                          <input placeholder={t("Code autorisation", "Authorization code")} value={saasPayForm.authCode} onChange={(e) => setSaasPayForm({ ...saasPayForm, authCode: e.target.value })} />
+                        </>
+                      ) : null}
+                      {(saasPayForm.methodType === "crypto_wallet" || saasPayForm.methodType === "binance_pay") ? (
+                        <>
+                          <input placeholder={t("Réseau wallet", "Wallet network")} value={saasPayForm.walletNetwork} onChange={(e) => setSaasPayForm({ ...saasPayForm, walletNetwork: e.target.value })} />
+                          <input placeholder={t("Adresse wallet", "Wallet address")} value={saasPayForm.walletAddress} onChange={(e) => setSaasPayForm({ ...saasPayForm, walletAddress: e.target.value })} />
+                        </>
+                      ) : null}
+                    </>
+                  )}
                   <button type="submit" disabled={!selectedIspId}>
-                    {t("Payer l'abonnement mensuel", "Pay monthly subscription")}
+                    {t("Soumettre le paiement", "Submit payment")}
                   </button>
                 </form>
                 {saasDepositResult?.depositId ? (
                   <p>
                     {t("ID dépôt :", "Deposit ID:")} {saasDepositResult.depositId}{" "}
-                    <button type="button" onClick={onPollPlatformDeposit}>
-                      {t("Vérifier le paiement", "Check payment status")}
-                    </button>
+                    {saasPayForm.methodType === "mobile_money" ? (
+                      <button type="button" onClick={onPollPlatformDeposit}>
+                        {t("Vérifier le paiement", "Check payment status")}
+                      </button>
+                    ) : (
+                      <button type="button" onClick={onConfirmManualPlatformDeposit}>
+                        {t("Confirmer réception et activer", "Confirm receipt and activate")}
+                      </button>
+                    )}
                   </p>
                 ) : null}
               </>
@@ -3876,8 +4034,8 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             {billing.subscription?.status === "trialing" ? (
               <p style={{ fontSize: "0.9rem", color: "var(--mb-muted)" }}>
                 {t(
-                  "Pour changer de formule, choisissez le nouveau plan dans le formulaire de paiement Mobile Money. La formule sera appliquée seulement après confirmation Pawapay.",
-                  "To change plan, select the new tier in the Mobile Money payment form. The tier is applied only after Pawapay confirms payment."
+                  "Pour changer de formule, choisissez le nouveau plan puis une méthode de paiement configurée. L’activation est appliquée après validation du paiement.",
+                  "To switch plan, select the new tier then a configured payment method. Activation is applied after payment validation."
                 )}
               </p>
             ) : null}

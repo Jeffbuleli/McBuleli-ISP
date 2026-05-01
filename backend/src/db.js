@@ -558,6 +558,24 @@ export async function initDb() {
   await query(
     "ALTER TABLE platform_saas_deposit_sessions ADD COLUMN IF NOT EXISTS target_package_id UUID NULL REFERENCES platform_packages(id) ON DELETE SET NULL;"
   );
+  await query(
+    "ALTER TABLE platform_saas_deposit_sessions ADD COLUMN IF NOT EXISTS method_type TEXT NOT NULL DEFAULT 'mobile_money' CHECK (method_type IN ('mobile_money', 'cash', 'bank_transfer', 'visa_card', 'crypto_wallet', 'binance_pay'));"
+  );
+  await query(
+    "ALTER TABLE platform_saas_deposit_sessions ADD COLUMN IF NOT EXISTS external_ref TEXT NULL;"
+  );
+  await query(
+    "ALTER TABLE platform_saas_deposit_sessions ADD COLUMN IF NOT EXISTS payer_contact TEXT NULL;"
+  );
+  await query(
+    "ALTER TABLE platform_saas_deposit_sessions ADD COLUMN IF NOT EXISTS evidence_json JSONB NOT NULL DEFAULT '{}'::jsonb;"
+  );
+  await query(
+    "ALTER TABLE platform_saas_deposit_sessions ADD COLUMN IF NOT EXISTS verified_by UUID NULL REFERENCES users(id) ON DELETE SET NULL;"
+  );
+  await query(
+    "ALTER TABLE platform_saas_deposit_sessions ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP NULL;"
+  );
   await query("CREATE INDEX IF NOT EXISTS idx_platform_saas_deposits_isp ON platform_saas_deposit_sessions (isp_id);");
 
   await query(`
