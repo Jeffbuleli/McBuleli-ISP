@@ -624,6 +624,25 @@ export async function initDb() {
     "ALTER TABLE isp_branding ADD COLUMN IF NOT EXISTS wifi_zone_public BOOLEAN NOT NULL DEFAULT FALSE;"
   );
   await query("ALTER TABLE isp_branding ALTER COLUMN wifi_zone_public SET DEFAULT TRUE;");
+  await query(`
+    CREATE TABLE IF NOT EXISTS app_runtime_flags (
+      key TEXT PRIMARY KEY,
+      value TEXT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+  const wifiZoneBackfillFlag = "wifi_zone_public_backfill_2026_05_01";
+  const wifiZoneBackfillDone = await query(
+    "SELECT key FROM app_runtime_flags WHERE key = $1",
+    [wifiZoneBackfillFlag]
+  );
+  if (!wifiZoneBackfillDone.rows[0]) {
+    await query("UPDATE isp_branding SET wifi_zone_public = TRUE WHERE wifi_zone_public = FALSE;");
+    await query(
+      "INSERT INTO app_runtime_flags (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING",
+      [wifiZoneBackfillFlag, "done"]
+    );
+  }
 
   await query(`
     CREATE TABLE IF NOT EXISTS isp_expenses (
