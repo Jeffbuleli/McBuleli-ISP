@@ -71,9 +71,33 @@ function chatMessageRichText(full) {
   return out.length ? out : "";
 }
 
-function initialsFromUsername(name) {
-  const t = String(name || "u").trim().slice(0, 2);
-  return t.toUpperCase();
+/** Initiales pour l’avatar : nom complet si disponible, sinon pseudo chat. */
+function chatAvatarInitials({ chatUsername, fullName }) {
+  const fn = String(fullName || "").trim();
+  if (fn) {
+    const parts = fn.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  }
+  const u = String(chatUsername || "").trim();
+  if (u.length >= 2) return u.slice(0, 2).toUpperCase();
+  if (u.length === 1) return u.toUpperCase();
+  return "?";
+}
+
+function TeamChatAvatar({ photoUrl, chatUsername, fullName, isMe, className = "" }) {
+  const [imgBroken, setImgBroken] = useState(false);
+  const src = photoUrl ? publicAssetUrl(photoUrl) : "";
+  const initials = chatAvatarInitials({ chatUsername, fullName });
+  const imgCls = `dashboard-team-chat-msg__avatar${isMe ? " dashboard-team-chat-msg__avatar--me" : ""}${className ? ` ${className}` : ""}`;
+  const fbCls = `dashboard-team-chat-msg__avatarFallback${isMe ? " dashboard-team-chat-msg__avatarFallback--me" : ""}${className ? ` ${className}` : ""}`;
+
+  if (src && !imgBroken) {
+    return (
+      <img src={src} alt="" className={imgCls} onError={() => setImgBroken(true)} loading="lazy" decoding="async" />
+    );
+  }
+  return <span className={fbCls}>{initials}</span>;
 }
 
 /** Default auto username from backend: u + 32 hex (no dashes) */
@@ -106,10 +130,12 @@ export default function TeamChatPanel({
   const [mentionMembers, setMentionMembers] = useState([]);
   const [mentionHl, setMentionHl] = useState(0);
   const textareaRef = useRef(null);
+  const chatAvatarInputRef = useRef(null);
 
   /** Compact chat handle editor when still on default backend username */
   const [handleDraft, setHandleDraft] = useState("");
   const [handleBusy, setHandleBusy] = useState(false);
+  const [chatAvatarBusy, setChatAvatarBusy] = useState(false);
   /** Desktop: position panel under measured sticky header (see updateDesktopDock). */
   const [desktopDock, setDesktopDock] = useState(null);
   const showHandleBanner = user && isDefaultChatUsername(user.chatUsername);
@@ -373,7 +399,7 @@ export default function TeamChatPanel({
       const out = await api.patchChatProfile({ chatUsername: h });
       onChatProfileSaved?.({
         chatUsername: out.chatUsername,
-        chatAvatarUrl: out.chatAvatarUrl
+        chatAvatarUrl: out.chatAvatarUrl ?? null
       });
     } catch (_e) {
       setErr(
@@ -383,6 +409,50 @@ export default function TeamChatPanel({
       );
     } finally {
       setHandleBusy(false);
+    }
+  }
+
+  async function onChatAvatarFileChange(e) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f || chatAvatarBusy) return;
+    if (!f.type.startsWith("image/")) {
+      setErr(isEn ? "Please choose an image file." : "Choisissez un fichier image.");
+      return;
+    }
+    if (f.size > 512 * 1024) {
+      setErr(isEn ? "Image too large (max 512 KB)." : "Image trop volumineuse (max 512 Ko).");
+      return;
+    }
+    setChatAvatarBusy(true);
+    setErr("");
+    try {
+      const out = await api.uploadChatAvatar(f);
+      onChatProfileSaved?.({
+        chatUsername: out.chatUsername,
+        chatAvatarUrl: out.chatAvatarUrl ?? null
+      });
+    } catch (err) {
+      setErr(sanitizeApiErrorForAudience(String(err?.message || ""), user, isEn));
+    } finally {
+      setChatAvatarBusy(false);
+    }
+  }
+
+  async function onClearChatAvatarClick() {
+    if (chatAvatarBusy) return;
+    setChatAvatarBusy(true);
+    setErr("");
+    try {
+      const out = await api.deleteChatAvatar();
+      onChatProfileSaved?.({
+        chatUsername: out.chatUsername,
+        chatAvatarUrl: out.chatAvatarUrl ?? null
+      });
+    } catch (err) {
+      setErr(sanitizeApiErrorForAudience(String(err?.message || ""), user, isEn));
+    } finally {
+      setChatAvatarBusy(false);
     }
   }
 
@@ -427,6 +497,59 @@ export default function TeamChatPanel({
           <IconX width={20} height={20} />
         </button>
       </div>
+
+      {user ? (
+        <div className="dashboard-team-chat-profile-photo">
+          <input
+            ref={chatAvatarInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="visually-hidden"
+            aria-hidden
+            tabIndex={-1}
+            onChange={(e) => void onChatAvatarFileChange(e)}
+          />
+          <div className="dashboard-team-chat-profile-photo__preview" aria-hidden>
+            <TeamChatAvatar
+              photoUrl={user.chatAvatarUrl}
+              chatUsername={user.chatUsername}
+              fullName={user.fullName}
+              isMe
+              className="dashboard-team-chat-profile-photo__avatar"
+            />
+          </div>
+          <div className="dashboard-team-chat-profile-photo__body">
+            <p className="dashboard-team-chat-profile-photo__hint">
+              {t(
+                "Photo visible dans la discussion équipe. Sans photo, vos initiales sont affichées.",
+                "Photo shown in team chat. Without a photo, your initials are shown."
+              )}
+            </p>
+            <div className="dashboard-team-chat-profile-photo__actions">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={chatAvatarBusy}
+                onClick={() => chatAvatarInputRef.current?.click()}
+              >
+                {chatAvatarBusy
+                  ? t("Envoi…", "Uploading…")
+                  : t("Ajouter ou changer la photo", "Add or change photo")}
+              </button>
+              {user.chatAvatarUrl ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary-outline btn-sm"
+                  disabled={chatAvatarBusy}
+                  onClick={() => void onClearChatAvatarClick()}
+                >
+                  {t("Retirer la photo", "Remove photo")}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {showHandleBanner ? (
         <form className="dashboard-team-chat-handle" onSubmit={saveHandle}>
@@ -496,9 +619,6 @@ export default function TeamChatPanel({
                     })
                   : "—";
 
-              const avSrc = publicAssetUrl(m.sender?.chatAvatarUrl || "");
-              const meAvatarSrc = publicAssetUrl(user?.chatAvatarUrl || "");
-
               const roleLabel = formatStaffRole(m.sender?.role, isEn);
 
               return (
@@ -511,19 +631,19 @@ export default function TeamChatPanel({
                   <div className="dashboard-team-chat-msg__avatarWrap" aria-hidden={groupSame}>
                     {!groupSame ? (
                       isMe ? (
-                        meAvatarSrc ? (
-                          <img src={meAvatarSrc} alt="" className="dashboard-team-chat-msg__avatar dashboard-team-chat-msg__avatar--me" />
-                        ) : (
-                          <span className="dashboard-team-chat-msg__avatarFallback dashboard-team-chat-msg__avatarFallback--me">
-                            {initialsFromUsername(user?.chatUsername || user?.fullName)}
-                          </span>
-                        )
-                      ) : avSrc ? (
-                        <img src={avSrc} alt="" className="dashboard-team-chat-msg__avatar" />
+                        <TeamChatAvatar
+                          photoUrl={user?.chatAvatarUrl}
+                          chatUsername={user?.chatUsername}
+                          fullName={user?.fullName}
+                          isMe
+                        />
                       ) : (
-                        <span className="dashboard-team-chat-msg__avatarFallback">
-                          {initialsFromUsername(m.sender?.chatUsername)}
-                        </span>
+                        <TeamChatAvatar
+                          photoUrl={m.sender?.chatAvatarUrl}
+                          chatUsername={m.sender?.chatUsername}
+                          fullName={m.sender?.fullName}
+                          isMe={false}
+                        />
                       )
                     ) : (
                       <span className="dashboard-team-chat-msg__avatarPlaceholder" />

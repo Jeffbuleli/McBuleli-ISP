@@ -1159,7 +1159,7 @@ function App() {
     durationDays: 30
   });
   const [statsPeriod, setStatsPeriod] = useState({
-    from: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
+    from: new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10),
     to: new Date().toISOString().slice(0, 10)
   });
   const [brandingForm, setBrandingForm] = useState({

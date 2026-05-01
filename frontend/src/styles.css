@@ -1031,6 +1031,47 @@ a:hover {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.dashboard-team-chat-profile-photo {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dashboard-team-chat-profile-photo__preview {
+  flex: 0 0 auto;
+}
+
+.dashboard-team-chat-profile-photo .dashboard-team-chat-profile-photo__avatar.dashboard-team-chat-msg__avatar,
+.dashboard-team-chat-profile-photo .dashboard-team-chat-profile-photo__avatar.dashboard-team-chat-msg__avatarFallback {
+  width: 40px;
+  height: 40px;
+}
+
+.dashboard-team-chat-profile-photo .dashboard-team-chat-profile-photo__avatar.dashboard-team-chat-msg__avatarFallback {
+  font-size: 0.84rem;
+}
+
+.dashboard-team-chat-profile-photo__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dashboard-team-chat-profile-photo__hint {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--mb-muted);
+  line-height: 1.4;
+}
+
+.dashboard-team-chat-profile-photo__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .dashboard-team-chat-handle {
   padding: 10px 12px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);

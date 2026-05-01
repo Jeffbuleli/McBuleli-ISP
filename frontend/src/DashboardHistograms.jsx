@@ -136,14 +136,15 @@ export default function DashboardHistograms({
   telemetrySnapshots
 }) {
   const daily = Array.isArray(networkStats?.dailyUsage) ? networkStats.dailyUsage : [];
-
-  const dLabels = daily.slice(-14).map((r) => formatShortDate(r.date));
-  const dDevices = daily.slice(-14).map((r) => r.connectedDevices ?? 0);
-  const dBw = daily.slice(-14).map((r) => r.bandwidthGb ?? 0);
+  /** Au plus 7 jours affichés : évite les histogrammes illisibles si la période stats couvre un mois ou plus. */
+  const dailyWindow = daily.slice(-7);
+  const dLabels = dailyWindow.map((r) => formatShortDate(r.date));
+  const dDevices = dailyWindow.map((r) => r.connectedDevices ?? 0);
+  const dBw = dailyWindow.map((r) => r.bandwidthGb ?? 0);
 
   const tel = [...(telemetrySnapshots || [])]
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-    .slice(-12);
+    .slice(-7);
   const telLabels = tel.map((r, i) => `${i + 1}`);
   const telVals = tel.map((r) => {
     if (r.connectedDevices != null) return r.connectedDevices;
@@ -168,7 +169,7 @@ export default function DashboardHistograms({
     if (!day) continue;
     invByDay[day] = (invByDay[day] || 0) + Number(row.amountUsd || 0);
   }
-  const invDays = Object.keys(invByDay).sort();
+  const invDays = Object.keys(invByDay).sort().slice(-7);
   const invLabels = invDays.map(formatShortDate);
   const invVals = invDays.map((d) => invByDay[d]);
 
@@ -186,8 +187,8 @@ export default function DashboardHistograms({
       <h2>{t("Performance & activité", "Performance & activity")}</h2>
       <p className="dash-hist-lead">
         {t(
-          "Vue synthétique : réseau, finances et équipe. Le détail complet reste dans les sections du menu.",
-          "At-a-glance network, revenue, and team view; full detail lives under each menu section."
+          "Vue synthétique : réseau, finances et équipe. Les séries jour par jour et la télémétrie montrent au plus 7 points (fin de la période sélectionnée dans les filtres stats). Le détail complet reste dans les sections du menu.",
+          "At-a-glance network, revenue, and team view. Day-by-day series and telemetry show at most 7 points (the end of your selected stats period). Full detail lives under each menu section."
         )}
       </p>
       <div className="dash-hist-grid">
@@ -206,12 +207,16 @@ export default function DashboardHistograms({
             format={(v, i) => (i === 3 ? Number(v).toFixed(2) : String(Math.round(v)))}
           />
         ) : null}
-        {daily.length ? (
+        {dailyWindow.length ? (
           <BarGroup
             title={t("Sessions réseau (quotidien)", "Network sessions (daily)")}
-            subtitle={networkStats?.period
-              ? `${networkStats.period.from} → ${networkStats.period.to}`
-              : ""}
+            subtitle={
+              dailyWindow.length && dailyWindow[0]?.date && dailyWindow[dailyWindow.length - 1]?.date
+                ? `${String(dailyWindow[0].date).slice(0, 10)} → ${String(dailyWindow[dailyWindow.length - 1].date).slice(0, 10)}`
+                : networkStats?.period
+                  ? `${networkStats.period.from} → ${networkStats.period.to}`
+                  : ""
+            }
             tierMode="temporal"
             labels={dLabels}
             values={dDevices}
@@ -240,7 +245,7 @@ export default function DashboardHistograms({
             ]}
           />
         )}
-        {daily.length ? (
+        {dailyWindow.length ? (
           <BarGroup
             title={t("Volume trafic agrégé (Go / jour)", "Aggregated traffic (GB / day)")}
             tierMode="temporal"

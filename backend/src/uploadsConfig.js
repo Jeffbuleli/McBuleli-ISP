@@ -13,12 +13,21 @@ export const platformBannerUploadDir = process.env.PLATFORM_BANNER_UPLOAD_DIR
   ? path.resolve(process.env.PLATFORM_BANNER_UPLOAD_DIR)
   : path.join(__dirname, "..", "uploads", "platform-banners");
 
+/** Team chat profile pictures (one file per user id). */
+export const chatAvatarUploadDir = process.env.CHAT_AVATAR_UPLOAD_DIR
+  ? path.resolve(process.env.CHAT_AVATAR_UPLOAD_DIR)
+  : path.join(__dirname, "..", "uploads", "chat-avatars");
+
 export function ensureBrandingUploadDir() {
   fs.mkdirSync(brandingUploadDir, { recursive: true });
 }
 
 export function ensurePlatformBannerUploadDir() {
   fs.mkdirSync(platformBannerUploadDir, { recursive: true });
+}
+
+export function ensureChatAvatarUploadDir() {
+  fs.mkdirSync(chatAvatarUploadDir, { recursive: true });
 }
 
 /** @param {string} ispId */
@@ -41,5 +50,16 @@ export async function clearPlatformBannerFiles(slot) {
     files
       .filter((f) => f.startsWith(prefix))
       .map((f) => fs.promises.unlink(path.join(platformBannerUploadDir, f)).catch(() => {}))
+  );
+}
+
+/** @param {string} userId */
+export async function clearChatAvatarFiles(userId) {
+  ensureChatAvatarUploadDir();
+  const files = await fs.promises.readdir(chatAvatarUploadDir);
+  await Promise.all(
+    files
+      .filter((f) => f.startsWith(`${userId}.`))
+      .map((f) => fs.promises.unlink(path.join(chatAvatarUploadDir, f)).catch(() => {}))
   );
 }

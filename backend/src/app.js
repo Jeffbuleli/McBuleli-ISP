@@ -56,9 +56,11 @@ import multer from "multer";
 import { parseCsv, rowsToCsv } from "./csvUtils.js";
 import {
   brandingUploadDir,
+  chatAvatarUploadDir,
   clearBrandingLogoFiles,
   clearPlatformBannerFiles,
   ensureBrandingUploadDir,
+  ensureChatAvatarUploadDir,
   ensurePlatformBannerUploadDir,
   platformBannerUploadDir
 } from "./uploadsConfig.js";
@@ -644,6 +646,24 @@ app.get("/api/public/branding-logo/:ispId", rlPublicRead, async (req, res) => {
       await fs.promises.access(fp, fs.constants.R_OK);
       res.type(BRANDING_LOGO_MIME[ext]);
       res.set("Cache-Control", "public, max-age=86400");
+      return res.sendFile(path.resolve(fp));
+    } catch {
+      /* try next extension */
+    }
+  }
+  return res.status(404).end();
+});
+
+app.get("/api/public/chat-avatar/:userId", rlPublicRead, async (req, res) => {
+  const { userId } = req.params;
+  if (!isUuidString(userId)) return res.status(400).end();
+  ensureChatAvatarUploadDir();
+  for (const ext of Object.keys(BRANDING_LOGO_MIME)) {
+    const fp = path.join(chatAvatarUploadDir, `${userId}${ext}`);
+    try {
+      await fs.promises.access(fp, fs.constants.R_OK);
+      res.type(BRANDING_LOGO_MIME[ext]);
+      res.set("Cache-Control", "private, max-age=120");
       return res.sendFile(path.resolve(fp));
     } catch {
       /* try next extension */

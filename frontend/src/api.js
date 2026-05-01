@@ -568,6 +568,33 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(payload)
     }),
+  uploadChatAvatar: async (file) => {
+    const form = new FormData();
+    form.append("photo", file);
+    const headers = {};
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    let response;
+    try {
+      response = await fetch(`${API_URL}/auth/chat-profile/avatar`, {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } catch (_err) {
+      throw new Error(
+        `Impossible de joindre l'API (${API_URL}). Vérifiez que le backend est lancé et que VITE_API_URL est correcte.`
+      );
+    }
+    if (!response.ok) {
+      const err = await extractErrorPayload(response);
+      throw new Error(buildApiErrorMessage(response.status, err));
+    }
+    return response.json();
+  },
+  deleteChatAvatar: () =>
+    request("/auth/chat-profile/avatar", {
+      method: "DELETE"
+    }),
   updateBranding: (ispId, payload) =>
     request(withIsp("/branding", ispId), {
       method: "POST",

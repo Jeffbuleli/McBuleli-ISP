@@ -1,6 +1,27 @@
+import fs from "fs";
+import path from "path";
+import multer from "multer";
 import { authenticate as authenticateJwt, requireRoles, resolveIspId } from "./auth.js";
 import { enforcePlatformAccess } from "./platformAccess.js";
 import { query } from "./db.js";
+import {
+  chatAvatarUploadDir,
+  clearChatAvatarFiles,
+  ensureChatAvatarUploadDir
+} from "./uploadsConfig.js";
+
+const uploadChatAvatarMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 512 * 1024 }
+});
+
+const CHAT_AVATAR_MIME_TO_EXT = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/jpg": ".jpg",
+  "image/webp": ".webp",
+  "image/gif": ".gif"
+};
 
 function authenticate(req, res, next) {
   authenticateJwt(req, res, () => enforcePlatformAccess(req, res, next));
@@ -111,6 +132,50 @@ async function fetchSeenCounts(ispId, messageIds, senderIds, viewerId) {
  * Registers team chat REST routes under /api (same auth + platform middleware as dashboard).
  */
 export function registerTeamChatRoutes(app) {
+  app.post(
+    "/api/auth/chat-profile/avatar",
+    authenticate,
+    requireRoles(...TEAM_CHAT_ROLES),
+    uploadChatAvatarMemory.single("photo"),
+    async (req, res) => {
+      const uid = req.user.sub;
+      if (!req.file?.buffer) {
+        return res.status(400).json({ message: "Choose an image file (photo field)." });
+      }
+      const ext = CHAT_AVATAR_MIME_TO_EXT[req.file.mimetype];
+      if (!ext) {
+        return res.status(400).json({ message: "Avatar must be PNG, JPEG, WebP or GIF." });
+      }
+      await clearChatAvatarFiles(uid);
+      ensureChatAvatarUploadDir();
+      const fp = path.join(chatAvatarUploadDir, `${uid}${ext}`);
+      await fs.promises.writeFile(fp, req.file.buffer);
+      const publicPath = `/api/public/chat-avatar/${uid}`;
+      await query(`UPDATE users SET chat_avatar_url = $1 WHERE id = $2::uuid`, [publicPath, uid]);
+      const again = await query(
+        `SELECT chat_username AS "chatUsername", chat_avatar_url AS "chatAvatarUrl" FROM users WHERE id = $1::uuid`,
+        [uid]
+      );
+      return res.json(again.rows[0]);
+    }
+  );
+
+  app.delete(
+    "/api/auth/chat-profile/avatar",
+    authenticate,
+    requireRoles(...TEAM_CHAT_ROLES),
+    async (req, res) => {
+      const uid = req.user.sub;
+      await clearChatAvatarFiles(uid);
+      await query(`UPDATE users SET chat_avatar_url = NULL WHERE id = $1::uuid`, [uid]);
+      const again = await query(
+        `SELECT chat_username AS "chatUsername", chat_avatar_url AS "chatAvatarUrl" FROM users WHERE id = $1::uuid`,
+        [uid]
+      );
+      return res.json(again.rows[0]);
+    }
+  );
+
   app.patch(
     "/api/auth/chat-profile",
     authenticate,
@@ -154,8 +219,12 @@ export function registerTeamChatRoutes(app) {
           nextAv = null;
         } else {
           const u = String(nextAv).trim().slice(0, 2048);
-          if (!/^https:\/\//i.test(u)) {
-            return res.status(400).json({ message: "chatAvatarUrl must be an https URL." });
+          const okHttps = /^https:\/\//i.test(u);
+          const okHosted = /^\/api\/public\/chat-avatar\//i.test(u);
+          if (!okHttps && !okHosted) {
+            return res.status(400).json({
+              message: "chatAvatarUrl must be an https URL, a hosted platform path (/api/public/chat-avatar/…), or empty to clear."
+            });
           }
           nextAv = u;
         }
