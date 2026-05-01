@@ -4121,6 +4121,7 @@ api.getPaymentNotifications(activeIspId)
             isFieldAgent={isFieldAgent}
             dashboardChatIspId={dashboardChatIspId}
             teamChatUnread={teamChatUnread + paymentNotifUnread}
+            onChatProfileSaved={(p) => setUser((u) => (u ? { ...u, ...p } : u))}
             onToggleChat={() => setTeamChatOpen((o) => !o)}
             onOpenSettings={() => {
               if (isMobileShell) {
@@ -4222,6 +4223,26 @@ api.getPaymentNotifications(activeIspId)
               </section>
             ) : null}
 
+            {!loading && selectedIspId ? (
+              <Suspense
+                fallback={
+                  <p className="app-meta dashboard-suspense-fallback">
+                    {t("Préparation des graphiques…", "Preparing charts…")}
+                  </p>
+                }
+              >
+                <DashboardHistograms
+                  t={t}
+                  isEn={isEn}
+                  globalSummary={user.role === "system_owner" ? superDashboard : null}
+                  networkStats={networkStats}
+                  cashbox={dashboard?.cashboxMonth || dashboard?.cashbox}
+                  users={users}
+                  telemetrySnapshots={telemetrySnapshots}
+                />
+              </Suspense>
+            ) : null}
+
             <section className="panel dashboard-analytics-period" id="reports">
               <h2>{t("Analyse — fenêtre temporelle", "Analytics — time window")}</h2>
               <p className="app-meta dashboard-analytics-period__lead">
@@ -4284,26 +4305,6 @@ api.getPaymentNotifications(activeIspId)
                 </p>
               </details>
             </section>
-
-            {!loading && selectedIspId ? (
-              <Suspense
-                fallback={
-                  <p className="app-meta dashboard-suspense-fallback">
-                    {t("Préparation des graphiques…", "Preparing charts…")}
-                  </p>
-                }
-              >
-                <DashboardHistograms
-                  t={t}
-                  isEn={isEn}
-                  globalSummary={user.role === "system_owner" ? superDashboard : null}
-                  networkStats={networkStats}
-                  cashbox={dashboard?.cashboxMonth || dashboard?.cashbox}
-                  users={users}
-                  telemetrySnapshots={telemetrySnapshots}
-                />
-              </Suspense>
-            ) : null}
 
             {selectedIspId ? (
               <>

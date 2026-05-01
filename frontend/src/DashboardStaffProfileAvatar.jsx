@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { api, publicAssetUrl } from "./api.js";
 import { getStoredProfilePhotoDataUrl, setStoredProfilePhotoDataUrl } from "./profilePhotoStorage.js";
 
 function initialsFromName(fullName) {
@@ -13,12 +14,26 @@ function initialsFromName(fullName) {
 
 const MAX_PHOTO_BYTES = 450 * 1024;
 
-export default function DashboardStaffProfileAvatar({ userId, fullName, t }) {
+export default function DashboardStaffProfileAvatar({
+  userId,
+  fullName,
+  chatAvatarUrl,
+  t,
+  onChatProfileSaved
+}) {
   const inputId = useId();
   const fileRef = useRef(null);
   const storageKey = userId || "session";
-  const [dataUrl, setDataUrl] = useState(() => getStoredProfilePhotoDataUrl(storageKey));
+  const remoteSrc = chatAvatarUrl ? publicAssetUrl(chatAvatarUrl) : "";
+  const [localDataUrl, setLocalDataUrl] = useState(() => getStoredProfilePhotoDataUrl(storageKey));
   const [menuOpen, setMenuOpen] = useState(false);
+  const [imgBroken, setImgBroken] = useState(false);
+
+  const displaySrc = localDataUrl || remoteSrc;
+
+  useEffect(() => {
+    setImgBroken(false);
+  }, [displaySrc]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -31,30 +46,52 @@ export default function DashboardStaffProfileAvatar({ userId, fullName, t }) {
   }, [menuOpen]);
 
   const applyFile = useCallback(
-    (file) => {
+    async (file) => {
       if (!file || !file.type.startsWith("image/")) return;
       if (file.size > MAX_PHOTO_BYTES) {
-        window.alert(
-          t("Image trop volumineuse (max. 450 Ko).", "Image too large (max 450 KB).")
-        );
+        window.alert(t("Image trop volumineuse (max. 450 Ko).", "Image too large (max 450 KB)."));
         return;
       }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const url = String(reader.result || "");
-        setDataUrl(url);
-        setStoredProfilePhotoDataUrl(storageKey, url);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const out = await api.uploadChatAvatar(file);
+        onChatProfileSaved?.({
+          chatUsername: out.chatUsername ?? undefined,
+          chatAvatarUrl: out.chatAvatarUrl ?? null
+        });
+        const reader = new FileReader();
+        reader.onload = () => {
+          const url = String(reader.result || "");
+          setLocalDataUrl(url);
+          setStoredProfilePhotoDataUrl(storageKey, url);
+        };
+        reader.readAsDataURL(file);
+      } catch (err) {
+        window.alert(
+          t(
+            "Impossible d’enregistrer la photo sur le serveur (chat). Réessayez.",
+            "Could not save the photo on the server for team chat. Try again."
+          ) + (err?.message ? ` ${err.message}` : "")
+        );
+      }
     },
-    [storageKey, t]
+    [onChatProfileSaved, storageKey, t]
   );
 
-  const clearPhoto = useCallback(() => {
-    setDataUrl("");
+  const clearPhoto = useCallback(async () => {
+    try {
+      await api.deleteChatAvatar();
+      onChatProfileSaved?.({ chatAvatarUrl: null });
+    } catch (err) {
+      window.alert(
+        t("Impossible de retirer la photo du serveur.", "Could not remove the photo on the server.") +
+          (err?.message ? ` ${err.message}` : "")
+      );
+      return;
+    }
+    setLocalDataUrl("");
     setStoredProfilePhotoDataUrl(storageKey, "");
     setMenuOpen(false);
-  }, [storageKey]);
+  }, [onChatProfileSaved, storageKey, t]);
 
   return (
     <div className="dashboard-mobile-profile">
@@ -66,21 +103,21 @@ export default function DashboardStaffProfileAvatar({ userId, fullName, t }) {
         className="visually-hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
-          applyFile(f);
+          void applyFile(f);
           e.target.value = "";
           setMenuOpen(false);
         }}
       />
       <button
         type="button"
-        className={`dashboard-mobile-avatar dashboard-mobile-avatar--btn${dataUrl ? " dashboard-mobile-avatar--photo" : ""}`}
+        className={`dashboard-mobile-avatar dashboard-mobile-avatar--btn${displaySrc ? " dashboard-mobile-avatar--photo" : ""}`}
         title={fullName}
         aria-label={t("Photo de profil", "Profile photo")}
         aria-expanded={menuOpen}
         onClick={() => setMenuOpen((v) => !v)}
       >
-        {dataUrl ? (
-          <img src={dataUrl} alt="" className="dashboard-mobile-avatar__img" />
+        {displaySrc && !imgBroken ? (
+          <img src={displaySrc} alt="" className="dashboard-mobile-avatar__img" onError={() => setImgBroken(true)} />
         ) : (
           initialsFromName(fullName)
         )}
@@ -97,12 +134,12 @@ export default function DashboardStaffProfileAvatar({ userId, fullName, t }) {
           >
             {t("Changer la photo…", "Change photo…")}
           </button>
-          {dataUrl ? (
+          {displaySrc ? (
             <button
               type="button"
               className="dashboard-mobile-profile-popover__btn dashboard-mobile-profile-popover__btn--muted"
               role="menuitem"
-              onClick={clearPhoto}
+              onClick={() => void clearPhoto()}
             >
               {t("Retirer la photo", "Remove photo")}
             </button>

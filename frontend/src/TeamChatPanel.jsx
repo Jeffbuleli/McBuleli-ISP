@@ -624,6 +624,14 @@ export default function TeamChatPanel({
             </div>
           ) : null}
           <div className="dashboard-team-chat-composer-row">
+            <div className="dashboard-team-chat-composer-avatar" aria-hidden>
+              <TeamChatAvatar
+                photoUrl={effectiveOwnChatPhoto}
+                chatUsername={user?.chatUsername}
+                fullName={user?.fullName}
+                isMe
+              />
+            </div>
             <textarea
               ref={textareaRef}
               className="dashboard-team-chat-input"

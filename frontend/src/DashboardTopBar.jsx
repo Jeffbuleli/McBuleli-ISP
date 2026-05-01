@@ -23,7 +23,8 @@ export default function DashboardTopBar({
   onLogout,
   onToggleSidebar,
   sidebarOpen,
-  isMobileShell
+  isMobileShell,
+  onChatProfileSaved
 }) {
   const categories = useMemo(
     () => buildDashboardNavCategories(t, user, isFieldAgent),
@@ -57,7 +58,13 @@ export default function DashboardTopBar({
             {sidebarOpen ? <IconX width={20} height={20} aria-hidden /> : <IconMenuHamburger width={20} height={20} aria-hidden />}
           </button>
 
-          <DashboardStaffProfileAvatar userId={user?.id || user?.email} fullName={user?.fullName} t={t} />
+          <DashboardStaffProfileAvatar
+            userId={user?.id || user?.email}
+            fullName={user?.fullName}
+            chatAvatarUrl={user?.chatAvatarUrl}
+            t={t}
+            onChatProfileSaved={onChatProfileSaved}
+          />
         </div>
 
         <div className="mb-topbar__center">

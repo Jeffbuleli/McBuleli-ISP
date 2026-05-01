@@ -861,6 +861,11 @@ a:hover {
   gap: 8px;
 }
 
+.dashboard-team-chat-composer-avatar {
+  flex: 0 0 auto;
+  padding-bottom: 4px;
+}
+
 .dashboard-team-chat-composer-wrap {
   position: relative;
 }
