@@ -3503,8 +3503,6 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
             t={t}
             user={user}
             isFieldAgent={isFieldAgent}
-            uiLang={uiLang}
-            onUiLangChange={setUiLang}
             dashboardChatIspId={dashboardChatIspId}
             teamChatUnread={teamChatUnread}
             onToggleChat={() => setTeamChatOpen((o) => !o)}

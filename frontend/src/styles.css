@@ -1398,10 +1398,6 @@ a:hover {
   gap: 8px;
 }
 
-.mb-topbar__lang {
-  flex-shrink: 0;
-}
-
 .mb-topbar__center {
   min-width: 0;
 }
@@ -5900,10 +5896,6 @@ a.public-footer-card:hover {
   margin-inline: auto;
 }
 
-.privacy-page-toolbar {
-  margin-left: auto;
-}
-
 .privacy-policy-h1 {
   margin: 8px 0 6px;
   font-size: clamp(1.6rem, 3.6vw, 2.05rem);
@@ -7577,13 +7569,13 @@ html:has(.app-shell--mobile-pwa) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: clamp(8px, 2.5vw, 18px);
   flex: 1 1 auto;
   min-width: 0;
 }
 
 .mb-table__pagenums {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   text-align: center;
   display: flex;
@@ -7595,34 +7587,34 @@ html:has(.app-shell--mobile-pwa) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.28em;
-  padding: 6px 12px;
+  gap: 0.35em;
+  padding: 8px clamp(14px, 3.5vw, 28px);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.1);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  font-size: 0.95rem;
+  font-weight: 700;
+  font-size: clamp(1rem, 2.4vw, 1.12rem);
   white-space: nowrap;
 }
 
 .mb-table__pagesep {
   opacity: 0.65;
   font-weight: 500;
-  padding: 0 0.06em;
+  padding: 0 0.28em;
 }
 
 .mb-table__pagenum {
   white-space: nowrap;
-  min-width: 1ch;
+  min-width: 1.35ch;
   text-align: center;
 }
 
 .mb-table__pagebtn {
-  min-height: 38px;
-  min-width: 44px;
-  border-radius: 12px;
-  padding: 8px 10px;
+  min-height: 30px;
+  min-width: 34px;
+  border-radius: 10px;
+  padding: 4px 6px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.9);
@@ -7635,17 +7627,17 @@ html:has(.app-shell--mobile-pwa) {
 
 .mb-table__pagebtn-glyph {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 0.82rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.02em;
   line-height: 1;
 }
 
-.mb-table__pagesize-label--compact {
-  display: none;
-  font-weight: 600;
-  opacity: 0.85;
-  padding-right: 2px;
+.mb-table__pagesize-hash {
+  font-weight: 700;
+  opacity: 0.88;
+  font-size: 0.95rem;
+  padding-right: 1px;
 }
 
 .mb-table__pagebtn:disabled {
@@ -7656,7 +7648,7 @@ html:has(.app-shell--mobile-pwa) {
 .mb-table__pagesize {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   color: rgba(255, 255, 255, 0.72);
   font-size: 0.9rem;
   flex-shrink: 0;
@@ -7681,29 +7673,31 @@ html:has(.app-shell--mobile-pwa) {
   .mb-table__pager {
     flex: 1 1 100%;
     justify-content: center;
-    gap: 12px;
+    gap: clamp(6px, 2vw, 14px);
     min-width: 0;
   }
 
   .mb-table__pagesize {
     flex: 1 1 auto;
     justify-content: center;
-    gap: 8px;
-  }
-
-  .mb-table__pagesize-label--full {
-    display: none;
-  }
-
-  .mb-table__pagesize-label--compact {
-    display: inline;
+    gap: 6px;
   }
 }
 
 @container mb-table-foot (max-width: 26rem) {
   .mb-table__pagepill {
-    padding: 6px 10px;
-    font-size: 0.9rem;
+    padding: 7px clamp(12px, 4vw, 22px);
+    font-size: clamp(0.95rem, 4.2vw, 1.05rem);
+  }
+
+  .mb-table__pagebtn {
+    min-height: 28px;
+    min-width: 30px;
+    padding: 3px 5px;
+  }
+
+  .mb-table__pagebtn-glyph {
+    font-size: 0.58rem;
   }
 }
 
@@ -7718,22 +7712,33 @@ html:has(.app-shell--mobile-pwa) {
   .mb-table__pager {
     flex: 1 1 100%;
     justify-content: center;
-    gap: 12px;
+    gap: clamp(6px, 2vw, 14px);
   }
 
   .mb-table__pagesize {
     flex: 1 1 auto;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
   }
+}
 
-  .mb-table__pagesize-label--full {
-    display: none;
-  }
+/* PWA mobile shell : chevrons compacts, zone page plus lisible */
+.app-shell--mobile-pwa .mb-table__pagebtn {
+  min-height: 28px;
+  min-width: 30px;
+}
 
-  .mb-table__pagesize-label--compact {
-    display: inline;
-  }
+.app-shell--mobile-pwa .mb-table__pagebtn-glyph {
+  font-size: 0.56rem;
+}
+
+.app-shell--mobile-pwa .mb-table__pagepill {
+  padding: 7px clamp(14px, 5vw, 24px);
+  font-size: clamp(0.98rem, 4.5vw, 1.08rem);
+}
+
+.app-shell--mobile-pwa .mb-table__pagesize select {
+  min-height: 36px;
 }
 
 /* ---- Unified toggle/checkbox style (mobile/tablet/desktop) ---- */

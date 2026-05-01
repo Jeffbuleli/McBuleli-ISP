@@ -181,12 +181,7 @@ export function DataTable({
         </div>
 
         <label className="mb-table__pagesize">
-          <span className="mb-table__pagesize-label mb-table__pagesize-label--full">{tr("Lignes", "Rows")}</span>
-          <span
-            className="mb-table__pagesize-label mb-table__pagesize-label--compact"
-            aria-hidden
-            title={tr("Lignes par page", "Rows per page")}
-          >
+          <span className="mb-table__pagesize-hash" aria-hidden title={tr("Lignes par page", "Rows per page")}>
             #
           </span>
           <select

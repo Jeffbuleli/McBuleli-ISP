@@ -1,18 +1,9 @@
-import { useEffect, useState } from "react";
-import LangSwitch from "./LangSwitch.jsx";
-import { UI_LANG_SYNC_EVENT, getStoredUiLang } from "./uiLangSync.js";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
+import { useReadOnlyUiLang } from "./uiLangSync.js";
 
 export default function PrivacyPolicy() {
-  const [uiLang, setUiLang] = useState(getStoredUiLang);
+  const uiLang = useReadOnlyUiLang();
   const isEn = uiLang === "en";
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("ui_lang", uiLang);
-      window.dispatchEvent(new Event(UI_LANG_SYNC_EVENT));
-    }
-  }, [uiLang]);
 
   const year = new Date().getFullYear();
 
@@ -24,9 +15,6 @@ export default function PrivacyPolicy() {
             <img className="public-logo-img" src={mcbuleliLogoUrl} alt="" width={40} height={40} loading="eager" />
             <span>McBuleli</span>
           </a>
-          <div className="privacy-page-toolbar">
-            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="privacy" compact />
-          </div>
         </div>
       </div>
       <article className="public-section privacy-policy-article">
@@ -69,7 +57,7 @@ export default function PrivacyPolicy() {
             </p>
             <h2>Contact</h2>
             <p>
-              Privacy questions:{' '}
+              Privacy questions:{" "}
               <a href="mailto:mcbuleli@gmail.com">mcbuleli@gmail.com</a>
             </p>
           </>
@@ -102,7 +90,7 @@ export default function PrivacyPolicy() {
             <h2>Vos droits</h2>
             <p>
               Selon votre juridiction : accès, rectification, portabilité ou effacement lorsque rien ne l&apos;interdit.
-              Mentionnez l&apos;entreprise concernée depuis{' '}
+              Mentionnez l&apos;entreprise concernée depuis{" "}
               <a href="mailto:mcbuleli@gmail.com">mcbuleli@gmail.com</a> ; nous suivons vos demandes aussi vite que la petite équipe le permet.
             </p>
           </>
