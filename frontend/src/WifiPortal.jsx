@@ -63,10 +63,12 @@ export default function WifiPortal() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const [checkout, setCheckout] = useState({
-    methodType: "mobile_money",
+  const [checkoutMm, setCheckoutMm] = useState({
     phone: "",
-    networkKey: "orange",
+    networkKey: "orange"
+  });
+  const [checkoutAlt, setCheckoutAlt] = useState({
+    methodType: "bank_transfer",
     externalRef: "",
     payerContact: ""
   });
@@ -92,8 +94,11 @@ export default function WifiPortal() {
     setNetworks(n || []);
     const methodItems = Array.isArray(methods?.items) ? methods.items : [];
     setPaymentMethods(methodItems);
-    const firstMethod = methodItems[0]?.methodType || "mobile_money";
-    setCheckout((prev) => ({ ...prev, methodType: firstMethod }));
+    const firstAlt = methodItems.find((m) => String(m.methodType || "").toLowerCase() !== "mobile_money");
+    setCheckoutAlt((prev) => ({
+      ...prev,
+      methodType: firstAlt?.methodType || "bank_transfer"
+    }));
     setActiveIspId(isp);
     const url = new URL(window.location.href);
     url.searchParams.set("ispId", isp);
@@ -135,21 +140,7 @@ export default function WifiPortal() {
     };
   }, [activeIspId]);
 
-  async function onStartPayment(e) {
-    e.preventDefault();
-    setError("");
-    setNotice("");
-    if (!selectedPlan || !activeIspId) return;
-    const methodType = String(checkout.methodType || "mobile_money").toLowerCase();
-    const phone = checkout.phone.replace(/\s+/g, "").replace(/^\+/, "");
-    if (methodType === "mobile_money" && phone.length < 9) {
-      setError(t("errPhone"));
-      return;
-    }
-    if (methodType !== "mobile_money" && !String(checkout.externalRef || "").trim()) {
-      setError(t("errRef"));
-      return;
-    }
+  async function initiateWifiPurchase(methodType, bodyExtra) {
     const sp = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
     const captiveContext = {
       ip: sp.get("ip")?.trim() || undefined,
@@ -157,19 +148,56 @@ export default function WifiPortal() {
       mac: sp.get("mac")?.trim() || undefined
     };
     const hasCap = Boolean(captiveContext.ip || captiveContext.router || captiveContext.mac);
+    return publicRequest("/public/wifi-purchase/initiate", {
+      method: "POST",
+      body: JSON.stringify({
+        ispId: activeIspId,
+        planId: selectedPlan.id,
+        methodType,
+        ...(hasCap ? { captiveContext } : {}),
+        ...bodyExtra
+      })
+    });
+  }
+
+  async function onStartPawapayPayment(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (!selectedPlan || !activeIspId) return;
+    const phone = checkoutMm.phone.replace(/\s+/g, "").replace(/^\+/, "");
+    if (phone.length < 9) {
+      setError(t("errPhone"));
+      return;
+    }
     try {
-      const res = await publicRequest("/public/wifi-purchase/initiate", {
-        method: "POST",
-        body: JSON.stringify({
-          ispId: activeIspId,
-          planId: selectedPlan.id,
-          methodType,
-          phoneNumber: phone || undefined,
-          networkKey: methodType === "mobile_money" ? checkout.networkKey : undefined,
-          externalRef: methodType !== "mobile_money" ? checkout.externalRef : undefined,
-          payerContact: methodType !== "mobile_money" ? checkout.payerContact : undefined,
-          ...(hasCap ? { captiveContext } : {})
-        })
+      const res = await initiateWifiPurchase("mobile_money", {
+        phoneNumber: phone || undefined,
+        networkKey: checkoutMm.networkKey
+      });
+      setDepositId(res.depositId);
+      setRedirectUrl(res.redirectUrlAfterPayment || "https://www.google.com");
+      setNotice(res.message || t("noticePhone"));
+      setPolling(true);
+    } catch (err) {
+      setError(wifiErr(err.message || t("errPayStart")));
+    }
+  }
+
+  async function onStartAlternatePayment(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (!selectedPlan || !activeIspId) return;
+    const methodType = String(checkoutAlt.methodType || "bank_transfer").toLowerCase();
+    if (!String(checkoutAlt.externalRef || "").trim()) {
+      setError(t("errRef"));
+      return;
+    }
+    try {
+      const res = await initiateWifiPurchase(methodType, {
+        externalRef: checkoutAlt.externalRef,
+        payerContact: checkoutAlt.payerContact || undefined
       });
       setDepositId(res.depositId);
       setRedirectUrl(res.redirectUrlAfterPayment || "https://www.google.com");
@@ -177,7 +205,7 @@ export default function WifiPortal() {
       if (res.status === "pending_manual") {
         setPolling(false);
       } else {
-        setPolling(true);
+        setPolling(false);
       }
     } catch (err) {
       setError(wifiErr(err.message || t("errPayStart")));
@@ -233,8 +261,13 @@ export default function WifiPortal() {
     branding?.logoUrl != null && String(branding.logoUrl).trim()
       ? publicAssetUrl(branding.logoUrl)
       : mcbuleliLogoUrl;
-  const selectedMethodDetails =
-    paymentMethods.find((m) => String(m.methodType || "") === String(checkout.methodType || "")) || null;
+  const pawapayMethodDetails =
+    paymentMethods.find((m) => String(m.methodType || "").toLowerCase() === "mobile_money") || null;
+  const alternateMethodDetails =
+    paymentMethods.find((m) => String(m.methodType || "") === String(checkoutAlt.methodType || "")) || null;
+  const alternateMethodOptions = paymentMethods.filter(
+    (m) => String(m.methodType || "").toLowerCase() !== "mobile_money"
+  );
 
   return (
     <main className="container wifi-portal-page wifi-portal-page--dark">
@@ -470,28 +503,9 @@ export default function WifiPortal() {
             <IconWallet width={22} height={22} aria-hidden />
           </div>
 
-          <form className="wifi-checkout-form" onSubmit={onStartPayment}>
-            <div className="wifi-input-row">
-              <span className="wifi-input-row__lead" aria-hidden="true">
-                <IconWallet width={20} height={20} />
-              </span>
-              <select
-                aria-label={t("method")}
-                value={checkout.methodType}
-                onChange={(e) => setCheckout({ ...checkout, methodType: e.target.value })}
-              >
-                {paymentMethods.map((m) => (
-                  <option key={m.id} value={m.methodType}>
-                    {m.providerName} ({m.methodType})
-                  </option>
-                ))}
-                {!paymentMethods.length ? (
-                  <option value="mobile_money">Mobile Money</option>
-                ) : null}
-              </select>
-            </div>
-            {checkout.methodType === "mobile_money" ? (
-              <>
+          <p className="wifi-checkout-section-title">{t("pawapayBlockTitle")}</p>
+          <p className="wifi-checkout-section-lead app-meta">{t("pawapayBlockLead")}</p>
+          <form className="wifi-checkout-form" onSubmit={onStartPawapayPayment}>
             <div className="wifi-input-row">
               <span className="wifi-input-row__lead" aria-hidden="true">
                 <IconSmartphone width={20} height={20} />
@@ -501,8 +515,8 @@ export default function WifiPortal() {
                 autoComplete="tel"
                 aria-label={t("phoneLabel")}
                 placeholder={t("phonePh")}
-                value={checkout.phone}
-                onChange={(e) => setCheckout({ ...checkout, phone: e.target.value })}
+                value={checkoutMm.phone}
+                onChange={(e) => setCheckoutMm({ ...checkoutMm, phone: e.target.value })}
               />
             </div>
             <div className="wifi-input-row">
@@ -512,8 +526,8 @@ export default function WifiPortal() {
               <select
                 id="wifi-checkout-network"
                 aria-label={t("network")}
-                value={checkout.networkKey}
-                onChange={(e) => setCheckout({ ...checkout, networkKey: e.target.value })}
+                value={checkoutMm.networkKey}
+                onChange={(e) => setCheckoutMm({ ...checkoutMm, networkKey: e.target.value })}
               >
                 {networks.map((n) => (
                   <option key={n.key} value={n.key}>
@@ -522,48 +536,94 @@ export default function WifiPortal() {
                 ))}
               </select>
             </div>
-              </>
-            ) : (
-              <>
-                <div className="wifi-input-row">
-                  <span className="wifi-input-row__lead" aria-hidden="true">
-                    <IconSmartphone width={20} height={20} />
-                  </span>
-                  <input
-                    autoComplete="off"
-                    aria-label={t("reference")}
-                    placeholder={t("referencePh")}
-                    value={checkout.externalRef}
-                    onChange={(e) => setCheckout({ ...checkout, externalRef: e.target.value })}
-                  />
-                </div>
-                <div className="wifi-input-row">
-                  <span className="wifi-input-row__lead" aria-hidden="true">
-                    <IconPhone width={20} height={20} />
-                  </span>
-                  <input
-                    autoComplete="tel"
-                    aria-label={t("payerContact")}
-                    placeholder={t("payerContactPh")}
-                    value={checkout.payerContact}
-                    onChange={(e) => setCheckout({ ...checkout, payerContact: e.target.value })}
-                  />
-                </div>
-              </>
-            )}
-            <button
-              type="submit"
-              className="wifi-pay-submit"
-              disabled={polling || (checkout.methodType === "mobile_money" ? !checkout.phone : !checkout.externalRef)}
-            >
+            <button type="submit" className="wifi-pay-submit" disabled={polling || !checkoutMm.phone}>
               <IconWallet width={18} height={18} aria-hidden />
               <span>{polling ? t("paying") : t("paySubmit")}</span>
             </button>
           </form>
-          {selectedMethodDetails ? (
+          {pawapayMethodDetails ? (
             <p className="wifi-checkout-foot">
               <small>
-                {selectedMethodDetails.instructions?.collectionPoint || selectedMethodDetails.instructions?.mobileMoneyNumber || selectedMethodDetails.instructions?.bankName || selectedMethodDetails.instructions?.walletAddress || selectedMethodDetails.instructions?.processorName || selectedMethodDetails.instructions?.note || ""}
+                {pawapayMethodDetails.instructions?.collectionPoint ||
+                  pawapayMethodDetails.instructions?.mobileMoneyNumber ||
+                  pawapayMethodDetails.instructions?.note ||
+                  ""}
+              </small>
+            </p>
+          ) : null}
+
+          <hr className="wifi-checkout-split" />
+          <p className="wifi-checkout-section-title">{t("alternateBlockTitle")}</p>
+          <p className="wifi-checkout-section-lead app-meta">{t("alternateBlockLead")}</p>
+          <form className="wifi-checkout-form" onSubmit={onStartAlternatePayment}>
+            <div className="wifi-input-row">
+              <span className="wifi-input-row__lead" aria-hidden="true">
+                <IconWallet width={20} height={20} />
+              </span>
+              <select
+                aria-label={t("method")}
+                value={checkoutAlt.methodType}
+                onChange={(e) => setCheckoutAlt({ ...checkoutAlt, methodType: e.target.value })}
+              >
+                {alternateMethodOptions.length ? (
+                  alternateMethodOptions.map((m) => (
+                    <option key={m.id} value={m.methodType}>
+                      {m.providerName} ({m.methodType})
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="bank_transfer">bank_transfer</option>
+                    <option value="cash">cash</option>
+                    <option value="binance_pay">binance_pay</option>
+                    <option value="crypto_wallet">crypto_wallet</option>
+                    <option value="visa_card">visa_card</option>
+                  </>
+                )}
+              </select>
+            </div>
+            <div className="wifi-input-row">
+              <span className="wifi-input-row__lead" aria-hidden="true">
+                <IconSmartphone width={20} height={20} />
+              </span>
+              <input
+                autoComplete="off"
+                aria-label={t("reference")}
+                placeholder={t("referencePh")}
+                value={checkoutAlt.externalRef}
+                onChange={(e) => setCheckoutAlt({ ...checkoutAlt, externalRef: e.target.value })}
+              />
+            </div>
+            <div className="wifi-input-row">
+              <span className="wifi-input-row__lead" aria-hidden="true">
+                <IconPhone width={20} height={20} />
+              </span>
+              <input
+                autoComplete="tel"
+                aria-label={t("payerContact")}
+                placeholder={t("payerContactPh")}
+                value={checkoutAlt.payerContact}
+                onChange={(e) => setCheckoutAlt({ ...checkoutAlt, payerContact: e.target.value })}
+              />
+            </div>
+            <button
+              type="submit"
+              className="wifi-pay-submit wifi-pay-submit--secondary"
+              disabled={polling || !String(checkoutAlt.externalRef || "").trim()}
+            >
+              <IconWallet width={18} height={18} aria-hidden />
+              <span>{t("alternateSubmit")}</span>
+            </button>
+          </form>
+          {alternateMethodDetails ? (
+            <p className="wifi-checkout-foot">
+              <small>
+                {alternateMethodDetails.instructions?.collectionPoint ||
+                  alternateMethodDetails.instructions?.bankName ||
+                  alternateMethodDetails.instructions?.walletAddress ||
+                  alternateMethodDetails.instructions?.processorName ||
+                  alternateMethodDetails.instructions?.note ||
+                  ""}
               </small>
             </p>
           ) : null}

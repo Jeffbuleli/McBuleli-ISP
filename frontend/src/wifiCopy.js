@@ -32,6 +32,13 @@ const STR = {
     network: "Réseau",
     paySubmit: "Payer et valider",
     paying: "En attente du paiement…",
+    pawapayBlockTitle: "Mobile Money (PawaPay)",
+    pawapayBlockLead:
+      "Paiement rapide : une demande peut s’afficher sur le téléphone (popup opérateur).",
+    alternateBlockTitle: "Autre méthode de paiement",
+    alternateBlockLead:
+      "TID / virement / cash / carte / crypto : référence soumise, vérification par votre FAI (procédure unifiée).",
+    alternateSubmit: "Envoyer la demande",
     payFoot:
       "ⓘ Mobile Money: validation téléphone. Autres méthodes: référence vérifiée par le FAI.",
     daySingular: "jour",
@@ -92,6 +99,12 @@ const STR = {
     network: "Network",
     paySubmit: "Pay and confirm",
     paying: "Waiting for payment…",
+    pawapayBlockTitle: "Mobile Money (PawaPay)",
+    pawapayBlockLead: "Fast payment: a prompt may appear on the phone (operator popup).",
+    alternateBlockTitle: "Other payment method",
+    alternateBlockLead:
+      "TID / bank / cash / card / crypto: reference submitted, verified by your ISP (unified flow).",
+    alternateSubmit: "Submit request",
     payFoot:
       "ⓘ Mobile Money: confirm on phone. Other methods: reference is reviewed by ISP.",
     daySingular: "day",

@@ -4707,6 +4707,30 @@ button.wifi-plan-card:focus-visible {
   margin-top: 6px;
 }
 
+.wifi-pay-submit--secondary {
+  opacity: 0.95;
+  margin-top: 10px;
+}
+
+.wifi-checkout-section-title {
+  margin: 14px 0 4px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--mb-text, #e8ecf4);
+}
+
+.wifi-checkout-section-lead {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.wifi-checkout-split {
+  border: none;
+  border-top: 1px solid rgba(197, 208, 227, 0.45);
+  margin: 18px 0 6px;
+}
+
 .wifi-checkout-foot {
   margin: 14px 0 0;
 }
