@@ -3426,7 +3426,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                 </p>
               </form>
           ) : null}
-          <a className="auth-simple-back" href="/">
+          <a className="auth-simple-back" href="/?site=public">
             <IconArrowLeft width={20} height={20} aria-hidden />
             {isEn ? "Homepage" : "Accueil"}
           </a>
@@ -4199,6 +4199,12 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
                 "List my company on McBuleli’s public WiFi Zone (/wifi-zone: logo, region, phone, guest Wi-Fi link). Uncheck to hide from the public directory."
               )}
             </label>
+            <p className="app-meta" style={{ margin: "8px 0 0", maxWidth: "62ch" }}>
+              {t(
+                "La visibilité publique dépend de l’abonnement plateforme et peut être retirée par un administrateur ; sans renouvellement, l’annuaire et les ventes Wi‑Fi invité côté public sont suspendus jusqu’au rétablissement du paiement.",
+                "Public listing depends on your platform subscription and can be hidden by an admin; if billing lapses, directory presence and public guest Wi‑Fi purchases pause until the subscription is active again."
+              )}
+            </p>
             <input
               placeholder="Redirection après paiement Wi‑Fi (https://…)"
               value={brandingForm.wifiPortalRedirectUrl}

@@ -135,7 +135,7 @@ export default function WifiZone() {
         key: "action",
         header: t("Accès", "Access"),
         cell: (row) => (
-          <a className="btn-secondary wifi-zone-open-btn" href={row.guestWifiUrl}>
+          <a className="wifi-zone-access-link" href={row.guestWifiUrl}>
             {t("Ouvrir Wi‑Fi invité", "Open guest Wi‑Fi")}
           </a>
         )
@@ -148,37 +148,36 @@ export default function WifiZone() {
     <main className="public-site public-site--dark wifi-zone-page">
       <div className="public-sticky-bar-wrap">
         <div className="public-hero-top wifi-zone-topbar">
-          <a className="public-brand" href="/">
-            <img className="public-logo-img" src={mcbuleliLogoUrl} alt="" width={40} height={40} loading="eager" />
-            <span>McBuleli</span>
-          </a>
-          <p className="wifi-zone-topbar__tagline">
-            {t("Retrouvez le FAI proche de chez vous", "Find the ISP closest to you")}
-          </p>
-          <div className="wifi-zone-topbar__actions">
-            <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="wifi-zone" compact />
-            <HomeShortcut title={t("Retour à l'accueil", "Back to homepage")} idPrefix="wifi-zone" className="app-home-shortcut" />
+          <div className="wifi-zone-topbar__row">
+            <a className="public-brand" href="/?site=public">
+              <img className="public-logo-img" src={mcbuleliLogoUrl} alt="" width={40} height={40} loading="eager" />
+              <span>McBuleli</span>
+            </a>
+            <div className="wifi-zone-topbar__tools public-hero-toolbar-row">
+              <LangSwitch value={uiLang} onChange={setUiLang} idPrefix="wifi-zone" compact />
+              <HomeShortcut
+                title={t("Retour à l'accueil", "Back to homepage")}
+                idPrefix="wifi-zone"
+                className="btn-icon-toolbar--compact"
+              />
+            </div>
           </div>
+          <p className="wifi-zone-topbar__tagline">
+            {t(
+              "Annuaire des fournisseurs d’accès Internet référencés sur McBuleli.",
+              "Directory of Internet service providers listed on McBuleli."
+            )}
+          </p>
         </div>
       </div>
 
       <section className="public-section wifi-zone-intro">
         <h1>{t("Zone WiFi", "WiFi Zone")}</h1>
-        <p>
-          {t(
-            "Les entreprises inscrites sur McBuleli apparaissent ici tant que leur abonnement plateforme est actif ; un administrateur peut retirer l’affichage à tout moment. Sans renouvellement, l’annuaire et les achats Wi‑Fi invité publics sont suspendus jusqu’au rétablissement de l’abonnement.",
-            "Workspaces on McBuleli are listed here while their platform subscription is active; an admin can hide the listing anytime. If the subscription lapses, public directory presence and guest Wi‑Fi purchases pause until billing is current again."
-          )}
-        </p>
       </section>
 
       <section className="public-section wifi-zone-table-wrap">
         <DataTable
           title={t("FAI enregistrés sur McBuleli", "ISPs registered on McBuleli")}
-          description={t(
-            "Filtrez par nom, téléphone ou localité, triez la liste, puis ouvrez le lien Wi‑Fi invité.",
-            "Filter by name, phone or location, sort the list, then open the guest Wi-Fi link."
-          )}
           rows={pageRows}
           columns={columns}
           loading={loading}
@@ -221,26 +220,21 @@ export default function WifiZone() {
       </section>
 
       <footer className="wifi-zone-footer">
-        <p className="wifi-zone-footer__powered">
-          <img src={mcbuleliLogoUrl} alt="" width={24} height={24} />
-          <span>
-            Powered by McBuleli | {t("Notre numéro de contact", "Our contact number")} : {COMPANY_CONTACT.phoneDisplay}
-          </span>
-        </p>
-        <p className="wifi-zone-footer__legal-inner">
-          <span className="wifi-zone-footer__meta">© {year} McBuleli</span>
+        <p className="wifi-zone-footer__line">
+          © {year} <strong className="wifi-zone-footer__brand">McBuleli</strong>
           <span className="wifi-zone-footer__sep" aria-hidden="true">
-            |
+            {" "}
+            |{" "}
           </span>
-          <a className="wifi-zone-footer__meta wifi-zone-footer__meta--link" href="/privacy">
+          <span>{COMPANY_CONTACT.phoneDisplay}</span>
+        </p>
+        <p className="wifi-zone-footer__line">
+          <a className="wifi-zone-footer__privacy" href="/privacy">
             {t("Politique de confidentialité", "Privacy policy")}
           </a>
-          <span className="wifi-zone-footer__sep" aria-hidden="true">
-            |
-          </span>
-          <span className="wifi-zone-footer__meta wifi-zone-footer__meta--muted">
-            RCCM&nbsp;: <span>{COMPANY_CONTACT.rccm}</span>
-          </span>
+        </p>
+        <p className="wifi-zone-footer__line wifi-zone-footer__line--muted">
+          RCCM&nbsp;: {COMPANY_CONTACT.rccm}
         </p>
       </footer>
     </main>

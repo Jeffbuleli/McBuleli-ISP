@@ -7752,32 +7752,36 @@ html:has(.app-shell--mobile-pwa) {
 }
 
 .wifi-zone-topbar {
-  gap: 10px 16px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.wifi-zone-topbar__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.wifi-zone-topbar__tools {
+  flex-shrink: 0;
 }
 
 .wifi-zone-topbar__tagline {
   margin: 0;
   color: rgba(235, 235, 235, 0.86);
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 600;
-}
-
-.wifi-zone-topbar__actions {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  line-height: 1.45;
+  text-align: center;
 }
 
 .wifi-zone-intro h1 {
-  margin: 0 0 10px;
-  font-size: clamp(1.7rem, 4vw, 2.2rem);
-}
-
-.wifi-zone-intro p {
   margin: 0;
-  color: rgba(222, 228, 222, 0.88);
-  max-width: 820px;
+  font-size: clamp(1.7rem, 4vw, 2.2rem);
 }
 
 .wifi-zone-table-wrap .mb-table {
@@ -7818,10 +7822,33 @@ html:has(.app-shell--mobile-pwa) {
   text-decoration: underline;
 }
 
-.wifi-zone-open-btn {
+.wifi-zone-access-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 34px;
-  padding: 7px 12px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(156, 208, 255, 0.38);
+  background: rgba(156, 208, 255, 0.09);
+  color: #9cd0ff;
+  font-weight: 650;
+  font-size: 0.86rem;
   text-decoration: none;
+  white-space: nowrap;
+  box-shadow: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.wifi-zone-access-link:hover {
+  background: rgba(156, 208, 255, 0.16);
+  border-color: rgba(180, 220, 255, 0.55);
+  color: #c4e4ff;
+}
+
+.wifi-zone-access-link:focus-visible {
+  outline: 2px solid rgba(156, 208, 255, 0.65);
+  outline-offset: 2px;
 }
 
 .wifi-zone-filters {
@@ -7854,40 +7881,35 @@ html:has(.app-shell--mobile-pwa) {
   padding: 10px 18px 20px;
   text-align: center;
   color: rgba(232, 232, 232, 0.86);
+  font-size: 0.92rem;
+  line-height: 1.55;
 }
 
-.wifi-zone-footer__powered {
+.wifi-zone-footer__line {
   margin: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
 }
 
-.wifi-zone-footer__legal-inner {
-  margin: 12px 0 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 10px;
-  justify-content: center;
-  align-items: center;
-  font-size: 0.9rem;
+.wifi-zone-footer__line + .wifi-zone-footer__line {
+  margin-top: 8px;
 }
 
-.wifi-zone-footer__meta {
-  color: rgba(232, 232, 232, 0.88);
+.wifi-zone-footer__brand {
+  font-weight: 800;
 }
 
-.wifi-zone-footer__meta--link {
+.wifi-zone-footer__privacy {
   color: #9cd0ff;
   text-decoration: none;
+  font-weight: 600;
 }
 
-.wifi-zone-footer__meta--link:hover {
+.wifi-zone-footer__privacy:hover {
   text-decoration: underline;
 }
 
-.wifi-zone-footer__meta--muted {
+.wifi-zone-footer__line--muted {
   color: rgba(223, 223, 223, 0.68);
+  font-size: 0.88rem;
 }
 
 .wifi-zone-footer__sep {
@@ -7896,19 +7918,8 @@ html:has(.app-shell--mobile-pwa) {
 }
 
 @media (max-width: 740px) {
-  .wifi-zone-topbar {
-    flex-wrap: wrap;
-  }
-
-  .wifi-zone-topbar__actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-
   .wifi-zone-topbar__tagline {
-    order: 3;
-    width: 100%;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
   }
 }
 
