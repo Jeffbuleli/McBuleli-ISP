@@ -1180,6 +1180,7 @@ function App() {
   });
   /** Local object URL for logo file picker preview (revoked when replaced or after upload). */
   const [brandingLogoPickPreview, setBrandingLogoPickPreview] = useState(null);
+  const [wifiZonePublicSaving, setWifiZonePublicSaving] = useState(false);
 
   useEffect(() => {
     const url = brandingLogoPickPreview;
@@ -2463,6 +2464,39 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
     refresh();
     } catch (err) {
       setError(audienceErr(err.message || t("Échec de l'enregistrement.", "Save failed.")));
+    }
+  }
+
+  async function onWifiZonePublicToggle(e) {
+    const checked = Boolean(e.target.checked);
+    setBrandingForm((prev) => ({ ...prev, wifiZonePublic: checked }));
+    if (!selectedIspId) {
+      setError(t("Choisissez d'abord un FAI dans « Espace FAI actif ».", "Select an ISP in Active ISP Workspace first."));
+      return;
+    }
+    setError("");
+    setNotice("");
+    setWifiZonePublicSaving(true);
+    try {
+      const saved = await api.patchBrandingWifiZonePublic(selectedIspId, checked);
+      setBranding(saved);
+      if (saved) {
+        setBrandingForm((prev) => ({
+          ...prev,
+          wifiZonePublic: saved.wifiZonePublic !== false
+        }));
+      }
+      setNotice(
+        t(
+          "Visibilité sur la Zone WiFi enregistrée. La liste publique peut prendre quelques secondes à se mettre à jour.",
+          "WiFi Zone visibility saved. The public list may take a few seconds to refresh."
+        )
+      );
+    } catch (err) {
+      setBrandingForm((prev) => ({ ...prev, wifiZonePublic: !checked }));
+      setError(audienceErr(err.message || t("Échec de l'enregistrement.", "Save failed.")));
+    } finally {
+      setWifiZonePublicSaving(false);
     }
   }
 
@@ -4207,13 +4241,20 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
               <input
                 type="checkbox"
                 checked={Boolean(brandingForm.wifiZonePublic)}
-                onChange={(e) => setBrandingForm({ ...brandingForm, wifiZonePublic: e.target.checked })}
+                disabled={!selectedIspId || wifiZonePublicSaving}
+                onChange={onWifiZonePublicToggle}
               />{" "}
               {t(
                 "Afficher mon entreprise sur la Zone WiFi publique McBuleli (/wifi-zone : logo, région, téléphone, lien Wi‑Fi invité). Décochez pour masquer l’annuaire public.",
                 "List my company on McBuleli’s public WiFi Zone (/wifi-zone: logo, region, phone, guest Wi-Fi link). Uncheck to hide from the public directory."
               )}
             </label>
+            <p className="app-meta" style={{ margin: "6px 0 0", maxWidth: "62ch" }}>
+              {t(
+                "Ce réglage est enregistré immédiatement (vous n’avez pas besoin de cliquer sur « Enregistrer l’image de marque »). Les autres champs de cette section utilisent encore ce bouton.",
+                "This setting saves immediately (you don’t need to click “Save branding”). Other fields in this section still use that button."
+              )}
+            </p>
             <p className="app-meta" style={{ margin: "8px 0 0", maxWidth: "62ch" }}>
               {t(
                 "La visibilité publique dépend de l’abonnement plateforme et peut être retirée par un administrateur ; sans renouvellement, l’annuaire et les ventes Wi‑Fi invité côté public sont suspendus jusqu’au rétablissement du paiement.",

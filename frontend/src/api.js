@@ -127,6 +127,7 @@ function withIsp(path, ispId) {
 
 async function request(path, options) {
   const headers = {
+    Accept: "application/json",
     "Content-Type": "application/json",
     ...(options?.headers || {})
   };
@@ -167,6 +168,7 @@ async function request(path, options) {
 
 export async function publicRequest(path, options = {}) {
   const headers = {
+    Accept: "application/json",
     "Content-Type": "application/json",
     ...(options.headers || {})
   };
@@ -274,7 +276,10 @@ export const api = {
   getPublicPlatformPackages: () => publicRequest("/public/platform-packages"),
   getPublicHomeMarketing: () => publicRequest("/public/home-marketing"),
   getPublicAuthCopy: () => publicRequest("/public/auth-copy"),
-  getPublicWifiZones: () => publicRequest("/public/wifi-zones"),
+  getPublicWifiZones: () =>
+    publicRequest("/public/wifi-zones", {
+      cache: "no-store"
+    }),
   signupTenant: (payload) =>
     publicRequest("/public/signup", { method: "POST", body: JSON.stringify(payload) }),
   forgotPassword: (email) =>
@@ -567,6 +572,11 @@ export const api = {
     request(withIsp("/branding", ispId), {
       method: "POST",
       body: JSON.stringify({ ...payload, ispId })
+    }),
+  patchBrandingWifiZonePublic: (ispId, wifiZonePublic) =>
+    request(withIsp("/branding/wifi-zone-public", ispId), {
+      method: "PATCH",
+      body: JSON.stringify({ wifiZonePublic })
     }),
   uploadBrandingLogo: async (ispId, file) => {
     const form = new FormData();

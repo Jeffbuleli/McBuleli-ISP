@@ -1463,6 +1463,7 @@ app.get("/api/public/wifi-networks", rlPublicRead, (_req, res) => {
 });
 
 app.get("/api/public/wifi-zones", rlPublicRead, async (_req, res) => {
+  res.set("Cache-Control", "private, no-store");
   const rows = await query(
     `SELECT i.id,
             i.name,
@@ -2464,6 +2465,40 @@ app.post(
       action: "branding.updated",
       entityType: "branding",
       entityId: updated.rows[0]?.id || null
+    });
+    const finalResult = await query(
+      "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", b.wifi_portal_banner_bytes AS \"wifiPortalBannerBytes\", b.wifi_portal_banner_mime AS \"wifiPortalBannerMime\", b.wifi_zone_public AS \"wifiZonePublic\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
+      [ispId]
+    );
+    return res.json(mapPublicBrandingRow(finalResult.rows[0] || null));
+  }
+);
+
+app.patch(
+  "/api/branding/wifi-zone-public",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin"),
+  async (req, res) => {
+    const ispId = resolveIspId(req, res);
+    if (!ispId) return;
+    const v = req.body?.wifiZonePublic;
+    if (typeof v !== "boolean") {
+      return res.status(400).json({ message: "wifiZonePublic (boolean) est requis." });
+    }
+    const updated = await query(
+      `UPDATE isp_branding SET wifi_zone_public = $1, updated_at = NOW() WHERE isp_id = $2 RETURNING id`,
+      [v, ispId]
+    );
+    if (!updated.rows[0]) {
+      return res.status(404).json({ message: "Image de marque introuvable pour cet espace." });
+    }
+    await logAudit({
+      ispId,
+      actorUserId: req.user.sub,
+      action: "branding.wifi_zone_public_updated",
+      entityType: "branding",
+      entityId: updated.rows[0]?.id || null,
+      details: { wifiZonePublic: v }
     });
     const finalResult = await query(
       "SELECT b.id, b.isp_id AS \"ispId\", b.display_name AS \"displayName\", b.logo_url AS \"logoUrl\", b.logo_bytes AS \"logoBytes\", b.logo_mime AS \"logoMime\", b.primary_color AS \"primaryColor\", b.secondary_color AS \"secondaryColor\", b.invoice_footer AS \"invoiceFooter\", b.address, b.contact_email AS \"contactEmail\", b.contact_phone AS \"contactPhone\", b.custom_domain AS \"customDomain\", b.wifi_portal_redirect_url AS \"wifiPortalRedirectUrl\", b.portal_footer_text AS \"portalFooterText\", b.portal_client_ref_prefix AS \"portalClientRefPrefix\", b.wifi_portal_banner_bytes AS \"wifiPortalBannerBytes\", b.wifi_portal_banner_mime AS \"wifiPortalBannerMime\", b.wifi_zone_public AS \"wifiZonePublic\", i.subdomain FROM isp_branding b JOIN isps i ON i.id = b.isp_id WHERE b.isp_id = $1",
