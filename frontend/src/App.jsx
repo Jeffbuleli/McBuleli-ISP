@@ -748,6 +748,9 @@ function App() {
   const [teamChatUnread, setTeamChatUnread] = useState(0);
   const teamChatUnreadPrevRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const [authBootstrapPending, setAuthBootstrapPending] = useState(
+    () => typeof window !== "undefined" && Boolean(window.localStorage.getItem("token"))
+  );
   const [uiLang, setUiLang] = useState(getStoredUiLang);
   const isEn = uiLang === "en";
   const t = (fr, en) => (isEn ? en : fr);
@@ -1741,6 +1744,7 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
           localStorage.removeItem("token");
         }
       }
+      setAuthBootstrapPending(false);
     }
     bootstrap();
   }, []);
@@ -3230,6 +3234,17 @@ api.getAccountingLedger(activeIspId, expenseFilter.from, expenseFilter.to)
     const name = workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user).trim();
     setWorkspaceTabTitle(name);
   }, [user, branding, tenantContext, isps, selectedIspId]);
+
+  if (authBootstrapPending) {
+    return (
+      <main className="global-loading-screen" role="status" aria-live="polite">
+        <div className="global-loading-screen__card">
+          <span className="global-loading-screen__spinner" aria-hidden="true" />
+          <p>{t("Ouverture de votre session…", "Opening your session...")}</p>
+        </div>
+      </main>
+    );
+  }
 
   if (!user) {
     const forgotHintPlain = (isEn ? publicAuthCopyForgot.en : publicAuthCopyForgot.fr).trim();

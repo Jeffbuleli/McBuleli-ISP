@@ -14,9 +14,12 @@ const WifiZone = lazy(() => import("./WifiZone.jsx"));
 registerServiceWorker();
 
 const LazyFallback = () => (
-  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh", color: "#aaa" }}>
-    Chargement…
-  </div>
+  <main className="global-loading-screen" role="status" aria-live="polite">
+    <div className="global-loading-screen__card">
+      <span className="global-loading-screen__spinner" aria-hidden="true" />
+      <p>Chargement…</p>
+    </div>
+  </main>
 );
 
 function Root() {

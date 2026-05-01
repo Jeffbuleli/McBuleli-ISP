@@ -3401,6 +3401,52 @@ button:disabled {
   color: #0f1419;
 }
 
+/* —— Global loading screen —— */
+.global-loading-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(99, 179, 143, 0.14), transparent 38%),
+    radial-gradient(circle at 80% 20%, rgba(120, 160, 255, 0.1), transparent 34%),
+    linear-gradient(160deg, #111313 0%, #161a17 48%, #0d0f0e 100%);
+}
+
+.global-loading-screen__card {
+  min-width: min(92vw, 360px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(17, 20, 18, 0.8);
+  color: rgba(236, 239, 241, 0.92);
+  font-weight: 650;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.global-loading-screen__spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(110, 207, 154, 0.3);
+  border-top-color: #7ad4a2;
+  animation: mb-spin 0.82s linear infinite;
+}
+
+.global-loading-screen__card p {
+  margin: 0;
+}
+
+@keyframes mb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* —— Auth simple (login / signup) —— */
 .auth-simple {
   max-width: 420px;
