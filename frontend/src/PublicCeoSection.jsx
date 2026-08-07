@@ -1,5 +1,5 @@
 /**
- * Direction — section premium (responsive desktop / tablette / mobile).
+ * Direction - section premium (responsive desktop / tablette / mobile).
  */
 export default function PublicCeoSection({
   t,

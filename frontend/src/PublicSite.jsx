@@ -148,7 +148,7 @@ const CEO_BIO_FALLBACK = {
   bioFr:
     "Jeff Buleli mêle entrepreneurship et terrain : il façonne une suite qui aide les FAI africains à aligner trésorerie, terrain et fidélité abonnés.",
   bioEn:
-    "Jeff blends product instincts with ISP operations—bringing billing clarity, crews and subscriber trust under one sane roof across Africa."
+    "Jeff blends product instincts with ISP operations-bringing billing clarity, crews and subscriber trust under one sane roof across Africa."
 };
 
 function ServiceIcon({ type }) {
@@ -208,7 +208,7 @@ const WORKSPACES = [
     fr: "Espace entreprise",
     en: "Company workspace",
     bodyFr:
-      "Vue dirigeante : revenus, clients, abonnements, dépenses, sites et indicateurs clés — au même endroit.",
+      "Vue dirigeante : revenus, clients, abonnements, dépenses, sites et indicateurs clés - au même endroit.",
     bodyEn: "Executive view: revenue, customers, subscriptions, expenses, sites and KPIs in one place."
   },
   {
@@ -216,7 +216,7 @@ const WORKSPACES = [
     fr: "Espace agents",
     en: "Field & agents",
     bodyFr: "Rôles, clients assignés, validations terrain et actions du quotidien, sans friction.",
-    bodyEn: "Roles, assigned customers, field validations and day-to-day actions—without friction."
+    bodyEn: "Roles, assigned customers, field validations and day-to-day actions-without friction."
   },
   {
     icon: "demo",
@@ -254,7 +254,7 @@ const TESTIMONIALS = [
     },
     en: {
       quote:
-        "We finally stopped chasing invoices blindly—automations and coordinated suspensions buy us serious time, and the whole desk sees one story.",
+        "We finally stopped chasing invoices blindly-automations and coordinated suspensions buy us serious time, and the whole desk sees one story.",
       name: "Claire M.",
       role: "Operations lead, urban ISP"
     }
@@ -268,7 +268,7 @@ const TESTIMONIALS = [
     },
     en: {
       quote:
-        "Fewer 'where’s my invoice?' calls—the portal plus mobile money clears things before folks need another phone chase.",
+        "Fewer 'where’s my invoice?' calls-the portal plus mobile money clears things before folks need another phone chase.",
       name: "Josué K.",
       role: "Support lead"
     }
@@ -297,7 +297,7 @@ const FAQ_ITEMS = [
     },
     en: {
       q: "Do you offer a trial?",
-      a: "Yes—fresh workspaces inherit a guided trial whose length mirrors what your McBuleli administrator configured. Signing up unlocks exploration before you subscribe."
+      a: "Yes-fresh workspaces inherit a guided trial whose length mirrors what your McBuleli administrator configured. Signing up unlocks exploration before you subscribe."
     }
   },
   {
@@ -313,31 +313,31 @@ const FAQ_ITEMS = [
   {
     fr: {
       q: "McBuleli connaît-il MikroTik ?",
-      a: "Oui — PPPoE, Hotspot, profils réseau : on pousse vos réglages depuis l’API REST, conserve un journal lisible pour le support et, si vous déployez RADIUS là où vous décidez, la même base Postgres peut suivre vos sessions."
+      a: "Oui - PPPoE, Hotspot, profils réseau : on pousse vos réglages depuis l’API REST, conserve un journal lisible pour le support et, si vous déployez RADIUS là où vous décidez, la même base Postgres peut suivre vos sessions."
     },
     en: {
       q: "Does McBuleli integrate with MikroTik?",
-      a: "Yes—think PPPoE, hotspot tiers, scripted pushes through the RouterOS REST hooks, searchable events for your helpdesk, optional FreeRADIUS sync when you bolt it onto the same Postgres footprint."
+      a: "Yes-think PPPoE, hotspot tiers, scripted pushes through the RouterOS REST hooks, searchable events for your helpdesk, optional FreeRADIUS sync when you bolt it onto the same Postgres footprint."
     }
   },
   {
     fr: {
       q: "Les abonnés ont-ils un portail leur parlant directement ?",
-      a: "Oui — factures, statut du service, paiement Mobile Money, envoi TID, téléphone comme identifiant : vous choisissez ce qui doit apparaître pour le FAI actif."
+      a: "Oui - factures, statut du service, paiement Mobile Money, envoi TID, téléphone comme identifiant : vous choisissez ce qui doit apparaître pour le FAI actif."
     },
     en: {
       q: "Is there a subscriber-facing portal?",
-      a: "They get invoices, service status, mobile payouts, TID flows, SMS-style phone logins—whatever you expose for each ISP persona."
+      a: "They get invoices, service status, mobile payouts, TID flows, SMS-style phone logins-whatever you expose for each ISP persona."
     }
   },
   {
     fr: {
       q: "Plusieurs équipes peuvent-elles vivre ensemble sur la même instance ?",
-      a: "Oui — direction, équipe facturation, NOC ou agents terrain reçoivent des rôles dédiés, et vous pouvez raffiner leurs périmètres sans dupliquer l’infra."
+      a: "Oui - direction, équipe facturation, NOC ou agents terrain reçoivent des rôles dédiés, et vous pouvez raffiner leurs périmètres sans dupliquer l’infra."
     },
     en: {
       q: "Can departments share one deployment?",
-      a: "Yes—finance, provisioning, technicians and field reps each inherit tailored roles plus guardrails instead of spawning another standalone stack."
+      a: "Yes-finance, provisioning, technicians and field reps each inherit tailored roles plus guardrails instead of spawning another standalone stack."
     }
   },
   {
@@ -347,7 +347,7 @@ const FAQ_ITEMS = [
     },
     en: {
       q: "Where does our data physically live?",
-      a: "Wherever you provision the backend—you pick the Postgres host, VPC and backup cadence. McBuleli behaves like software you supervise end to end."
+      a: "Wherever you provision the backend-you pick the Postgres host, VPC and backup cadence. McBuleli behaves like software you supervise end to end."
     }
   }
 ];
@@ -428,8 +428,8 @@ export default function PublicSite() {
   const founderShowcase = homeMarketing.founderShowcase || { caption: "", imageUrl: null };
   const ceoHeadshotSrc = useMemo(() => {
     const raw = founderShowcase.imageUrl != null ? String(founderShowcase.imageUrl).trim() : "";
-    if (!raw) return null;
-    return publicAssetUrl(raw);
+    if (raw) return publicAssetUrl(raw);
+    return "/founder-jeff-buleli.png";
   }, [founderShowcase.imageUrl]);
 
   useEffect(() => {
@@ -532,8 +532,8 @@ export default function PublicSite() {
           <section>
             <p className="eyebrow public-hero-eyebrow">
               {t(
-                "Facturation, réseau et équipes — sur une seule plateforme",
-                "Billing, network and teams — in one place"
+                "Facturation, réseau et équipes - sur une seule plateforme",
+                "Billing, network and teams - in one place"
               )}
             </p>
             <h1 className="public-hero-title">
@@ -545,7 +545,7 @@ export default function PublicSite() {
             <p className="public-hero-lead">
               {t(
                 "Facturation automatique, paiement Mobile Money, portail abonnés, Wi‑Fi hotspot, gestion MikroTik et agents terrain : tout pour gérer votre business WiFi depuis Kinshasa ou partout en Afrique.",
-                "Automated billing, Mobile Money payments, subscriber portal, WiFi hotspot, MikroTik management and field agents — everything to run your WiFi business from Kinshasa or anywhere in Africa."
+                "Automated billing, Mobile Money payments, subscriber portal, WiFi hotspot, MikroTik management and field agents - everything to run your WiFi business from Kinshasa or anywhere in Africa."
               )}
             </p>
             <div className="public-cta">
@@ -598,10 +598,10 @@ export default function PublicSite() {
       <section className="public-whats-new" aria-label={t("Nouveautés produit", "Product updates")}>
         <p>
           <strong>{t("Nouveau", "New")}</strong>
-          {" — "}
+          {" - "}
           {t(
-            "Discussion d’équipe réservée à votre entreprise, dans le tableau de bord : vous échangez vite, voyez qui a lu — sans passer par un autre outil.",
-            "Team-only chat inside the dashboard — quick messages and read receipts, no extra app."
+            "Discussion d’équipe réservée à votre entreprise, dans le tableau de bord : vous échangez vite, voyez qui a lu - sans passer par un autre outil.",
+            "Team-only chat inside the dashboard - quick messages and read receipts, no extra app."
           )}
         </p>
       </section>
@@ -616,7 +616,7 @@ export default function PublicSite() {
         <p>
           {t(
             "Les finances, le terrain et vos abonnés lisent la même vérité : moins de frictions, une marque propre et moins d’échanges inutiles.",
-            "Finance, field teams and subscribers see the same story—less friction, a clean brand, fewer needless back‑and‑forths."
+            "Finance, field teams and subscribers see the same story-less friction, a clean brand, fewer needless back‑and‑forths."
           )}
         </p>
       </section>
@@ -624,8 +624,12 @@ export default function PublicSite() {
       <section className="public-grid public-grid--services">
         {SERVICES.map((service) => (
           <article className="public-card public-card--service" key={service.icon}>
-            <span className="service-icon"><ServiceIcon type={service.icon} /></span>
-            <h3>{isEn ? service.en.title : service.fr.title}</h3>
+            <div className="service-card-head">
+              <span className="service-icon" aria-hidden>
+                <ServiceIcon type={service.icon} />
+              </span>
+              <h3>{isEn ? service.en.title : service.fr.title}</h3>
+            </div>
             <p>{isEn ? service.en.text : service.fr.text}</p>
           </article>
         ))}
@@ -672,7 +676,7 @@ export default function PublicSite() {
         <p className="public-section-lead">
           {t(
             "Trois offres claires côte à côte : démarrez petit, passez au niveau supérieur quand votre parc réseau grandit.",
-            "Three clear plans side by side—start small and move up as your network footprint grows."
+            "Three clear plans side by side-start small and move up as your network footprint grows."
           )}
         </p>
         <div className="public-grid public-grid--pricing">
@@ -726,8 +730,8 @@ export default function PublicSite() {
         <h2>{t("Ce que disent les opérateurs", "What operators say")}</h2>
         <p className="public-section-lead">
           {t(
-            "Des retours concrets sur la facturation, le portail client et le réseau — pas seulement des promesses marketing.",
-            "Real feedback on billing, the customer portal and the network—not just marketing claims."
+            "Des retours concrets sur la facturation, le portail client et le réseau - pas seulement des promesses marketing.",
+            "Real feedback on billing, the customer portal and the network-not just marketing claims."
           )}
         </p>
         <div className="public-testimonials">
@@ -817,8 +821,8 @@ export default function PublicSite() {
             </a>
             <p className="public-footer-tagline">
               {t(
-                "Le logiciel de gestion FAI N°1 en République Démocratique du Congo. Gérez votre business WiFi à Kinshasa, Lubumbashi, Goma ou partout en Afrique centrale—facturation, MikroTik, hotspot et paiement mobile depuis un seul tableau de bord.",
-                "The #1 ISP management software in DR Congo. Run your WiFi business in Kinshasa, Lubumbashi, Goma or anywhere in Central Africa—billing, MikroTik, hotspot and mobile payments from one dashboard."
+                "Le logiciel de gestion FAI N°1 en République Démocratique du Congo. Gérez votre business WiFi à Kinshasa, Lubumbashi, Goma ou partout en Afrique centrale-facturation, MikroTik, hotspot et paiement mobile depuis un seul tableau de bord.",
+                "The #1 ISP management software in DR Congo. Run your WiFi business in Kinshasa, Lubumbashi, Goma or anywhere in Central Africa-billing, MikroTik, hotspot and mobile payments from one dashboard."
               )}
             </p>
           </div>
@@ -847,7 +851,7 @@ export default function PublicSite() {
               className="public-footer-card"
               href={COMPANY_CONTACT.whatsapp}
               rel="noopener noreferrer"
-              aria-label={`WhatsApp — ${t("Écrire à McBuleli", "Message McBuleli")}`}
+              aria-label={`WhatsApp - ${t("Écrire à McBuleli", "Message McBuleli")}`}
             >
               <span className="public-footer-card-icon" aria-hidden="true">
                 <IconWhatsApp width={24} height={24} />
