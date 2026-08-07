@@ -4011,11 +4011,25 @@ body:has(.auth-simple--dark) {
   justify-content: center;
   width: 48px;
   height: 48px;
-  margin-bottom: 12px;
+  flex-shrink: 0;
+  margin-bottom: 0;
   border-radius: 14px;
   background: linear-gradient(145deg, rgba(200, 230, 201, 0.45), rgba(255, 255, 255, 0.9));
   color: var(--mb-primary);
   border: 1px solid rgba(93, 64, 55, 0.1);
+}
+
+.workspace-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.workspace-card-head h3 {
+  margin: 0 !important;
+  flex: 1;
+  line-height: 1.25;
 }
 
 .dashboard-quick-actions span.dashboard-quick-icon {
@@ -5026,13 +5040,24 @@ button.wifi-plan-card:focus-visible {
 .public-footer-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding: 16px 18px;
   border-radius: 16px;
   text-decoration: none;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.public-footer-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.public-footer-card-head .public-footer-card-label {
+  margin: 0;
+  color: rgba(200, 230, 201, 0.92);
 }
 
 a.public-footer-card:hover {

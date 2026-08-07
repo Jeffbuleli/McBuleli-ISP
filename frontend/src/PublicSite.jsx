@@ -641,10 +641,12 @@ export default function PublicSite() {
         <div className="public-grid">
           {WORKSPACES.map((item) => (
             <article className="public-card public-card--workspace" key={item.fr}>
-              <span className="workspace-icon" aria-hidden>
-                <WorkspaceIcon type={item.icon} />
-              </span>
-              <h3>{isEn ? item.en : item.fr}</h3>
+              <div className="workspace-card-head">
+                <span className="workspace-icon" aria-hidden>
+                  <WorkspaceIcon type={item.icon} />
+                </span>
+                <h3>{isEn ? item.en : item.fr}</h3>
+              </div>
               <p>{isEn ? item.bodyEn : item.bodyFr}</p>
             </article>
           ))}
@@ -832,9 +834,12 @@ export default function PublicSite() {
               href={`mailto:${COMPANY_CONTACT.email}`}
               aria-label={`${t("Courriel", "Email")}: ${COMPANY_CONTACT.email}`}
             >
-              <span className="public-footer-card-icon" aria-hidden="true">
-                <IconMail width={24} height={24} />
-              </span>
+              <div className="public-footer-card-head">
+                <span className="public-footer-card-icon" aria-hidden="true">
+                  <IconMail width={22} height={22} />
+                </span>
+                <span className="public-footer-card-label">{t("Courriel", "Email")}</span>
+              </div>
               <span className="public-footer-card-value">{COMPANY_CONTACT.email}</span>
             </a>
             <a
@@ -842,9 +847,12 @@ export default function PublicSite() {
               href={`tel:${COMPANY_CONTACT.phoneTel}`}
               aria-label={`${t("Téléphone", "Phone")}: ${COMPANY_CONTACT.phoneDisplay}`}
             >
-              <span className="public-footer-card-icon" aria-hidden="true">
-                <IconPhone width={24} height={24} />
-              </span>
+              <div className="public-footer-card-head">
+                <span className="public-footer-card-icon" aria-hidden="true">
+                  <IconPhone width={22} height={22} />
+                </span>
+                <span className="public-footer-card-label">{t("Téléphone", "Phone")}</span>
+              </div>
               <span className="public-footer-card-value">{COMPANY_CONTACT.phoneDisplay}</span>
             </a>
             <a
@@ -853,9 +861,12 @@ export default function PublicSite() {
               rel="noopener noreferrer"
               aria-label={`WhatsApp - ${t("Écrire à McBuleli", "Message McBuleli")}`}
             >
-              <span className="public-footer-card-icon" aria-hidden="true">
-                <IconWhatsApp width={24} height={24} />
-              </span>
+              <div className="public-footer-card-head">
+                <span className="public-footer-card-icon" aria-hidden="true">
+                  <IconWhatsApp width={22} height={22} />
+                </span>
+                <span className="public-footer-card-label">WhatsApp</span>
+              </div>
               <span className="public-footer-card-value">{t("Écrire à McBuleli", "Message McBuleli")}</span>
             </a>
             <div
@@ -863,9 +874,12 @@ export default function PublicSite() {
               role="group"
               aria-label={`${t("Siège", "Head office")}: ${COMPANY_CONTACT.address}`}
             >
-              <span className="public-footer-card-icon" aria-hidden="true">
-                <IconMapPin width={24} height={24} />
-              </span>
+              <div className="public-footer-card-head">
+                <span className="public-footer-card-icon" aria-hidden="true">
+                  <IconMapPin width={22} height={22} />
+                </span>
+                <span className="public-footer-card-label">{t("Siège", "Head office")}</span>
+              </div>
               <span className="public-footer-card-value">{COMPANY_CONTACT.address}</span>
             </div>
           </div>
