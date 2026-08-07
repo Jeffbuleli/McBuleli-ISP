@@ -5443,10 +5443,295 @@ api.getPaymentNotifications(activeIspId)
         hash="#team-settings"
         isFieldAgent={isFieldAgent}
       >
-      <section className="grid" id="team-settings">
+      <section className="grid field-clients-simple" id="team-settings">
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
-          <form className="panel" onSubmit={onUpsertNotificationProvider}>
-            <h2>{t("Fournisseurs de notifications", "Notification providers")}</h2>
+          <form className="panel field-clients-create" onSubmit={onCreateUser}>
+            <h2>{t("Nouveau membre", "New member")}</h2>
+            <div className="field-clients-create__row">
+              <input
+                placeholder={t("Nom complet", "Full name")}
+                value={userForm.fullName}
+                onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
+                required
+              />
+              <input
+                placeholder={t("E-mail", "Email")}
+                value={userForm.email}
+                onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                required
+              />
+            </div>
+            <div className="field-clients-create__row">
+              <input
+                placeholder={t(
+                  "Mot de passe (obligatoire seulement pour un nouvel e-mail)",
+                  "Password (required only for a new email)"
+                )}
+                type="password"
+                value={userForm.password}
+                onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+              />
+              <select
+                value={userForm.role}
+                onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+              >
+                {assignableStaffRoles(user.role).map((role) => (
+                  <option key={role} value={role}>
+                    {staffRoleOptionLabel(role, t)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="app-meta">
+              {t(
+                "Si l’e-mail existe déjà sur McBuleli, le compte est rattaché à ce FAI sans changer le mot de passe.",
+                "If the email already exists on McBuleli, the account is linked to this ISP without changing the password."
+              )}
+            </p>
+            <div className="field-clients-create__row">
+              <input
+                placeholder={t("Téléphone (facultatif)", "Phone (optional)")}
+                value={userForm.phone}
+                onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
+              />
+              <input
+                placeholder={t("Adresse (facultatif)", "Address (optional)")}
+                value={userForm.address}
+                onChange={(e) => setUserForm({ ...userForm, address: e.target.value })}
+              />
+            </div>
+            <div className="field-clients-create__row">
+              <input
+                placeholder={t("Site / zone affectée (facultatif)", "Site / zone (optional)")}
+                value={userForm.assignedSite}
+                onChange={(e) => setUserForm({ ...userForm, assignedSite: e.target.value })}
+              />
+              <select
+                value={userForm.accreditationLevel}
+                onChange={(e) =>
+                  setUserForm({ ...userForm, accreditationLevel: e.target.value })
+                }
+              >
+                <option value="basic">{t("Accréditation : basique", "Accreditation: basic")}</option>
+                <option value="standard">{t("Accréditation : standard", "Accreditation: standard")}</option>
+                <option value="senior">{t("Accréditation : senior", "Accreditation: senior")}</option>
+                <option value="manager">{t("Accréditation : manager", "Accreditation: manager")}</option>
+              </select>
+            </div>
+            <button type="submit" disabled={!selectedIspId}>
+              {t("Créer l'utilisateur", "Create user")}
+            </button>
+          </form>
+        )}
+
+        <section className="panel">
+          <h2>{t("Équipe du FAI", "ISP team")}</h2>
+          {generatedInvite && (
+            <div>
+              <p>
+                {t("Dernier lien d'invitation :", "Latest invite link:")}{" "}
+                <code>{generatedInvite.inviteLink}</code>
+              </p>
+              <p>
+                {t("Jeton :", "Token:")} <code>{generatedInvite.token}</code>
+              </p>
+              <p>
+                {t("Expire :", "Expires:")} {generatedInvite.expiresIn}
+              </p>
+            </div>
+          )}
+          {users.map((item) => {
+            const d =
+              teamRowDraft[item.id] || {
+                role: item.role,
+                phone: item.phone || "",
+                address: item.address || "",
+                assignedSite: item.assignedSite || "",
+                accreditationLevel: item.accreditationLevel || "basic"
+              };
+            const canManageTeam =
+              isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin";
+            return (
+              <div key={item.id} className="panel" style={{ marginBottom: 12 }}>
+                <p style={{ marginTop: 0 }}>
+                  <strong>{item.fullName}</strong> — {item.email}{" "}
+                  <span className="app-meta">
+                    [
+                    {item.isActive
+                      ? t("actif dans ce FAI", "active in this ISP")
+                      : t("inactif dans ce FAI", "inactive in this ISP")}
+                    {item.userAccountActive === false
+                      ? t(" · compte global suspendu", " · account suspended globally")
+                      : ""}
+                    ]
+                  </span>
+                </p>
+                {canManageTeam ? (
+                  <div className="grid" style={{ gap: 8 }}>
+                    {assignableStaffRoles(user.role).includes(d.role) ? (
+                      <select
+                        value={d.role}
+                        onChange={(e) =>
+                          setTeamRowDraft({
+                            ...teamRowDraft,
+                            [item.id]: { ...d, role: e.target.value }
+                          })
+                        }
+                      >
+                        {assignableStaffRoles(user.role).map((role) => (
+                          <option key={role} value={role}>
+                            {staffRoleOptionLabel(role, t)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="app-meta" style={{ margin: 0 }}>
+                        {staffRoleOptionLabel(d.role, t)}
+                      </p>
+                    )}
+                    <select
+                      value={d.accreditationLevel}
+                      onChange={(e) =>
+                        setTeamRowDraft({
+                          ...teamRowDraft,
+                          [item.id]: { ...d, accreditationLevel: e.target.value }
+                        })
+                      }
+                    >
+                      <option value="basic">{t("Accréditation : basique", "Accreditation: basic")}</option>
+                      <option value="standard">{t("Accréditation : standard", "Accreditation: standard")}</option>
+                      <option value="senior">{t("Accréditation : senior", "Accreditation: senior")}</option>
+                      <option value="manager">{t("Accréditation : manager", "Accreditation: manager")}</option>
+                    </select>
+                    <input
+                      placeholder={t("Téléphone", "Phone")}
+                      value={d.phone}
+                      onChange={(e) =>
+                        setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, phone: e.target.value } })
+                      }
+                    />
+                    <input
+                      placeholder={t("Adresse", "Address")}
+                      value={d.address}
+                      onChange={(e) =>
+                        setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, address: e.target.value } })
+                      }
+                    />
+                    <input
+                      placeholder={t("Site / zone", "Site / zone")}
+                      value={d.assignedSite}
+                      onChange={(e) =>
+                        setTeamRowDraft({
+                          ...teamRowDraft,
+                          [item.id]: { ...d, assignedSite: e.target.value }
+                        })
+                      }
+                    />
+                    <button type="button" onClick={() => onSaveTeamUser(item.id)}>
+                      {t("Enregistrer fiche & rôle", "Save profile & role")}
+                    </button>
+                  </div>
+                ) : null}
+                {canManageTeam ? (
+                  <p style={{ marginBottom: 0 }}>
+                    <button type="button" onClick={() => onResetPassword(item.id)}>
+                      {t("Réinitialiser le mot de passe", "Reset password")}
+                    </button>{" "}
+                    <button type="button" onClick={() => onCreateInvite(item.id)}>
+                      {t("Créer une invitation", "Create invite")}
+                    </button>{" "}
+                    {item.isActive ? (
+                      <button type="button" onClick={() => onDeactivateUser(item.id)}>
+                        {t("Désactiver dans ce FAI", "Disable in this ISP")}
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => onReactivateUser(item.id)}>
+                        {t("Réactiver dans ce FAI", "Reactivate in this ISP")}
+                      </button>
+                    )}{" "}
+                    <button type="button" onClick={() => onSuspendUserGlobally(item.id)}>
+                      {t("Suspendre compte (toutes entreprises)", "Suspend account (all companies)")}
+                    </button>{" "}
+                    {item.userAccountActive === false ? (
+                      <button type="button" onClick={() => onReactivateUserGlobally(item.id)}>
+                        {t("Réactiver connexion (global)", "Reactivate login (global)")}
+                      </button>
+                    ) : null}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })}
+
+        </section>
+
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
+          <details className="panel field-clients-more">
+            <summary>{t("Import / export CSV", "Import / export CSV")}</summary>
+            <div className="field-clients-more__body">
+              <p>
+                {t(
+                  "Téléchargez les comptes pour sauvegarde ou importez avec les colonnes : fullName, email, role, mot de passe facultatif. Les lignes sans mot de passe utilisent le défaut ci-dessous (min. 6 caractères).",
+                  "Download accounts for backup or import with columns: fullName, email, role, optional password. Rows without a password use the default below (min. 6 characters)."
+                )}
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                <button type="button" onClick={onDownloadTeamUsersCsv} disabled={!selectedIspId}>
+                  {t("Télécharger le CSV équipe", "Download team users CSV")}
+                </button>
+                <button type="button" onClick={() => api.downloadTeamImportTemplate()}>
+                  {t("Télécharger le modèle d'import", "Download import template")}
+                </button>
+              </div>
+              <p className="app-meta" style={{ marginTop: 8, fontSize: "0.9em" }}>
+                {t("Modèle : ligne d'en-tête uniquement —", "Template: header row only —")}{" "}
+                <code>fullName,email,role,password,accreditationLevel</code>.{" "}
+                {t(
+                  "Mot de passe vide = défaut ci-dessous ; rôle vide = rôle par défaut.",
+                  "Empty password = default below; empty role = default role."
+                )}
+              </p>
+              <form onSubmit={onImportTeamUsersCsv} style={{ marginTop: 12 }}>
+                <input ref={teamCsvInputRef} type="file" accept=".csv,text/csv" />
+                <input
+                  type="password"
+                  placeholder={t(
+                    "Mot de passe par défaut pour les lignes sans (min. 6)",
+                    "Default password for rows without one (min. 6)"
+                  )}
+                  value={teamImportPassword}
+                  onChange={(e) => setTeamImportPassword(e.target.value)}
+                />
+                <select value={teamImportRole} onChange={(e) => setTeamImportRole(e.target.value)}>
+                  {assignableStaffRoles(user.role).map((role) => (
+                    <option key={role} value={role}>
+                      {staffRoleOptionLabel(role, t)}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" disabled={!selectedIspId}>
+                  {t("Importer le CSV équipe", "Import team CSV")}
+                </button>
+              </form>
+              {teamImportReport ? (
+                <CsvImportResultBlock
+                  t={t}
+                  createdCount={teamImportReport.createdCount}
+                  skipped={teamImportReport.skipped}
+                  errors={teamImportReport.errors}
+                  onDismiss={() => setTeamImportReport(null)}
+                />
+              ) : null}
+            </div>
+          </details>
+        )}
+
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
+          <details className="panel field-clients-more">
+            <summary>{t("Notifications", "Notifications")}</summary>
+            <div className="field-clients-more__body field-clients-more__body--stack">
+          <form className="field-clients-more__body" onSubmit={onUpsertNotificationProvider} style={{ margin: 0, boxShadow: "none", border: 0, padding: 0 }}>
+            <h3>{t("Fournisseurs de notifications", "Notification providers")}</h3>
             <select
               value={notificationProviderForm.channel}
               onChange={(e) =>
@@ -5621,771 +5906,9 @@ api.getPaymentNotifications(activeIspId)
               </p>
             ))}
           </form>
-        )}
-      </section>
 
-      <section className="grid">
-        <form className="panel" onSubmit={onCreatePaymentIntent}>
-          <h2>{t("Encaissement manuel standard", "Standard manual collection")}</h2>
-          <p className="app-meta">
-            {t(
-              "Procédure: 1) collecte preuve client, 2) validation financière FAI, 3) activation internet après confirmation.",
-              "Procedure: 1) capture customer proof, 2) FAI finance validation, 3) internet activation after confirmation."
-            )}
-          </p>
-          <select
-            value={paymentIntentForm.invoiceId}
-            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, invoiceId: e.target.value })}
-          >
-            <option value="">
-              {t("Choisir une facture ouverte (impayée / en retard)", "Select an open invoice (unpaid / overdue)")}
-            </option>
-            {invoices
-              .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
-              .map((inv) => (
-                <option key={inv.id} value={inv.id}>
-                  {inv.id.slice(0, 8)} — ${inv.amountUsd} ({invoiceStatusShort(inv.status, isEn)})
-                </option>
-              ))}
-          </select>
-          <select
-            value={paymentIntentForm.channel}
-            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, channel: e.target.value })}
-          >
-            <option value="cash_agent">{t("Cash agent terrain", "Field cash collection")}</option>
-            <option value="bank_transfer">{t("Virement bancaire", "Bank transfer")}</option>
-            <option value="card_manual">{t("Visa Card (manuel)", "Visa Card (manual)")}</option>
-            <option value="crypto_wallet">{t("Portefeuille crypto / Binance", "Crypto wallet / Binance")}</option>
-            <option value="mobile_money_manual">{t("Mobile Money manuel", "Manual Mobile Money")}</option>
-          </select>
-          <input
-            placeholder={t("Référence transaction / hash / reçu", "Transaction ref / hash / receipt")}
-            value={paymentIntentForm.externalRef}
-            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, externalRef: e.target.value })}
-          />
-          <input
-            placeholder={t("Téléphone ou contact payeur", "Payer phone or contact")}
-            value={paymentIntentForm.payerContact}
-            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, payerContact: e.target.value })}
-          />
-          <input
-            placeholder={t("Montant USD (facultatif)", "Amount USD (optional)")}
-            value={paymentIntentForm.amountUsd}
-            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, amountUsd: e.target.value })}
-          />
-          {paymentIntentForm.channel === "cash_agent" ? (
-            <>
-              <input placeholder={t("Nom agent collecteur", "Collector agent name")} value={paymentIntentForm.collectorName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, collectorName: e.target.value })} />
-              <input placeholder={t("N° reçu cash", "Cash receipt number")} value={paymentIntentForm.receiptNumber} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, receiptNumber: e.target.value })} />
-              <input placeholder={t("Lieu de collecte", "Collection location")} value={paymentIntentForm.collectionLocation} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, collectionLocation: e.target.value })} />
-              <input type="datetime-local" value={paymentIntentForm.collectedAt} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, collectedAt: e.target.value })} />
-            </>
-          ) : null}
-          {paymentIntentForm.channel === "bank_transfer" ? (
-            <>
-              <input placeholder={t("Banque", "Bank name")} value={paymentIntentForm.bankName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, bankName: e.target.value })} />
-              <input placeholder={t("Nom du titulaire", "Account owner name")} value={paymentIntentForm.accountName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, accountName: e.target.value })} />
-              <input placeholder={t("Numéro de compte", "Account number")} value={paymentIntentForm.accountNumber} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, accountNumber: e.target.value })} />
-            </>
-          ) : null}
-          {paymentIntentForm.channel === "card_manual" ? (
-            <>
-              <input placeholder={t("Acquéreur / PSP", "Processor / PSP")} value={paymentIntentForm.processorName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, processorName: e.target.value })} />
-              <input placeholder={t("4 derniers chiffres carte", "Card last 4 digits")} value={paymentIntentForm.cardLast4} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, cardLast4: e.target.value })} />
-              <input placeholder={t("Code autorisation", "Authorization code")} value={paymentIntentForm.authCode} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, authCode: e.target.value })} />
-            </>
-          ) : null}
-          {paymentIntentForm.channel === "crypto_wallet" ? (
-            <>
-              <input placeholder={t("Réseau (TRC20, BEP20, etc.)", "Network (TRC20, BEP20, etc.)")} value={paymentIntentForm.walletNetwork} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, walletNetwork: e.target.value })} />
-              <input placeholder={t("Adresse wallet destinataire", "Destination wallet address")} value={paymentIntentForm.walletAddress} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, walletAddress: e.target.value })} />
-            </>
-          ) : null}
-          <button type="submit" disabled={!selectedIspId}>
-            {t("Enregistrer l'encaissement manuel", "Record manual collection")}
-          </button>
-        </form>
-
-        <form className="panel" onSubmit={onSubmitTid}>
-          <h2>{t("Mobile Money manuel (TID)", "Manual Mobile Money (TID)")}</h2>
-          <select
-            value={tidForm.invoiceId}
-            onChange={(e) => setTidForm({ ...tidForm, invoiceId: e.target.value })}
-          >
-            <option value="">
-              {t("Choisir une facture ouverte (impayée / en retard)", "Select an open invoice (unpaid / overdue)")}
-            </option>
-            {invoices
-              .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
-              .map((inv) => (
-                <option key={inv.id} value={inv.id}>
-                  {inv.id.slice(0, 8)} — ${inv.amountUsd} ({invoiceStatusShort(inv.status, isEn)})
-                </option>
-              ))}
-          </select>
-          <input
-            placeholder={t("Référence de transaction (TID)", "Transaction reference (TID)")}
-            value={tidForm.tid}
-            onChange={(e) => setTidForm({ ...tidForm, tid: e.target.value })}
-          />
-          <input
-            placeholder={t("Téléphone payeur", "Payer phone")}
-            value={tidForm.submittedByPhone}
-            onChange={(e) => setTidForm({ ...tidForm, submittedByPhone: e.target.value })}
-          />
-          <input
-            placeholder={t("Montant (facultatif)", "Amount (optional)")}
-            value={tidForm.amountUsd}
-            onChange={(e) => setTidForm({ ...tidForm, amountUsd: e.target.value })}
-          />
-          <button type="submit" disabled={!selectedIspId}>
-            {t("Envoyer la TID", "Submit TID")}
-          </button>
-        </form>
-
-        <section className="panel">
-          <h2>{t("File de vérification des TID", "TID verification queue")}</h2>
-          <button type="button" onClick={onQueueTidReminders} disabled={!selectedIspId}>
-            {t("Mettre en file les rappels TID en attente", "Queue pending TID reminders")}
-          </button>
-          {tidSubmissions.map((row) => (
-            <p key={row.id}>
-              {row.tid} — {tidSubmissionStatusLabel(row.status, isEn)} — {t("facture", "invoice")}{" "}
-              {row.invoiceId?.slice(0, 8)}{" "}
-              {(isPlatformSuperRole(user.role) ||
-                user.role === "company_manager" ||
-                user.role === "isp_admin" ||
-                user.role === "billing_agent") &&
-                row.status === "pending" && (
-                  <>
-                    <button type="button" onClick={() => onReviewTid(row.id, "approved")}>
-                      {t("Approuver", "Approve")}
-                    </button>{" "}
-                    <button type="button" onClick={() => onReviewTid(row.id, "rejected")}>
-                      {t("Rejeter", "Reject")}
-                    </button>
-                  </>
-                )}
-            </p>
-          ))}
-          {tidConflicts.length > 0 && (
-            <>
-              <h3>{t("Conflits TID en double", "Duplicate TID conflicts")}</h3>
-              {tidConflicts.map((c) => (
-                <p key={c.tid}>
-                  {c.tid} — {c.duplicates} {t("envoi(s)", "submission(s)")} — {c.statuses?.join(", ")}
-                </p>
-              ))}
-            </>
-          )}
-        </section>
-
-        {showAdvancedPayments ? (
-        <section className="panel">
-          <h2>{t("Validation avancee", "Advanced validation")}</h2>
-          <DataTable
-            t={t}
-            title={null}
-            rows={unifiedPaymentTableView.pageRows}
-            columns={[
-              { key: "createdAt", label: t("Date", "Date"), sortable: true, render: (r) => formatDateTime(r.createdAt) },
-              { key: "scope", label: t("Portée", "Scope"), sortable: true },
-              { key: "methodType", label: t("Méthode", "Method"), sortable: true },
-              { key: "tid", label: "TID/Ref", sortable: true },
-              { key: "amountUsd", label: "USD", sortable: true, align: "right" },
-              { key: "status", label: t("Statut", "Status"), sortable: true },
-              {
-                key: "actions",
-                label: t("Actions", "Actions"),
-                render: (r) =>
-                  r.status === "PENDING" || r.status === "UNDER_REVIEW" ? (
-                    <>
-                      {r.status === "PENDING" ? (
-                        <button type="button" className="btn-secondary-outline" onClick={() => onReviewUnifiedPayment(r.id, "UNDER_REVIEW")}>
-                          {t("Prendre en revue", "Take for review")}
-                        </button>
-                      ) : null}
-                      <button type="button" onClick={() => onReviewUnifiedPayment(r.id, "APPROVED")}>{t("Approuver", "Approve")}</button>
-                      <button type="button" className="btn-secondary-outline" onClick={() => onReviewUnifiedPayment(r.id, "REJECTED")}>{t("Rejeter", "Reject")}</button>
-                    </>
-                  ) : (
-                    <span className="app-meta">-</span>
-                  )
-              }
-            ]}
-            searchValue={unifiedPaymentTable.q}
-            onSearchChange={(q) => setUnifiedPaymentTable((prev) => ({ ...prev, q, page: 1 }))}
-            filters={
-              <select
-                value={unifiedPaymentTable.status}
-                onChange={(e) => setUnifiedPaymentTable((prev) => ({ ...prev, status: e.target.value, page: 1 }))}
-              >
-                <option value="all">{t("Tous statuts", "All statuses")}</option>
-                <option value="PENDING">PENDING</option>
-                <option value="UNDER_REVIEW">UNDER_REVIEW</option>
-                <option value="APPROVED">APPROVED</option>
-                <option value="REJECTED">REJECTED</option>
-                <option value="EXPIRED">EXPIRED</option>
-              </select>
-            }
-            page={unifiedPaymentTable.page}
-            pageSize={unifiedPaymentTable.pageSize}
-            totalRows={unifiedPaymentTableView.total}
-            onPageChange={(page) => setUnifiedPaymentTable((prev) => ({ ...prev, page }))}
-            onPageSizeChange={(pageSize) => setUnifiedPaymentTable((prev) => ({ ...prev, pageSize, page: 1 }))}
-            sort={unifiedPaymentTable.sort}
-            onSortChange={(sort) => setUnifiedPaymentTable((prev) => ({ ...prev, sort }))}
-            emptyLabel={t("Aucun paiement canonique.", "No canonical payment records.")}
-          />
-        </section>
-        ) : null}
-
-        <section className="panel">
-          <h2>
-            {t("Notifications", "Notifications")}{" "}
-            {paymentNotifUnread > 0 ? <span className="badge">{paymentNotifUnread}</span> : null}
-          </h2>
-          {paymentNotifications.map((n) => (
-            <p key={n.id}>
-              <strong>{n.title}</strong> - {n.body} ({formatDateTime(n.createdAt)}){" "}
-              {!n.isRead ? (
-                <button type="button" className="btn-secondary-outline" onClick={() => onMarkPaymentNotificationRead(n.id)}>
-                  {t("Marquer lu", "Mark read")}
-                </button>
-              ) : null}
-            </p>
-          ))}
-        </section>
-
-        {showAdvancedPayments ? (
-        <section className="panel">
-          <h2>{t("Paiements manuels (avance)", "Manual payments (advanced)")}</h2>
-          <DataTable
-            t={t}
-            title={null}
-            rows={paymentIntentTableView.pageRows}
-            columns={[
-              { key: "channel", header: t("Canal", "Channel"), sortKey: "channel", cell: (r) => r.channel || "-" },
-              { key: "externalRef", header: t("Référence", "Reference"), sortKey: "externalRef", cell: (r) => r.externalRef || "-" },
-              { key: "amountUsd", header: "USD", sortKey: "amountUsd", cell: (r) => Number(r.amountUsd || 0).toFixed(2) },
-              { key: "status", header: t("Statut", "Status"), sortKey: "status", cell: (r) => paymentIntentStatusLabel(r.status, isEn) },
-              { key: "createdAt", header: t("Créé", "Created"), sortKey: "createdAt", cell: (r) => (r.createdAt ? new Date(r.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "-") },
-              {
-                key: "actions",
-                header: t("Actions", "Actions"),
-                cell: (r) =>
-                  (isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin" || user.role === "billing_agent") &&
-                  (r.status === "pending" || r.status === "approved_l1") ? (
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button type="button" onClick={() => onReviewPaymentIntent(r.id, "approved")}>{t("Approuver", "Approve")}</button>
-                      <button type="button" className="btn-secondary-outline" onClick={() => onReviewPaymentIntent(r.id, "rejected")}>{t("Rejeter", "Reject")}</button>
-                    </div>
-                  ) : "-"
-              }
-            ]}
-            searchValue={paymentIntentTable.q}
-            onSearchValueChange={(q) => setPaymentIntentTable((s) => ({ ...s, q, page: 1 }))}
-            filters={
-              <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-                <span>{t("Statut", "Status")}</span>
-                <select
-                  value={paymentIntentTable.status}
-                  onChange={(e) => setPaymentIntentTable((s) => ({ ...s, status: e.target.value, page: 1 }))}
-                >
-                  <option value="all">{t("Tous", "All")}</option>
-                  <option value="pending">{t("En attente", "Pending")}</option>
-                  <option value="approved_l1">{t("Niveau 1", "Level 1")}</option>
-                  <option value="approved">{t("Approuvé", "Approved")}</option>
-                  <option value="rejected">{t("Rejeté", "Rejected")}</option>
-                </select>
-              </label>
-            }
-            page={paymentIntentTable.page}
-            pageSize={paymentIntentTable.pageSize}
-            totalRows={paymentIntentTableView.total}
-            onPageChange={(page) => setPaymentIntentTable((s) => ({ ...s, page }))}
-            onPageSizeChange={(pageSize) => setPaymentIntentTable((s) => ({ ...s, pageSize, page: 1 }))}
-            sort={paymentIntentTable.sort}
-            onSortChange={(sort) => setPaymentIntentTable((s) => ({ ...s, sort }))}
-          />
-        </section>
-        ) : null}
-      </section>
-
-      <section className="grid">
-        <form className="panel" onSubmit={onGenerateVouchers}>
-          <h2>{t("Générer des bons d'accès", "Generate access vouchers")}</h2>
-          <select
-            value={voucherForm.planId}
-            onChange={(e) => setVoucherForm({ ...voucherForm, planId: e.target.value })}
-          >
-            <option value="">{t("Choisir une formule", "Select a plan")}</option>
-            {plans.map((plan) => (
-              <option key={plan.id} value={plan.id}>
-                {plan.name} ({plan.rateLimit}, {plan.durationDays} {t("jours", "days")})
-              </option>
-            ))}
-          </select>
-          <input
-            type="number"
-            min="1"
-            max="100"
-            value={voucherForm.quantity}
-            onChange={(e) => setVoucherForm({ ...voucherForm, quantity: e.target.value })}
-          />
-          <label style={{ display: "block", marginTop: 8 }}>
-            {t(
-              "Appareils max par bon (défaut = limite de la formule)",
-              "Max devices per voucher (defaults to plan limit)"
-            )}
-            <input
-              type="number"
-              min="1"
-              max="100"
-              placeholder={t("Défaut formule", "Plan default")}
-              value={voucherForm.maxDevices}
-              onChange={(e) => setVoucherForm({ ...voucherForm, maxDevices: e.target.value })}
-              style={{ marginLeft: 8, width: 120 }}
-            />
-          </label>
-          <button type="submit" disabled={!selectedIspId}>
-            {t("Générer les bons", "Generate vouchers")}
-          </button>
-          <button type="button" onClick={onPrintVouchers} disabled={!selectedIspId}>
-            {t("Imprimer les bons inutilisés", "Print unused vouchers")}
-          </button>
-          <button type="button" onClick={onExportVouchers} disabled={!selectedIspId}>
-            {t("Exporter CSV", "Export CSV")}
-          </button>
-        </form>
-
-        <form className="panel" onSubmit={onRedeemVoucher}>
-          <h2>{t("Utiliser un bon", "Redeem voucher")}</h2>
-          <input
-            placeholder={t("Code du bon", "Voucher code")}
-            value={voucherRedeemForm.code}
-            onChange={(e) => setVoucherRedeemForm({ ...voucherRedeemForm, code: e.target.value })}
-          />
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-            <input
-              type="checkbox"
-              checked={voucherRedeemForm.redeemByPhone}
-              onChange={(e) =>
-                setVoucherRedeemForm({ ...voucherRedeemForm, redeemByPhone: e.target.checked })
-              }
-            />
-            {t(
-              "Utiliser par téléphone (FAI = locataire sélectionné)",
-              "Redeem by phone (ISP = selected tenant)"
-            )}
-          </label>
-          {voucherRedeemForm.redeemByPhone ? (
-            <input
-              placeholder={t("Téléphone client (chiffres, indicatif)", "Customer phone (digits, country code)")}
-              value={voucherRedeemForm.phone}
-              onChange={(e) => setVoucherRedeemForm({ ...voucherRedeemForm, phone: e.target.value })}
-            />
-          ) : (
-            <select
-              value={voucherRedeemForm.customerId}
-              onChange={(e) =>
-                setVoucherRedeemForm({ ...voucherRedeemForm, customerId: e.target.value })
-              }
-            >
-              <option value="">{t("Choisir un client", "Select a customer")}</option>
-              {customers.map((cst) => (
-                <option key={cst.id} value={cst.id}>
-                  {cst.fullName}
-                </option>
-              ))}
-            </select>
-          )}
-          <input
-            type="password"
-            placeholder={t(
-              "Mot de passe portail (obligatoire si absent, min. 6 car.)",
-              "Portal password (required if none, min. 6 chars)"
-            )}
-            value={voucherRedeemForm.newPassword}
-            onChange={(e) => setVoucherRedeemForm({ ...voucherRedeemForm, newPassword: e.target.value })}
-          />
-          <button type="submit" disabled={!selectedIspId}>
-            {t("Utiliser le bon", "Redeem voucher")}
-          </button>
-          <DataTable
-            t={t}
-            title={t("Derniers bons", "Latest vouchers")}
-            rows={voucherTableView.pageRows}
-            columns={[
-              { key: "code", header: t("Code", "Code"), sortKey: "code", cell: (v) => v.code || "—" },
-              { key: "rateLimit", header: t("Débit", "Speed"), sortKey: "rateLimit", cell: (v) => v.rateLimit || "—" },
-              {
-                key: "durationDays",
-                header: t("Durée", "Duration"),
-                sortKey: "durationDays",
-                cell: (v) => (v.durationDays != null ? `${v.durationDays}d` : "—")
-              },
-              {
-                key: "maxDevices",
-                header: t("Appareils", "Devices"),
-                sortKey: "maxDevices",
-                cell: (v) => (v.maxDevices != null ? String(v.maxDevices) : "—")
-              },
-              { key: "status", header: t("Statut", "Status"), sortKey: "status", cell: (v) => v.status || "—" }
-            ]}
-            searchValue={voucherTable.q}
-            onSearchValueChange={(q) => setVoucherTable((s) => ({ ...s, q, page: 1 }))}
-            page={voucherTable.page}
-            pageSize={voucherTable.pageSize}
-            totalRows={voucherTableView.total}
-            onPageChange={(page) => setVoucherTable((s) => ({ ...s, page }))}
-            onPageSizeChange={(pageSize) => setVoucherTable((s) => ({ ...s, pageSize, page: 1 }))}
-            sort={voucherTable.sort}
-            onSortChange={(sort) => setVoucherTable((s) => ({ ...s, sort }))}
-          />
-        </form>
-      </section>
-
-      <section className="grid">
-        <section className="panel">
-          <h2>{t("Formule plateforme (facturation SaaS)", "Platform plan (SaaS billing)")}</h2>
-          <form onSubmit={onCreatePlatformSubscription}>
-            <select
-              value={platformSubForm.packageId}
-              onChange={(e) => setPlatformSubForm({ ...platformSubForm, packageId: e.target.value })}
-            >
-              <option value="">{t("Choisir une formule", "Select a plan")}</option>
-              {platformPackages.map((pkg) => (
-                <option key={pkg.id} value={pkg.id}>
-                  {`${pkg.name} ($${pkg.monthlyPriceUsd}${t(" / mois", " / month")})`}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              value={platformSubForm.durationDays}
-              onChange={(e) =>
-                setPlatformSubForm({ ...platformSubForm, durationDays: e.target.value })
-              }
-            />
-            <button type="submit" disabled={!selectedIspId || !isPlatformSuperRole(user.role)}>
-              {t("Attribuer la formule", "Assign plan")}
-            </button>
-          </form>
-          {platformSubscriptions.map((sub) => (
-            <p key={sub.id}>
-              {sub.packageName} ({sub.status}) {t("jusqu'au", "until")}{" "}
-              {new Date(sub.endsAt).toLocaleDateString(isEn ? "en-GB" : "fr-FR")}
-            </p>
-          ))}
-        </section>
-      </section>
-
-      <section className="grid">
-        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
-          <form className="panel" onSubmit={onCreateUser}>
-            <h2>{t("Créer un utilisateur équipe", "Create team user")}</h2>
-            <input
-              placeholder={t("Nom complet", "Full name")}
-              value={userForm.fullName}
-              onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
-            />
-            <input
-              placeholder={t("E-mail", "Email")}
-              value={userForm.email}
-              onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-            />
-            <input
-              placeholder={t(
-                "Mot de passe (obligatoire seulement pour un nouvel e-mail)",
-                "Password (required only for a new email)"
-              )}
-              type="password"
-              value={userForm.password}
-              onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-            />
-            <p className="app-meta">
-              {t(
-                "Si l’e-mail existe déjà sur McBuleli, le compte est rattaché à ce FAI sans changer le mot de passe.",
-                "If the email already exists on McBuleli, the account is linked to this ISP without changing the password."
-              )}
-            </p>
-            <input
-              placeholder={t("Téléphone (facultatif)", "Phone (optional)")}
-              value={userForm.phone}
-              onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
-            />
-            <input
-              placeholder={t("Adresse (facultatif)", "Address (optional)")}
-              value={userForm.address}
-              onChange={(e) => setUserForm({ ...userForm, address: e.target.value })}
-            />
-            <input
-              placeholder={t("Site / zone affectée (facultatif)", "Site / zone (optional)")}
-              value={userForm.assignedSite}
-              onChange={(e) => setUserForm({ ...userForm, assignedSite: e.target.value })}
-            />
-            <select
-              value={userForm.role}
-              onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
-            >
-              {assignableStaffRoles(user.role).map((role) => (
-                <option key={role} value={role}>
-                  {staffRoleOptionLabel(role, t)}
-                </option>
-              ))}
-            </select>
-            <select
-              value={userForm.accreditationLevel}
-              onChange={(e) =>
-                setUserForm({ ...userForm, accreditationLevel: e.target.value })
-              }
-            >
-              <option value="basic">{t("Accréditation : basique", "Accreditation: basic")}</option>
-              <option value="standard">{t("Accréditation : standard", "Accreditation: standard")}</option>
-              <option value="senior">{t("Accréditation : senior", "Accreditation: senior")}</option>
-              <option value="manager">{t("Accréditation : manager", "Accreditation: manager")}</option>
-            </select>
-            <button type="submit" disabled={!selectedIspId}>
-              {t("Créer l'utilisateur", "Create user")}
-            </button>
-          </form>
-        )}
-
-        <section className="panel">
-          <h2>{t("Équipe du FAI", "ISP team")}</h2>
-          {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
-            <div style={{ marginBottom: 16 }}>
-              <h3>{t("Import / export équipe (CSV)", "Import / export team (CSV)")}</h3>
-              <p>
-                {t(
-                  "Téléchargez les comptes pour sauvegarde ou importez avec les colonnes : fullName, email, role, mot de passe facultatif. Les lignes sans mot de passe utilisent le défaut ci-dessous (min. 6 caractères).",
-                  "Download accounts for backup or import with columns: fullName, email, role, optional password. Rows without a password use the default below (min. 6 characters)."
-                )}
-              </p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                <button type="button" onClick={onDownloadTeamUsersCsv} disabled={!selectedIspId}>
-                  {t("Télécharger le CSV équipe", "Download team users CSV")}
-                </button>
-                <button type="button" onClick={() => api.downloadTeamImportTemplate()}>
-                  {t("Télécharger le modèle d'import", "Download import template")}
-                </button>
-              </div>
-              <p className="app-meta" style={{ marginTop: 8, fontSize: "0.9em" }}>
-                {t("Modèle : ligne d'en-tête uniquement —", "Template: header row only —")}{" "}
-                <code>fullName,email,role,password,accreditationLevel</code>.{" "}
-                {t(
-                  "Mot de passe vide = défaut ci-dessous ; rôle vide = rôle par défaut.",
-                  "Empty password = default below; empty role = default role."
-                )}
-              </p>
-              <form onSubmit={onImportTeamUsersCsv} style={{ marginTop: 12 }}>
-                <input ref={teamCsvInputRef} type="file" accept=".csv,text/csv" />
-                <input
-                  type="password"
-                  placeholder={t(
-                    "Mot de passe par défaut pour les lignes sans (min. 6)",
-                    "Default password for rows without one (min. 6)"
-                  )}
-                  value={teamImportPassword}
-                  onChange={(e) => setTeamImportPassword(e.target.value)}
-                />
-                <select value={teamImportRole} onChange={(e) => setTeamImportRole(e.target.value)}>
-                  {assignableStaffRoles(user.role).map((role) => (
-                    <option key={role} value={role}>
-                      {staffRoleOptionLabel(role, t)}
-                    </option>
-                  ))}
-                </select>
-                <button type="submit" disabled={!selectedIspId}>
-                  {t("Importer le CSV équipe", "Import team CSV")}
-                </button>
-              </form>
-              {teamImportReport ? (
-                <CsvImportResultBlock
-                  t={t}
-                  createdCount={teamImportReport.createdCount}
-                  skipped={teamImportReport.skipped}
-                  errors={teamImportReport.errors}
-                  onDismiss={() => setTeamImportReport(null)}
-                />
-              ) : null}
-            </div>
-          )}
-          {generatedInvite && (
-            <div>
-              <p>
-                {t("Dernier lien d'invitation :", "Latest invite link:")}{" "}
-                <code>{generatedInvite.inviteLink}</code>
-              </p>
-              <p>
-                {t("Jeton :", "Token:")} <code>{generatedInvite.token}</code>
-              </p>
-              <p>
-                {t("Expire :", "Expires:")} {generatedInvite.expiresIn}
-              </p>
-            </div>
-          )}
-          {users.map((item) => {
-            const d =
-              teamRowDraft[item.id] || {
-                role: item.role,
-                phone: item.phone || "",
-                address: item.address || "",
-                assignedSite: item.assignedSite || "",
-                accreditationLevel: item.accreditationLevel || "basic"
-              };
-            const canManageTeam =
-              isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin";
-            return (
-              <div key={item.id} className="panel" style={{ marginBottom: 12 }}>
-                <p style={{ marginTop: 0 }}>
-                  <strong>{item.fullName}</strong> — {item.email}{" "}
-                  <span className="app-meta">
-                    [
-                    {item.isActive
-                      ? t("actif dans ce FAI", "active in this ISP")
-                      : t("inactif dans ce FAI", "inactive in this ISP")}
-                    {item.userAccountActive === false
-                      ? t(" · compte global suspendu", " · account suspended globally")
-                      : ""}
-                    ]
-                  </span>
-                </p>
-                {canManageTeam ? (
-                  <div className="grid" style={{ gap: 8 }}>
-                    {assignableStaffRoles(user.role).includes(d.role) ? (
-                      <select
-                        value={d.role}
-                        onChange={(e) =>
-                          setTeamRowDraft({
-                            ...teamRowDraft,
-                            [item.id]: { ...d, role: e.target.value }
-                          })
-                        }
-                      >
-                        {assignableStaffRoles(user.role).map((role) => (
-                          <option key={role} value={role}>
-                            {staffRoleOptionLabel(role, t)}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <p className="app-meta" style={{ margin: 0 }}>
-                        {staffRoleOptionLabel(d.role, t)}
-                      </p>
-                    )}
-                    <select
-                      value={d.accreditationLevel}
-                      onChange={(e) =>
-                        setTeamRowDraft({
-                          ...teamRowDraft,
-                          [item.id]: { ...d, accreditationLevel: e.target.value }
-                        })
-                      }
-                    >
-                      <option value="basic">{t("Accréditation : basique", "Accreditation: basic")}</option>
-                      <option value="standard">{t("Accréditation : standard", "Accreditation: standard")}</option>
-                      <option value="senior">{t("Accréditation : senior", "Accreditation: senior")}</option>
-                      <option value="manager">{t("Accréditation : manager", "Accreditation: manager")}</option>
-                    </select>
-                    <input
-                      placeholder={t("Téléphone", "Phone")}
-                      value={d.phone}
-                      onChange={(e) =>
-                        setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, phone: e.target.value } })
-                      }
-                    />
-                    <input
-                      placeholder={t("Adresse", "Address")}
-                      value={d.address}
-                      onChange={(e) =>
-                        setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, address: e.target.value } })
-                      }
-                    />
-                    <input
-                      placeholder={t("Site / zone", "Site / zone")}
-                      value={d.assignedSite}
-                      onChange={(e) =>
-                        setTeamRowDraft({
-                          ...teamRowDraft,
-                          [item.id]: { ...d, assignedSite: e.target.value }
-                        })
-                      }
-                    />
-                    <button type="button" onClick={() => onSaveTeamUser(item.id)}>
-                      {t("Enregistrer fiche & rôle", "Save profile & role")}
-                    </button>
-                  </div>
-                ) : null}
-                {canManageTeam ? (
-                  <p style={{ marginBottom: 0 }}>
-                    <button type="button" onClick={() => onResetPassword(item.id)}>
-                      {t("Réinitialiser le mot de passe", "Reset password")}
-                    </button>{" "}
-                    <button type="button" onClick={() => onCreateInvite(item.id)}>
-                      {t("Créer une invitation", "Create invite")}
-                    </button>{" "}
-                    {item.isActive ? (
-                      <button type="button" onClick={() => onDeactivateUser(item.id)}>
-                        {t("Désactiver dans ce FAI", "Disable in this ISP")}
-                      </button>
-                    ) : (
-                      <button type="button" onClick={() => onReactivateUser(item.id)}>
-                        {t("Réactiver dans ce FAI", "Reactivate in this ISP")}
-                      </button>
-                    )}{" "}
-                    <button type="button" onClick={() => onSuspendUserGlobally(item.id)}>
-                      {t("Suspendre compte (toutes entreprises)", "Suspend account (all companies)")}
-                    </button>{" "}
-                    {item.userAccountActive === false ? (
-                      <button type="button" onClick={() => onReactivateUserGlobally(item.id)}>
-                        {t("Réactiver connexion (global)", "Reactivate login (global)")}
-                      </button>
-                    ) : null}
-                  </p>
-                ) : null}
-              </div>
-            );
-          })}
-        </section>
-      </section>
-      </DashboardScreenGate>
-
-      <DashboardScreenGate
-        mobile={gateMobile}
-        active={mobileScreen}
-        id="settings"
-        hash="#audit"
-        isFieldAgent={isFieldAgent}
-      >
-      {user.role === "system_owner" ? (
-        <section className="panel" id="audit">
-          <h2>{t("Journal d'audit récent", "Recent audit log")}</h2>
-          <p className="app-meta">
-            {t(
-              "Réservé au propriétaire plateforme : historique des actions pour le FAI sélectionné.",
-              "Platform owner only: action history for the selected ISP."
-            )}
-          </p>
-        {auditLogs.slice(0, 12).map((log) => (
-          <p key={log.id}>
-              {new Date(log.createdAt).toLocaleString()} — {log.action} ({log.entityType})
-          </p>
-        ))}
-      </section>
-      ) : null}
-      </DashboardScreenGate>
-
-      <DashboardScreenGate
-        mobile={gateMobile}
-        active={mobileScreen}
-        id="users"
-        hash="#team-settings"
-        isFieldAgent={isFieldAgent}
-      >
-      <section className="panel">
-        <h2>{t("File d'attente des notifications", "Notification outbox")}</h2>
+      <div className="panel" style={{ margin: 0, boxShadow: "none", border: 0, padding: "12px 0" }}>
+        <h3>{t("File d'attente des notifications", "Notification outbox")}</h3>
         <p>
           {t("En file :", "Queued:")}{" "}
           {notificationOutbox.filter((row) => row.status === "queued").length} | {t("Envoyé :", "Sent:")}{" "}
@@ -6401,10 +5924,10 @@ api.getPaymentNotifications(activeIspId)
             {row.lastError ? ` - ${row.lastError}` : ""}
           </p>
         ))}
-      </section>
+      </div>
 
-      <section className="panel">
-        <h2>{t("Envoyer une notification de test", "Send test notification")}</h2>
+      <div className="panel" style={{ margin: 0, boxShadow: "none", border: 0, padding: "12px 0" }}>
+        <h3>{t("Envoyer une notification de test", "Send test notification")}</h3>
         <form onSubmit={onSendTestNotification}>
           <select
             value={notificationTestForm.channel}
@@ -6434,8 +5957,41 @@ api.getPaymentNotifications(activeIspId)
             {t("Envoyer le test", "Send test")}
           </button>
         </form>
+      </div>
+
+            </div>
+          </details>
+        )}
       </section>
       </DashboardScreenGate>
+
+
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="settings"
+        hash="#audit"
+        isFieldAgent={isFieldAgent}
+      >
+      {user.role === "system_owner" ? (
+        <section className="panel" id="audit">
+          <h2>{t("Journal d'audit récent", "Recent audit log")}</h2>
+          <p className="app-meta">
+            {t(
+              "Réservé au propriétaire plateforme : historique des actions pour le FAI sélectionné.",
+              "Platform owner only: action history for the selected ISP."
+            )}
+          </p>
+        {auditLogs.slice(0, 12).map((log) => (
+          <p key={log.id}>
+              {new Date(log.createdAt).toLocaleString()} — {log.action} ({log.entityType})
+          </p>
+        ))}
+      </section>
+      ) : null}
+      </DashboardScreenGate>
+
+
 
         </>
       )}
@@ -7715,6 +7271,442 @@ api.getPaymentNotifications(activeIspId)
           </section>
         </DashboardScreenGate>
       ) : null}
+
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="billing"
+        hash="#billing-ops"
+        isFieldAgent={isFieldAgent}
+      >
+      <section className="grid">
+        <form className="panel" onSubmit={onCreatePaymentIntent}>
+          <h2>{t("Encaissement manuel standard", "Standard manual collection")}</h2>
+          <p className="app-meta">
+            {t(
+              "Procédure: 1) collecte preuve client, 2) validation financière FAI, 3) activation internet après confirmation.",
+              "Procedure: 1) capture customer proof, 2) FAI finance validation, 3) internet activation after confirmation."
+            )}
+          </p>
+          <select
+            value={paymentIntentForm.invoiceId}
+            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, invoiceId: e.target.value })}
+          >
+            <option value="">
+              {t("Choisir une facture ouverte (impayée / en retard)", "Select an open invoice (unpaid / overdue)")}
+            </option>
+            {invoices
+              .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
+              .map((inv) => (
+                <option key={inv.id} value={inv.id}>
+                  {inv.id.slice(0, 8)} — ${inv.amountUsd} ({invoiceStatusShort(inv.status, isEn)})
+                </option>
+              ))}
+          </select>
+          <select
+            value={paymentIntentForm.channel}
+            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, channel: e.target.value })}
+          >
+            <option value="cash_agent">{t("Cash agent terrain", "Field cash collection")}</option>
+            <option value="bank_transfer">{t("Virement bancaire", "Bank transfer")}</option>
+            <option value="card_manual">{t("Visa Card (manuel)", "Visa Card (manual)")}</option>
+            <option value="crypto_wallet">{t("Portefeuille crypto / Binance", "Crypto wallet / Binance")}</option>
+            <option value="mobile_money_manual">{t("Mobile Money manuel", "Manual Mobile Money")}</option>
+          </select>
+          <input
+            placeholder={t("Référence transaction / hash / reçu", "Transaction ref / hash / receipt")}
+            value={paymentIntentForm.externalRef}
+            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, externalRef: e.target.value })}
+          />
+          <input
+            placeholder={t("Téléphone ou contact payeur", "Payer phone or contact")}
+            value={paymentIntentForm.payerContact}
+            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, payerContact: e.target.value })}
+          />
+          <input
+            placeholder={t("Montant USD (facultatif)", "Amount USD (optional)")}
+            value={paymentIntentForm.amountUsd}
+            onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, amountUsd: e.target.value })}
+          />
+          {paymentIntentForm.channel === "cash_agent" ? (
+            <>
+              <input placeholder={t("Nom agent collecteur", "Collector agent name")} value={paymentIntentForm.collectorName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, collectorName: e.target.value })} />
+              <input placeholder={t("N° reçu cash", "Cash receipt number")} value={paymentIntentForm.receiptNumber} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, receiptNumber: e.target.value })} />
+              <input placeholder={t("Lieu de collecte", "Collection location")} value={paymentIntentForm.collectionLocation} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, collectionLocation: e.target.value })} />
+              <input type="datetime-local" value={paymentIntentForm.collectedAt} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, collectedAt: e.target.value })} />
+            </>
+          ) : null}
+          {paymentIntentForm.channel === "bank_transfer" ? (
+            <>
+              <input placeholder={t("Banque", "Bank name")} value={paymentIntentForm.bankName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, bankName: e.target.value })} />
+              <input placeholder={t("Nom du titulaire", "Account owner name")} value={paymentIntentForm.accountName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, accountName: e.target.value })} />
+              <input placeholder={t("Numéro de compte", "Account number")} value={paymentIntentForm.accountNumber} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, accountNumber: e.target.value })} />
+            </>
+          ) : null}
+          {paymentIntentForm.channel === "card_manual" ? (
+            <>
+              <input placeholder={t("Acquéreur / PSP", "Processor / PSP")} value={paymentIntentForm.processorName} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, processorName: e.target.value })} />
+              <input placeholder={t("4 derniers chiffres carte", "Card last 4 digits")} value={paymentIntentForm.cardLast4} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, cardLast4: e.target.value })} />
+              <input placeholder={t("Code autorisation", "Authorization code")} value={paymentIntentForm.authCode} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, authCode: e.target.value })} />
+            </>
+          ) : null}
+          {paymentIntentForm.channel === "crypto_wallet" ? (
+            <>
+              <input placeholder={t("Réseau (TRC20, BEP20, etc.)", "Network (TRC20, BEP20, etc.)")} value={paymentIntentForm.walletNetwork} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, walletNetwork: e.target.value })} />
+              <input placeholder={t("Adresse wallet destinataire", "Destination wallet address")} value={paymentIntentForm.walletAddress} onChange={(e) => setPaymentIntentForm({ ...paymentIntentForm, walletAddress: e.target.value })} />
+            </>
+          ) : null}
+          <button type="submit" disabled={!selectedIspId}>
+            {t("Enregistrer l'encaissement manuel", "Record manual collection")}
+          </button>
+        </form>
+
+        <form className="panel" onSubmit={onSubmitTid}>
+          <h2>{t("Mobile Money manuel (TID)", "Manual Mobile Money (TID)")}</h2>
+          <select
+            value={tidForm.invoiceId}
+            onChange={(e) => setTidForm({ ...tidForm, invoiceId: e.target.value })}
+          >
+            <option value="">
+              {t("Choisir une facture ouverte (impayée / en retard)", "Select an open invoice (unpaid / overdue)")}
+            </option>
+            {invoices
+              .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
+              .map((inv) => (
+                <option key={inv.id} value={inv.id}>
+                  {inv.id.slice(0, 8)} — ${inv.amountUsd} ({invoiceStatusShort(inv.status, isEn)})
+                </option>
+              ))}
+          </select>
+          <input
+            placeholder={t("Référence de transaction (TID)", "Transaction reference (TID)")}
+            value={tidForm.tid}
+            onChange={(e) => setTidForm({ ...tidForm, tid: e.target.value })}
+          />
+          <input
+            placeholder={t("Téléphone payeur", "Payer phone")}
+            value={tidForm.submittedByPhone}
+            onChange={(e) => setTidForm({ ...tidForm, submittedByPhone: e.target.value })}
+          />
+          <input
+            placeholder={t("Montant (facultatif)", "Amount (optional)")}
+            value={tidForm.amountUsd}
+            onChange={(e) => setTidForm({ ...tidForm, amountUsd: e.target.value })}
+          />
+          <button type="submit" disabled={!selectedIspId}>
+            {t("Envoyer la TID", "Submit TID")}
+          </button>
+        </form>
+
+        <section className="panel">
+          <h2>{t("File de vérification des TID", "TID verification queue")}</h2>
+          <button type="button" onClick={onQueueTidReminders} disabled={!selectedIspId}>
+            {t("Mettre en file les rappels TID en attente", "Queue pending TID reminders")}
+          </button>
+          {tidSubmissions.map((row) => (
+            <p key={row.id}>
+              {row.tid} — {tidSubmissionStatusLabel(row.status, isEn)} — {t("facture", "invoice")}{" "}
+              {row.invoiceId?.slice(0, 8)}{" "}
+              {(isPlatformSuperRole(user.role) ||
+                user.role === "company_manager" ||
+                user.role === "isp_admin" ||
+                user.role === "billing_agent") &&
+                row.status === "pending" && (
+                  <>
+                    <button type="button" onClick={() => onReviewTid(row.id, "approved")}>
+                      {t("Approuver", "Approve")}
+                    </button>{" "}
+                    <button type="button" onClick={() => onReviewTid(row.id, "rejected")}>
+                      {t("Rejeter", "Reject")}
+                    </button>
+                  </>
+                )}
+            </p>
+          ))}
+          {tidConflicts.length > 0 && (
+            <>
+              <h3>{t("Conflits TID en double", "Duplicate TID conflicts")}</h3>
+              {tidConflicts.map((c) => (
+                <p key={c.tid}>
+                  {c.tid} — {c.duplicates} {t("envoi(s)", "submission(s)")} — {c.statuses?.join(", ")}
+                </p>
+              ))}
+            </>
+          )}
+        </section>
+
+        {showAdvancedPayments ? (
+        <section className="panel">
+          <h2>{t("Validation avancee", "Advanced validation")}</h2>
+          <DataTable
+            t={t}
+            title={null}
+            rows={unifiedPaymentTableView.pageRows}
+            columns={[
+              { key: "createdAt", label: t("Date", "Date"), sortable: true, render: (r) => formatDateTime(r.createdAt) },
+              { key: "scope", label: t("Portée", "Scope"), sortable: true },
+              { key: "methodType", label: t("Méthode", "Method"), sortable: true },
+              { key: "tid", label: "TID/Ref", sortable: true },
+              { key: "amountUsd", label: "USD", sortable: true, align: "right" },
+              { key: "status", label: t("Statut", "Status"), sortable: true },
+              {
+                key: "actions",
+                label: t("Actions", "Actions"),
+                render: (r) =>
+                  r.status === "PENDING" || r.status === "UNDER_REVIEW" ? (
+                    <>
+                      {r.status === "PENDING" ? (
+                        <button type="button" className="btn-secondary-outline" onClick={() => onReviewUnifiedPayment(r.id, "UNDER_REVIEW")}>
+                          {t("Prendre en revue", "Take for review")}
+                        </button>
+                      ) : null}
+                      <button type="button" onClick={() => onReviewUnifiedPayment(r.id, "APPROVED")}>{t("Approuver", "Approve")}</button>
+                      <button type="button" className="btn-secondary-outline" onClick={() => onReviewUnifiedPayment(r.id, "REJECTED")}>{t("Rejeter", "Reject")}</button>
+                    </>
+                  ) : (
+                    <span className="app-meta">-</span>
+                  )
+              }
+            ]}
+            searchValue={unifiedPaymentTable.q}
+            onSearchChange={(q) => setUnifiedPaymentTable((prev) => ({ ...prev, q, page: 1 }))}
+            filters={
+              <select
+                value={unifiedPaymentTable.status}
+                onChange={(e) => setUnifiedPaymentTable((prev) => ({ ...prev, status: e.target.value, page: 1 }))}
+              >
+                <option value="all">{t("Tous statuts", "All statuses")}</option>
+                <option value="PENDING">PENDING</option>
+                <option value="UNDER_REVIEW">UNDER_REVIEW</option>
+                <option value="APPROVED">APPROVED</option>
+                <option value="REJECTED">REJECTED</option>
+                <option value="EXPIRED">EXPIRED</option>
+              </select>
+            }
+            page={unifiedPaymentTable.page}
+            pageSize={unifiedPaymentTable.pageSize}
+            totalRows={unifiedPaymentTableView.total}
+            onPageChange={(page) => setUnifiedPaymentTable((prev) => ({ ...prev, page }))}
+            onPageSizeChange={(pageSize) => setUnifiedPaymentTable((prev) => ({ ...prev, pageSize, page: 1 }))}
+            sort={unifiedPaymentTable.sort}
+            onSortChange={(sort) => setUnifiedPaymentTable((prev) => ({ ...prev, sort }))}
+            emptyLabel={t("Aucun paiement canonique.", "No canonical payment records.")}
+          />
+        </section>
+        ) : null}
+
+        <section className="panel">
+          <h2>
+            {t("Notifications", "Notifications")}{" "}
+            {paymentNotifUnread > 0 ? <span className="badge">{paymentNotifUnread}</span> : null}
+          </h2>
+          {paymentNotifications.map((n) => (
+            <p key={n.id}>
+              <strong>{n.title}</strong> - {n.body} ({formatDateTime(n.createdAt)}){" "}
+              {!n.isRead ? (
+                <button type="button" className="btn-secondary-outline" onClick={() => onMarkPaymentNotificationRead(n.id)}>
+                  {t("Marquer lu", "Mark read")}
+                </button>
+              ) : null}
+            </p>
+          ))}
+        </section>
+
+        {showAdvancedPayments ? (
+        <section className="panel">
+          <h2>{t("Paiements manuels (avance)", "Manual payments (advanced)")}</h2>
+          <DataTable
+            t={t}
+            title={null}
+            rows={paymentIntentTableView.pageRows}
+            columns={[
+              { key: "channel", header: t("Canal", "Channel"), sortKey: "channel", cell: (r) => r.channel || "-" },
+              { key: "externalRef", header: t("Référence", "Reference"), sortKey: "externalRef", cell: (r) => r.externalRef || "-" },
+              { key: "amountUsd", header: "USD", sortKey: "amountUsd", cell: (r) => Number(r.amountUsd || 0).toFixed(2) },
+              { key: "status", header: t("Statut", "Status"), sortKey: "status", cell: (r) => paymentIntentStatusLabel(r.status, isEn) },
+              { key: "createdAt", header: t("Créé", "Created"), sortKey: "createdAt", cell: (r) => (r.createdAt ? new Date(r.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "-") },
+              {
+                key: "actions",
+                header: t("Actions", "Actions"),
+                cell: (r) =>
+                  (isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin" || user.role === "billing_agent") &&
+                  (r.status === "pending" || r.status === "approved_l1") ? (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button type="button" onClick={() => onReviewPaymentIntent(r.id, "approved")}>{t("Approuver", "Approve")}</button>
+                      <button type="button" className="btn-secondary-outline" onClick={() => onReviewPaymentIntent(r.id, "rejected")}>{t("Rejeter", "Reject")}</button>
+                    </div>
+                  ) : "-"
+              }
+            ]}
+            searchValue={paymentIntentTable.q}
+            onSearchValueChange={(q) => setPaymentIntentTable((s) => ({ ...s, q, page: 1 }))}
+            filters={
+              <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                <span>{t("Statut", "Status")}</span>
+                <select
+                  value={paymentIntentTable.status}
+                  onChange={(e) => setPaymentIntentTable((s) => ({ ...s, status: e.target.value, page: 1 }))}
+                >
+                  <option value="all">{t("Tous", "All")}</option>
+                  <option value="pending">{t("En attente", "Pending")}</option>
+                  <option value="approved_l1">{t("Niveau 1", "Level 1")}</option>
+                  <option value="approved">{t("Approuvé", "Approved")}</option>
+                  <option value="rejected">{t("Rejeté", "Rejected")}</option>
+                </select>
+              </label>
+            }
+            page={paymentIntentTable.page}
+            pageSize={paymentIntentTable.pageSize}
+            totalRows={paymentIntentTableView.total}
+            onPageChange={(page) => setPaymentIntentTable((s) => ({ ...s, page }))}
+            onPageSizeChange={(pageSize) => setPaymentIntentTable((s) => ({ ...s, pageSize, page: 1 }))}
+            sort={paymentIntentTable.sort}
+            onSortChange={(sort) => setPaymentIntentTable((s) => ({ ...s, sort }))}
+          />
+        </section>
+        ) : null}
+      </section>
+
+      <details className="panel field-clients-more">
+        <summary>{t("Bons d'accès", "Access vouchers")}</summary>
+        <div className="field-clients-more__body field-clients-more__body--stack">
+      <div className="grid" style={{ margin: 0 }}>
+        <form className="panel" onSubmit={onGenerateVouchers}>
+          <h2>{t("Générer des bons d'accès", "Generate access vouchers")}</h2>
+          <select
+            value={voucherForm.planId}
+            onChange={(e) => setVoucherForm({ ...voucherForm, planId: e.target.value })}
+          >
+            <option value="">{t("Choisir une formule", "Select a plan")}</option>
+            {plans.map((plan) => (
+              <option key={plan.id} value={plan.id}>
+                {plan.name} ({plan.rateLimit}, {plan.durationDays} {t("jours", "days")})
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            min="1"
+            max="100"
+            value={voucherForm.quantity}
+            onChange={(e) => setVoucherForm({ ...voucherForm, quantity: e.target.value })}
+          />
+          <label style={{ display: "block", marginTop: 8 }}>
+            {t(
+              "Appareils max par bon (défaut = limite de la formule)",
+              "Max devices per voucher (defaults to plan limit)"
+            )}
+            <input
+              type="number"
+              min="1"
+              max="100"
+              placeholder={t("Défaut formule", "Plan default")}
+              value={voucherForm.maxDevices}
+              onChange={(e) => setVoucherForm({ ...voucherForm, maxDevices: e.target.value })}
+              style={{ marginLeft: 8, width: 120 }}
+            />
+          </label>
+          <button type="submit" disabled={!selectedIspId}>
+            {t("Générer les bons", "Generate vouchers")}
+          </button>
+          <button type="button" onClick={onPrintVouchers} disabled={!selectedIspId}>
+            {t("Imprimer les bons inutilisés", "Print unused vouchers")}
+          </button>
+          <button type="button" onClick={onExportVouchers} disabled={!selectedIspId}>
+            {t("Exporter CSV", "Export CSV")}
+          </button>
+        </form>
+
+        <form className="panel" onSubmit={onRedeemVoucher}>
+          <h2>{t("Utiliser un bon", "Redeem voucher")}</h2>
+          <input
+            placeholder={t("Code du bon", "Voucher code")}
+            value={voucherRedeemForm.code}
+            onChange={(e) => setVoucherRedeemForm({ ...voucherRedeemForm, code: e.target.value })}
+          />
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+            <input
+              type="checkbox"
+              checked={voucherRedeemForm.redeemByPhone}
+              onChange={(e) =>
+                setVoucherRedeemForm({ ...voucherRedeemForm, redeemByPhone: e.target.checked })
+              }
+            />
+            {t(
+              "Utiliser par téléphone (FAI = locataire sélectionné)",
+              "Redeem by phone (ISP = selected tenant)"
+            )}
+          </label>
+          {voucherRedeemForm.redeemByPhone ? (
+            <input
+              placeholder={t("Téléphone client (chiffres, indicatif)", "Customer phone (digits, country code)")}
+              value={voucherRedeemForm.phone}
+              onChange={(e) => setVoucherRedeemForm({ ...voucherRedeemForm, phone: e.target.value })}
+            />
+          ) : (
+            <select
+              value={voucherRedeemForm.customerId}
+              onChange={(e) =>
+                setVoucherRedeemForm({ ...voucherRedeemForm, customerId: e.target.value })
+              }
+            >
+              <option value="">{t("Choisir un client", "Select a customer")}</option>
+              {customers.map((cst) => (
+                <option key={cst.id} value={cst.id}>
+                  {cst.fullName}
+                </option>
+              ))}
+            </select>
+          )}
+          <input
+            type="password"
+            placeholder={t(
+              "Mot de passe portail (obligatoire si absent, min. 6 car.)",
+              "Portal password (required if none, min. 6 chars)"
+            )}
+            value={voucherRedeemForm.newPassword}
+            onChange={(e) => setVoucherRedeemForm({ ...voucherRedeemForm, newPassword: e.target.value })}
+          />
+          <button type="submit" disabled={!selectedIspId}>
+            {t("Utiliser le bon", "Redeem voucher")}
+          </button>
+          <DataTable
+            t={t}
+            title={t("Derniers bons", "Latest vouchers")}
+            rows={voucherTableView.pageRows}
+            columns={[
+              { key: "code", header: t("Code", "Code"), sortKey: "code", cell: (v) => v.code || "—" },
+              { key: "rateLimit", header: t("Débit", "Speed"), sortKey: "rateLimit", cell: (v) => v.rateLimit || "—" },
+              {
+                key: "durationDays",
+                header: t("Durée", "Duration"),
+                sortKey: "durationDays",
+                cell: (v) => (v.durationDays != null ? `${v.durationDays}d` : "—")
+              },
+              {
+                key: "maxDevices",
+                header: t("Appareils", "Devices"),
+                sortKey: "maxDevices",
+                cell: (v) => (v.maxDevices != null ? String(v.maxDevices) : "—")
+              },
+              { key: "status", header: t("Statut", "Status"), sortKey: "status", cell: (v) => v.status || "—" }
+            ]}
+            searchValue={voucherTable.q}
+            onSearchValueChange={(q) => setVoucherTable((s) => ({ ...s, q, page: 1 }))}
+            page={voucherTable.page}
+            pageSize={voucherTable.pageSize}
+            totalRows={voucherTableView.total}
+            onPageChange={(page) => setVoucherTable((s) => ({ ...s, page }))}
+            onPageSizeChange={(pageSize) => setVoucherTable((s) => ({ ...s, pageSize, page: 1 }))}
+            sort={voucherTable.sort}
+            onSortChange={(sort) => setVoucherTable((s) => ({ ...s, sort }))}
+          />
+        </form>
+      </div>
+        </div>
+      </details>
+
+      </DashboardScreenGate>
 
       <DashboardScreenGate
         mobile={gateMobile}
