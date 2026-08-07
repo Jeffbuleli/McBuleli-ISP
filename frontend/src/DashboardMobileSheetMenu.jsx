@@ -54,6 +54,25 @@ export default function DashboardMobileSheetMenu({
         <div className="dashboard-mobile-menu-body">
           {categories.map((cat) => {
             const Icon = cat.Icon;
+            const solo = cat.items.length === 1;
+
+            if (solo) {
+              const item = cat.items[0];
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className="dashboard-mobile-menu-solo"
+                  onClick={() => go(item.href)}
+                >
+                  <span className="dashboard-mobile-menu-cat-icon" aria-hidden>
+                    <Icon width={18} height={18} />
+                  </span>
+                  <span>{item.label || cat.label}</span>
+                </button>
+              );
+            }
+
             return (
               <section key={cat.id} className="dashboard-mobile-menu-block">
                 <div className="dashboard-mobile-menu-cat">

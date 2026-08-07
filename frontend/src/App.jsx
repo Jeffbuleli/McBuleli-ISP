@@ -4228,16 +4228,6 @@ api.getPaymentNotifications(activeIspId)
             teamChatUnread={teamChatUnread + paymentNotifUnread}
             onChatProfileSaved={(p) => setUser((u) => (u ? { ...u, ...p } : u))}
             onToggleChat={() => setTeamChatOpen((o) => !o)}
-            onOpenSettings={() => {
-              if (isMobileShell) {
-                navigateMobileScreen("settings");
-                window.requestAnimationFrame(() => {
-                  window.location.hash = "workspace-settings";
-                });
-              } else if (typeof window !== "undefined") {
-                window.location.hash = "#workspace-settings";
-              }
-            }}
             onGoHome={() => {
               if (typeof window !== "undefined") window.location.href = "/?site=public";
             }}

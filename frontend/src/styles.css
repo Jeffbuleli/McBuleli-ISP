@@ -469,6 +469,35 @@ a:hover {
   color: var(--mb-primary);
 }
 
+.dashboard-nav-category-solo {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: var(--mb-text);
+  text-decoration: none;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.dashboard-nav-category-solo:hover {
+  color: var(--mb-primary);
+}
+
+.dashboard-nav-category-solo--active {
+  font-weight: 700;
+  color: var(--mb-primary);
+  background: rgba(21, 101, 216, 0.12);
+  border: 1px solid rgba(21, 101, 216, 0.22);
+  padding: 11px 3px;
+}
+
 .dashboard-nav-category-icon {
   display: flex;
   color: var(--mb-primary);
@@ -522,6 +551,16 @@ a:hover {
   justify-content: center;
   padding: 10px 6px;
   gap: 0;
+}
+
+.dashboard-sidenav--compact .dashboard-nav-category-solo {
+  justify-content: center;
+  padding: 10px 6px;
+  gap: 0;
+}
+
+.dashboard-sidenav--compact .dashboard-nav-category-solo--active {
+  padding: 9px 5px;
 }
 
 .dashboard-sidenav--compact .dashboard-nav-category-label,
@@ -588,6 +627,16 @@ a:hover {
     justify-content: flex-start;
     gap: 10px;
     padding: 12px 4px;
+  }
+
+  .dashboard-sidenav--compact .dashboard-nav-category-solo {
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 12px 4px;
+  }
+
+  .dashboard-sidenav--compact .dashboard-nav-category-solo--active {
+    padding: 11px 3px;
   }
 
   .dashboard-nav-flyout {
@@ -7106,6 +7155,20 @@ body:has(.app-shell--dashboard-dark) {
   color: #63b38f;
 }
 
+.app-shell--dashboard-dark .dashboard-nav-category-solo {
+  color: #e6e6e6;
+}
+
+.app-shell--dashboard-dark .dashboard-nav-category-solo:hover {
+  color: #63b38f;
+}
+
+.app-shell--dashboard-dark .dashboard-nav-category-solo--active {
+  color: #63b38f;
+  background: rgba(99, 179, 143, 0.14);
+  border-color: rgba(99, 179, 143, 0.35);
+}
+
 .app-shell--dashboard-dark .dashboard-nav-category-icon {
   color: #63b38f;
 }
@@ -7842,6 +7905,33 @@ html:has(.app-shell--mobile-pwa) {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.dashboard-mobile-menu-solo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #e8eaed;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dashboard-mobile-menu-solo:active {
+  background: rgba(99, 179, 143, 0.12);
+}
+
+.dashboard-mobile-menu-solo .dashboard-mobile-menu-cat-icon {
+  color: #63b38f;
 }
 
 .dashboard-mobile-menu-cat-icon {

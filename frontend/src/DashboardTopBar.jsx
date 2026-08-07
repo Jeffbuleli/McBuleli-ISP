@@ -5,7 +5,6 @@ import DashboardTeamChatButton from "./DashboardTeamChatButton.jsx";
 import DashboardCommandPalette from "./DashboardCommandPalette.jsx";
 import {
   IconHome,
-  IconSettings,
   IconSignOut,
   IconMenuHamburger,
   IconX
@@ -18,7 +17,6 @@ export default function DashboardTopBar({
   dashboardChatIspId,
   teamChatUnread,
   onToggleChat,
-  onOpenSettings,
   onGoHome,
   onLogout,
   onToggleSidebar,
@@ -87,16 +85,6 @@ export default function DashboardTopBar({
           {dashboardChatIspId ? (
             <DashboardTeamChatButton unreadCount={teamChatUnread} t={t} variant={isMobileShell ? "mobile" : "desktop"} onClick={onToggleChat} />
           ) : null}
-
-          <button
-            type="button"
-            className="mb-topbar__iconbtn"
-            onClick={onOpenSettings}
-            aria-label={t("Paramètres", "Settings")}
-            title={t("Paramètres", "Settings")}
-          >
-            <IconSettings width={20} height={20} aria-hidden />
-          </button>
 
           <button
             type="button"

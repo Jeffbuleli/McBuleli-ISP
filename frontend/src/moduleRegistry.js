@@ -3,13 +3,16 @@ import {
   IconHome,
   IconPeople,
   IconReceipt,
+  IconSettings,
   IconSliders,
   IconSmartphone,
+  IconUserCheck,
   IconWallet
 } from "./icons.jsx";
 
 /**
- * ISP operator nav - 5 zones max.
+ * ISP operator nav — each former Clients / Facturation / Réglages submenu
+ * is a top-level entry (no nested accordion for those).
  * Platform CMS only for system_owner.
  */
 export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
@@ -61,7 +64,7 @@ export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
     },
     {
       key: "clients.team",
-      nav: { category: "clients", categoryLabel: t("Clients", "Clients"), categoryIcon: IconPeople },
+      nav: { category: "team", categoryLabel: t("Equipe", "Team"), categoryIcon: IconUserCheck },
       href: "#team-settings",
       label: t("Equipe", "Team"),
       mobileScreen: "users"
@@ -80,14 +83,14 @@ export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
     key: "finance.billing",
     nav: { category: "billing", categoryLabel: t("Facturation", "Billing"), categoryIcon: IconWallet },
     href: "#billing-ops",
-    label: t("Paiements", "Payments"),
+    label: t("Facturation", "Billing"),
     mobileScreen: "billing"
   });
 
   if (role !== "system_owner") {
     modules.push({
       key: "finance.subscription",
-      nav: { category: "billing", categoryLabel: t("Facturation", "Billing"), categoryIcon: IconWallet },
+      nav: { category: "saas", categoryLabel: t("Abonnement SaaS", "SaaS plan"), categoryIcon: IconReceipt },
       href: "#mcbuleli-billing",
       label: t("Abonnement SaaS", "SaaS plan"),
       mobileScreen: "billing"
@@ -98,14 +101,14 @@ export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
     key: "settings.workspace",
     nav: { category: "settings", categoryLabel: t("Reglages", "Settings"), categoryIcon: IconSliders },
     href: "#workspace-settings",
-    label: t("Espace", "Workspace"),
+    label: t("Reglages", "Settings"),
     mobileScreen: "settings"
   });
 
   if (canSeeSecurity) {
     modules.push({
       key: "settings.security",
-      nav: { category: "settings", categoryLabel: t("Reglages", "Settings"), categoryIcon: IconSliders },
+      nav: { category: "security", categoryLabel: t("Securite", "Security"), categoryIcon: IconSettings },
       href: "#security-settings",
       label: t("Securite", "Security"),
       mobileScreen: "settings"
@@ -137,7 +140,7 @@ export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
       },
       {
         key: "settings.audit",
-        nav: { category: "settings", categoryLabel: t("Reglages", "Settings"), categoryIcon: IconSliders },
+        nav: { category: "audit", categoryLabel: t("Audit", "Audit"), categoryIcon: IconReceipt },
         href: "#audit",
         label: t("Audit", "Audit"),
         mobileScreen: "settings"

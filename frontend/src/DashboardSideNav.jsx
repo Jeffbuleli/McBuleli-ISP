@@ -32,7 +32,7 @@ export default function DashboardSideNav({
   );
 
   const defaultHash = isFieldAgent ? "#field-clients" : "#dashboard-overview";
-  const defaultExpand = isFieldAgent ? "field" : "overview";
+  const defaultExpand = isFieldAgent ? "clients" : "home";
 
   const knownHashes = useMemo(() => new Set(categories.flatMap((c) => c.items.map((i) => i.href))), [categories]);
 
@@ -169,7 +169,48 @@ export default function DashboardSideNav({
         <nav className="dashboard-sidenav-categories" aria-label={t("Sections", "Sections")}>
           {filteredCategories.map((cat) => {
             const Icon = cat.Icon;
+            const solo = cat.items.length === 1;
+            const soloHref = solo ? cat.items[0].href : null;
+            const soloLabel = solo ? cat.items[0].label || cat.label : cat.label;
             const open = expandedCategory === cat.id;
+            const soloActive = solo && activeHash === soloHref;
+
+            if (solo) {
+              return (
+                <div
+                  key={cat.id}
+                  className={`dashboard-nav-category dashboard-nav-category--solo${
+                    soloActive ? " dashboard-nav-category--solo-active" : ""
+                  }`}
+                >
+                  <a
+                    href={soloHref}
+                    className={`dashboard-nav-category-solo${
+                      soloActive ? " dashboard-nav-category-solo--active" : ""
+                    }`}
+                    aria-current={soloActive ? "page" : undefined}
+                    title={compact ? soloLabel : undefined}
+                    onClick={() => {
+                      setActiveHash(soloHref);
+                      setExpandedCategory(cat.id);
+                      if (typeof window !== "undefined") {
+                        window.dispatchEvent(
+                          new CustomEvent("dashboard-nav-select", {
+                            detail: { href: soloHref }
+                          })
+                        );
+                      }
+                    }}
+                  >
+                    <span className="dashboard-nav-category-icon" aria-hidden>
+                      <Icon width={20} height={20} />
+                    </span>
+                    <span className="dashboard-nav-category-label">{soloLabel}</span>
+                  </a>
+                </div>
+              );
+            }
+
             return (
               <div
                 key={cat.id}
