@@ -715,6 +715,47 @@ export async function initDb() {
       [wifiZoneBackfillFlag, "done"]
     );
   }
+  // Ensure TID table exists before unified_payments backfill
+  await query(`
+    CREATE TABLE IF NOT EXISTS payment_tid_submissions (
+      id UUID PRIMARY KEY,
+      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
+      invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+      customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+      tid TEXT NOT NULL,
+      submitted_by_phone TEXT NULL,
+      amount_usd NUMERIC(10,2) NULL,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+      reviewed_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_at TIMESTAMP NULL,
+      review_note TEXT NULL,
+      approved_l1_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      approved_l1_at TIMESTAMP NULL,
+      approved_l2_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+      approved_l2_at TIMESTAMP NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(`
+    DO $tidchk$ BEGIN
+      ALTER TABLE payment_tid_submissions DROP CONSTRAINT IF EXISTS payment_tid_submissions_status_check;
+    EXCEPTION WHEN undefined_object THEN NULL;
+    END $tidchk$;
+  `);
+  await query(`
+    ALTER TABLE payment_tid_submissions
+    ADD CONSTRAINT payment_tid_submissions_status_check
+    CHECK (status IN ('pending', 'approved_l1', 'approved', 'rejected'))
+  `);
+  await query("ALTER TABLE payment_tid_submissions ADD COLUMN IF NOT EXISTS approved_l1_by UUID NULL REFERENCES users(id) ON DELETE SET NULL;");
+  await query("ALTER TABLE payment_tid_submissions ADD COLUMN IF NOT EXISTS approved_l1_at TIMESTAMP NULL;");
+  await query("ALTER TABLE payment_tid_submissions ADD COLUMN IF NOT EXISTS approved_l2_by UUID NULL REFERENCES users(id) ON DELETE SET NULL;");
+  await query("ALTER TABLE payment_tid_submissions ADD COLUMN IF NOT EXISTS approved_l2_at TIMESTAMP NULL;");
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_tid_submissions_isp_tid ON payment_tid_submissions (isp_id, tid);"
+  );
+
   const unifiedBackfillFlag = "unified_payments_backfill_2026_05_02";
   const unifiedBackfillDone = await query("SELECT key FROM app_runtime_flags WHERE key = $1", [unifiedBackfillFlag]);
   if (!unifiedBackfillDone.rows[0]) {
@@ -991,45 +1032,6 @@ export async function initDb() {
     "CREATE INDEX IF NOT EXISTS idx_radius_acct_ingest_username ON radius_accounting_ingest (username);"
   );
 
-  await query(`
-    CREATE TABLE IF NOT EXISTS payment_tid_submissions (
-      id UUID PRIMARY KEY,
-      isp_id UUID NOT NULL REFERENCES isps(id) ON DELETE CASCADE,
-      invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
-      customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-      subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
-      tid TEXT NOT NULL,
-      submitted_by_phone TEXT NULL,
-      amount_usd NUMERIC(10,2) NULL,
-      status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
-      reviewed_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
-      reviewed_at TIMESTAMP NULL,
-      review_note TEXT NULL,
-      approved_l1_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
-      approved_l1_at TIMESTAMP NULL,
-      approved_l2_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
-      approved_l2_at TIMESTAMP NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
-    );
-  `);
-  await query(`
-    DO $tidchk$ BEGIN
-      ALTER TABLE payment_tid_submissions DROP CONSTRAINT IF EXISTS payment_tid_submissions_status_check;
-    EXCEPTION WHEN undefined_object THEN NULL;
-    END $tidchk$;
-  `);
-  await query(`
-    ALTER TABLE payment_tid_submissions
-    ADD CONSTRAINT payment_tid_submissions_status_check
-    CHECK (status IN ('pending', 'approved_l1', 'approved', 'rejected'))
-  `);
-  await query("ALTER TABLE payment_tid_submissions ADD COLUMN IF NOT EXISTS approved_l1_by UUID NULL REFERENCES users(id) ON DELETE SET NULL;");
-  await query("ALTER TABLE payment_tid_submissions ADD COLUMN IF NOT EXISTS approved_l1_at TIMESTAMP NULL;");
-  await query("ALTER TABLE payment_tid_submissions ADD COLUMN IF NOT EXISTS approved_l2_by UUID NULL REFERENCES users(id) ON DELETE SET NULL;");
-  await query("ALTER TABLE payment_tid_submissions ADD COLUMN IF NOT EXISTS approved_l2_at TIMESTAMP NULL;");
-  await query(
-    "CREATE INDEX IF NOT EXISTS idx_tid_submissions_isp_tid ON payment_tid_submissions (isp_id, tid);"
-  );
 
   await query(`
     CREATE TABLE IF NOT EXISTS access_vouchers (
