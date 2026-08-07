@@ -1,15 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
-import PublicHomePromos from "./PublicHomePromos.jsx";
 import TeamChatPanel from "./TeamChatPanel.jsx";
-import AnalyticMetricCard from "./AnalyticMetricCard.jsx";
-import { DEFINITION_GLOSSARY } from "./dashboardMetricCatalog.js";
-import { formatUsd, formatGb, formatCount, formatIsoRange } from "./dashboardFormat.js";
+import { formatUsd, formatCount } from "./dashboardFormat.js";
 import DashboardSideNav from "./DashboardSideNav.jsx";
 import DashboardMobileSheetMenu from "./DashboardMobileSheetMenu.jsx";
 import DashboardScreenGate from "./DashboardScreenGate.jsx";
 import DashboardTopBar from "./DashboardTopBar.jsx";
 import DashboardStickyBanner from "./DashboardStickyBanner.jsx";
+import DashboardKpiStrip, { DASH_KPI_ICONS } from "./DashboardKpiStrip.jsx";
 import { DataTable } from "./ui/DataTable.jsx";
 import { useDashboardMobilePath } from "./useDashboardMobilePath.js";
 import { buildDashboardNavCategories } from "./dashboardNavCategories.js";
@@ -732,12 +730,6 @@ onlineSessions: "abonnés en ligne",
 expenses: "dépenses",
 accountingPeriodClosures: "clôtures comptables"
 };
-
-function glossaryTooltip(isEn, token) {
-  const row = DEFINITION_GLOSSARY[token];
-  if (!row) return undefined;
-  return isEn ? row.en : row.fr;
-}
 
 function App() {
   const [user, setUser] = useState(null);
@@ -3930,7 +3922,6 @@ api.getPaymentNotifications(activeIspId)
     branding?.logoUrl != null && String(branding.logoUrl).trim()
       ? publicAssetUrl(branding.logoUrl)
       : null;
-  const showDashboardHeaderPromos = !user?.dashboardBanners?.length && !user?.dashboardBannerHtml;
 
   const gateMobile = isMobileShell;
   const renewalBillingPanel = (() => {
@@ -4225,7 +4216,7 @@ api.getPaymentNotifications(activeIspId)
             t={t}
             slides={user?.dashboardBanners}
             html={user?.dashboardBannerHtml}
-            fallback={showDashboardHeaderPromos ? <PublicHomePromos t={t} isEn={isEn} variant="dashboard" /> : null}
+            fallback={null}
             variant={isMobileShell ? "compact" : "default"}
           />
         </header>
@@ -4282,18 +4273,112 @@ api.getPaymentNotifications(activeIspId)
       {!isFieldAgent ? (
         <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="dashboard">
           <>
-            {user.role === "system_owner" ? (
-              <section className="grid metrics dashboard-section-anchor" id="dashboard-overview">
-                <Card title={t("FAI", "ISPs")} value={superDashboard?.totalIsps ?? 0} />
-                <Card title={t("Clients (tous FAI)", "All Customers")} value={superDashboard?.totalCustomers ?? 0} />
-                <Card
-                  title={t("Abonnements actifs (tous)", "All Active Subscriptions")}
-                  value={superDashboard?.totalActiveSubscriptions ?? 0}
-                />
-                <Card
-                  title={t("CA factures payées cumulé (tous FAI)", "Lifetime paid-invoice revenue (all ISPs)")}
-                  value={formatUsd(superDashboard?.totalRevenueUsd ?? 0, dashLocale)}
-                />
+            {selectedIspId || user.role === "system_owner" ? (
+              <DashboardKpiStrip
+                items={
+                  user.role === "system_owner" && !selectedIspId
+                    ? [
+                        {
+                          key: "isps",
+                          label: t("FAI", "ISPs"),
+                          value: formatCount(superDashboard?.totalIsps ?? 0, dashLocale),
+                          Icon: DASH_KPI_ICONS.people,
+                          tone: "info"
+                        },
+                        {
+                          key: "customers",
+                          label: t("Clients", "Customers"),
+                          value: formatCount(superDashboard?.totalCustomers ?? 0, dashLocale),
+                          Icon: DASH_KPI_ICONS.people,
+                          tone: "info"
+                        },
+                        {
+                          key: "subs",
+                          label: t("Actifs", "Active"),
+                          value: formatCount(superDashboard?.totalActiveSubscriptions ?? 0, dashLocale),
+                          Icon: DASH_KPI_ICONS.signal,
+                          tone: "good"
+                        },
+                        {
+                          key: "rev",
+                          label: t("CA", "Revenue"),
+                          value: formatUsd(superDashboard?.totalRevenueUsd ?? 0, dashLocale),
+                          Icon: DASH_KPI_ICONS.wallet,
+                          tone: "accent"
+                        }
+                      ]
+                    : [
+                        {
+                          key: "customers",
+                          label: t("Clients", "Customers"),
+                          value: formatCount(dashboard?.totalCustomers ?? 0, dashLocale),
+                          Icon: DASH_KPI_ICONS.people,
+                          tone: "info"
+                        },
+                        {
+                          key: "subs",
+                          label: t("Actifs", "Active"),
+                          value: formatCount(dashboard?.activeSubscriptions ?? 0, dashLocale),
+                          Icon: DASH_KPI_ICONS.signal,
+                          tone: "good"
+                        },
+                        {
+                          key: "open",
+                          label: t("Impayés", "Open"),
+                          value: formatCount(dashboard?.unpaidInvoices ?? 0, dashLocale),
+                          Icon: DASH_KPI_ICONS.receipt,
+                          tone: "warn"
+                        },
+                        {
+                          key: "cash",
+                          label: t("Encaissé", "Collected"),
+                          value: formatUsd(networkStats?.revenueCollectedUsd ?? 0, dashLocale),
+                          Icon: DASH_KPI_ICONS.wallet,
+                          tone: "accent"
+                        },
+                        {
+                          key: "online",
+                          label: t("En ligne", "Online"),
+                          value: formatCount(
+                            dashboard?.networkSessions ?? onlineSessions.length,
+                            dashLocale
+                          ),
+                          Icon: DASH_KPI_ICONS.antenna,
+                          tone: "info"
+                        }
+                      ]
+                }
+              />
+            ) : (
+              <p className="app-meta">{t("Choisissez un espace FAI.", "Pick an ISP workspace.")}</p>
+            )}
+
+            {selectedIspId ? (
+              <section className="dash-period-bar" id="reports">
+                <label className="dash-period-bar__field">
+                  <span>{t("Du", "From")}</span>
+                  <input
+                    type="date"
+                    value={statsPeriod.from}
+                    onChange={(e) => setStatsPeriod((s) => ({ ...s, from: e.target.value }))}
+                  />
+                </label>
+                <label className="dash-period-bar__field">
+                  <span>{t("Au", "To")}</span>
+                  <input
+                    type="date"
+                    value={statsPeriod.to}
+                    onChange={(e) => setStatsPeriod((s) => ({ ...s, to: e.target.value }))}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn-secondary-outline"
+                  onClick={() => refresh()}
+                  disabled={!selectedIspId}
+                >
+                  {t("Actualiser", "Refresh")}
+                </button>
               </section>
             ) : null}
 
@@ -4301,7 +4386,7 @@ api.getPaymentNotifications(activeIspId)
               <Suspense
                 fallback={
                   <p className="app-meta dashboard-suspense-fallback">
-                    {t("Préparation des graphiques…", "Preparing charts…")}
+                    {t("Graphiques…", "Charts…")}
                   </p>
                 }
               >
@@ -4317,492 +4402,168 @@ api.getPaymentNotifications(activeIspId)
               </Suspense>
             ) : null}
 
-            <section className="panel dashboard-analytics-period" id="reports">
-              <h2>{t("Analyse — fenêtre temporelle", "Analytics — time window")}</h2>
-              <p className="app-meta dashboard-analytics-period__lead">
-                {t(
-                  "ⓘ Flux/caisse = période choisie. Stocks = instantané.",
-                  "ⓘ Flow/cashbox = selected period. Stocks = snapshot."
-                )}
-              </p>
-              <div className="dashboard-analytics-period__controls">
-                <label className="app-meta dashboard-analytics-period__control">
-                  <span>{t("Du", "From")}</span>
-                  <input
-                    type="date"
-                    value={statsPeriod.from}
-                    onChange={(e) => setStatsPeriod((s) => ({ ...s, from: e.target.value }))}
-                  />
-                </label>
-                <label className="app-meta dashboard-analytics-period__control">
-                  <span>{t("Au", "To")}</span>
-                  <input
-                    type="date"
-                    value={statsPeriod.to}
-                    onChange={(e) => setStatsPeriod((s) => ({ ...s, to: e.target.value }))}
-                  />
-                </label>
-                <button type="button" className="btn-secondary-outline" onClick={() => refresh()} disabled={!selectedIspId}>
-                  {t("Mettre à jour les données", "Refresh data")}
-                </button>
-              </div>
-              {networkStats?.computedAt ? (
-                <p className="app-meta dashboard-analytics-period__fresh">
-                  {t("Calcul agrégats réseau / paiements :", "Network / payments aggregates computed:")}{" "}
-                  <time dateTime={networkStats.computedAt}>
-                    {new Date(networkStats.computedAt).toLocaleString(dashLocale)}
-                  </time>
-                  {networkStats?.previousPeriod ? (
-                    <>
-                      {" "}
-                      ·{" "}
-                      {t("Comparaison Δ — fenêtre précédente :", "Δ comparison — previous window:")}{" "}
-                      <span className="dashboard-analytics-period__iso-range">
-                        {formatIsoRange(networkStats.previousPeriod.from, networkStats.previousPeriod.to)}
-                      </span>
-                    </>
-                  ) : null}
-                </p>
-              ) : null}
-              {networkStats?.quality?.flags?.includes("partial_daily_rollups") ? (
-                <p className="dashboard-quality-flag" role="status">
-                  {glossaryTooltip(isEn, "partial_daily_rollups")}
-                </p>
-              ) : null}
-              <details className="dashboard-roadmap-details">
-                <summary>{t("Feuille de route rapports avancés", "Advanced reporting roadmap")}</summary>
-                <p className="app-meta">
-                  {t(
-                    "CSV, alertes et qualité détaillée: à venir.",
-                    "CSV exports, alerts and detailed quality checks: coming soon."
-                  )}
-                </p>
-              </details>
-            </section>
-
-            {selectedIspId ? (
-              <>
-                <h3 className="dashboard-analytics-block-title">{t("A — Stocks", "A — Stock")}</h3>
-                <section className="grid analytic-metric-grid">
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Clients", "Customers")}
-                    value={formatCount(dashboard?.totalCustomers ?? 0, dashLocale)}
-                    timeframe={t("Instantané", "Snapshot")}
-                    definitionTitle={glossaryTooltip(isEn, "stock_snapshot_count")}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Abonnements actifs", "Active subscriptions")}
-                    value={formatCount(dashboard?.activeSubscriptions ?? 0, dashLocale)}
-                    timeframe={t("Instantané", "Snapshot")}
-                    definitionTitle={glossaryTooltip(isEn, "stock_snapshot_count")}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Factures ouvertes", "Open invoices")}
-                    value={formatCount(dashboard?.unpaidInvoices ?? 0, dashLocale)}
-                    timeframe={t("Instantané", "Snapshot")}
-                    definitionTitle={glossaryTooltip(isEn, "open_unpaid_invoice_count")}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("CA factures « payées » (cumul historique)", "Lifetime paid invoice revenue")}
-                    value={formatUsd(dashboard?.revenueUsd ?? 0, dashLocale)}
-                    timeframe={t("Cumul tout temps", "All-time cumulative")}
-                    definitionTitle={glossaryTooltip(isEn, "cumulative_paid_invoice_amount_all_time")}
-                  />
-                </section>
-
-                <h3 className="dashboard-analytics-block-title">{t("B — Flux réseau & encaissements", "B — Network & collections")}</h3>
-                <p className="app-meta dashboard-aggregation-notes">
-                  {t(
-                    "ⓘ Hotspot/PPPoE = somme jour ; appareils = pic ; bande passante = somme GB/j.",
-                    "ⓘ Hotspot/PPPoE = daily sum; devices = peak; bandwidth = sum of GB/day."
-                  )}
-                </p>
-                <section className="grid analytic-metric-grid">
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Utilisateurs hotspot (somme journalière)", "Hotspot users (sum of daily)")}
-                    value={formatCount(networkStats?.hotspotUsers ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-                    comparison={networkStats?.comparison?.hotspotUsers}
-                    deltaHint="up_good"
-                    definitionTitle={glossaryTooltip(isEn, "network_daily_rollup_sum")}
-                    locale={dashLocale}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Utilisateurs PPPoE (somme journalière)", "PPPoE users (sum of daily)")}
-                    value={formatCount(networkStats?.pppoeUsers ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-                    comparison={networkStats?.comparison?.pppoeUsers}
-                    deltaHint="up_good"
-                    definitionTitle={glossaryTooltip(isEn, "network_daily_rollup_sum")}
-                    locale={dashLocale}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Appareils connectés (pic journalier)", "Connected devices (daily peak)")}
-                    value={formatCount(networkStats?.connectedDevices ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-                    comparison={networkStats?.comparison?.connectedDevices}
-                    deltaHint="up_good"
-                    definitionTitle={glossaryTooltip(isEn, "peak_connected_devices_max_over_days")}
-                    locale={dashLocale}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Bande passante agrégée", "Aggregated bandwidth")}
-                    value={formatGb(networkStats?.bandwidthTotalGb ?? 0, 2, dashLocale)}
-                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-                    comparison={networkStats?.comparison?.bandwidthTotalGb}
-                    deltaHint="neutral"
-                    definitionTitle={glossaryTooltip(isEn, "bandwidth_sum_daily_gb")}
-                    locale={dashLocale}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Encaissements confirmés", "Confirmed collections")}
-                    value={formatUsd(networkStats?.revenueCollectedUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(statsPeriod.from, statsPeriod.to)}
-                    comparison={networkStats?.comparison?.revenueCollectedUsd}
-                    deltaHint="up_good"
-                    definitionTitle={glossaryTooltip(isEn, "confirmed_payments_by_paid_at_in_period")}
-                    locale={dashLocale}
-                  />
-                </section>
-
-                <h3 className="dashboard-analytics-block-title">{t("C — Caisse par canal (mois)", "C — Cashbox by channel (month)")}</h3>
-                <section className="grid analytic-metric-grid">
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Cash", "Cash")}
-                    value={formatUsd(dashboard?.cashboxMonth?.cashUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-                    comparison={dashboard?.meta?.monthComparison?.cashUsd}
-                    deltaHint="up_good"
-                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-                    locale={dashLocale}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("TID validés", "Validated TID")}
-                    value={formatUsd(dashboard?.cashboxMonth?.tidUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-                    comparison={dashboard?.meta?.monthComparison?.tidUsd}
-                    deltaHint="up_good"
-                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-                    locale={dashLocale}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Mobile Money", "Mobile Money")}
-                    value={formatUsd(dashboard?.cashboxMonth?.mobileMoneyUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-                    comparison={dashboard?.meta?.monthComparison?.mobileMoneyUsd}
-                    deltaHint="up_good"
-                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-                    locale={dashLocale}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Binance Pay", "Binance Pay")}
-                    value={formatUsd(dashboard?.cashboxMonth?.binancePayUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-                    comparison={dashboard?.meta?.monthComparison?.binancePayUsd}
-                    deltaHint="up_good"
-                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-                    locale={dashLocale}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Virement bancaire", "Bank transfer")}
-                    value={formatUsd(dashboard?.cashboxMonth?.bankTransferUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-                    comparison={dashboard?.meta?.monthComparison?.bankTransferUsd}
-                    deltaHint="up_good"
-                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-                    locale={dashLocale}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Portefeuille crypto", "Crypto wallet")}
-                    value={formatUsd(dashboard?.cashboxMonth?.cryptoWalletUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-                    comparison={dashboard?.meta?.monthComparison?.cryptoWalletUsd}
-                    deltaHint="up_good"
-                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-                    locale={dashLocale}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Visa Card", "Visa Card")}
-                    value={formatUsd(dashboard?.cashboxMonth?.visaCardUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-                    comparison={dashboard?.meta?.monthComparison?.visaCardUsd}
-                    deltaHint="up_good"
-                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-                    locale={dashLocale}
-                  />
-                  <AnalyticMetricCard
-                    t={t}
-                    title={t("Retirable Mobile Money", "Withdrawable Mobile Money")}
-                    value={formatUsd(dashboard?.cashboxMonth?.withdrawableMobileMoneyUsd ?? 0, dashLocale)}
-                    timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-                    comparison={dashboard?.meta?.monthComparison?.withdrawableMobileMoneyUsd}
-                    deltaHint="up_good"
-                    definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-                    locale={dashLocale}
-                  />
-                </section>
-
-                <h3 className="dashboard-analytics-block-title">{t("D — Temps quasi réel RADIUS", "D — Near-real-time RADIUS")}</h3>
-                <section className="panel dashboard-online-radar">
-                  <div className="dashboard-online-radar__summary">
-                    <p className="dashboard-online-radar__count-line">
-                      <strong>{formatCount(dashboard?.networkSessions ?? onlineSessions.length, dashLocale)}</strong>{" "}
-                      {t("sessions corrélées abonnés", "subscriber-correlated sessions")}
-                    </p>
-                    <p className="app-meta">
-                      {t(
-                        `Fenêtre active : ${dashboard?.networkSessionsWindowMinutes || onlineSessionsWindowMinutes} minutes.`,
-                        `Active window: ${dashboard?.networkSessionsWindowMinutes || onlineSessionsWindowMinutes} minutes.`
-                      )}{" "}
-                      <span title={glossaryTooltip(isEn, "radius_live_correlated_window")}>ⓘ</span>
-                    </p>
-                  </div>
-                  <h4>{t("Détail des sessions récentes", "Recent session rows")}</h4>
-                  <p className="app-meta">
-                    {t(
-                      "ⓘ Corrélation RADIUS → client actif.",
-                      "ⓘ RADIUS to active customer mapping."
-                    )}
-                  </p>
-                  {onlineSessions.length === 0 ? (
-                    <p>
-                      {t(
-                        "Aucune session détectée dans la fenêtre courante.",
-                        "No sessions detected in the current window."
-                      )}
-                    </p>
-                  ) : (
-                    onlineSessions.slice(0, 25).map((row) => (
-                      <p key={row.ingestId}>
-                        {new Date(row.seenAt).toLocaleString(dashLocale)} —{" "}
-                        {row.customerName || row.customerPhone || row.username} ({row.username})
-                        {row.planName ? ` · ${row.planName}` : ""}
-                        {row.accessType ? ` · ${row.accessType}` : ""}
-                        {row.framedIpAddress ? ` · IP ${row.framedIpAddress}` : ""}
-                      </p>
-                    ))
-                  )}
-                </section>
-
-                <section className="panel dashboard-ratio-panel">
-                  <h4>{t("Ratios indicatifs", "Indicative ratios")}</h4>
-                  <ul className="dashboard-ratio-list">
-                    <li>
-                      {t("Factures ouvertes / client", "Open invoices / customer")}:{" "}
-                      <strong>
-                        {(
-                          (dashboard?.unpaidInvoices ?? 0) / Math.max(dashboard?.totalCustomers ?? 0, 1)
-                        ).toLocaleString(dashLocale, { maximumFractionDigits: 3 })}
-                      </strong>
-                    </li>
-                    <li>
-                      {t("Encaissements confirmés / client (période)", "Confirmed collections / customer (period)")}:{" "}
-                      <strong>
-                        {formatUsd(
-                          (networkStats?.revenueCollectedUsd ?? 0) / Math.max(dashboard?.totalCustomers ?? 0, 1),
-                          dashLocale
-                        )}
-                      </strong>
-                    </li>
-                    <li>
-                      {t("Sessions en ligne / abonnement actif", "Online sessions / active subscription")}:{" "}
-                      <strong>
-                        {(
-                          (dashboard?.networkSessions ?? onlineSessions.length) /
-                          Math.max(dashboard?.activeSubscriptions ?? 0, 1)
-                        ).toLocaleString(dashLocale, { maximumFractionDigits: 3 })}
-                      </strong>
-                    </li>
-                  </ul>
-                </section>
-              </>
-            ) : (
-              <p className="app-meta">{t("Choisissez un espace FAI pour afficher les analyses.", "Pick an ISP workspace to load analytics.")}</p>
-            )}
-
             {user.role === "system_owner" ? (
-        <section className="panel" id="platform-banners">
-          <h2>{t("Bannières tableau de bord (3 visuels)", "Dashboard banners (3 slides)")}</h2>
-          <p className="app-meta" style={{ maxWidth: "56rem", marginBottom: 12 }}>
-            {t(
-              "Préparez trois images au même format paysage pour un défilement homogène. Recommandé : 1200 × 400 px (ratio ~3:1) ou 1920 × 360 px ; PNG, JPEG ou WebP ; max. 2 Mo par fichier. Un format « 24 × 45 » très vertical convient mal à cette zone : préférez une largeur nettement plus grande que la hauteur. Lien optionnel : URL complète en https://…",
-              "Use three images with the same landscape dimensions for a clean rotation. Recommended: 1200 × 400 px (~3:1) or 1920 × 360 px; PNG, JPEG or WebP; max 2 MB each. A very tall 24×45-style strip fits poorly here—keep width clearly larger than height. Optional link: full https://… URL."
-            )}
-          </p>
-          <p className="app-meta" style={{ marginBottom: 16 }}>
-            {t(
-              "Défilement automatique toutes les 6 secondes pour les bannières actives avec image. Réservé au compte propriétaire plateforme (system_owner).",
-              "Auto-rotation every 6 seconds for active slides that have an image. Managed by the platform owner (system_owner) account only."
-            )}
-          </p>
-          <div className="grid">
-            {platformBannerSlots.map((slot) => {
-              const ed = platformBannerEdits[slot.slotIndex] || {
-                linkUrl: "",
-                altText: "",
-                isActive: true
-              };
-              return (
-                <div key={slot.slotIndex} className="panel" style={{ margin: 0 }}>
-                  <h3 style={{ marginTop: 0 }}>
-                    {t("Bannière", "Banner")} {slot.slotIndex + 1}
-                  </h3>
-                  {platformBannerHasStoredImage(slot) ? (
-                    <p style={{ margin: "8px 0" }}>
-                      <img
-                        src={platformBannerThumbSrc(slot)}
-                        alt={ed.altText || slot.altText || ""}
-                        style={{ maxWidth: "100%", maxHeight: 120, objectFit: "contain" }}
-                      />
-                    </p>
-                  ) : (
-                    <p className="app-meta">{t("Aucune image", "No image yet")}</p>
-                  )}
-                  <label style={{ display: "block", marginBottom: 8 }}>
-                    {t("Fichier image", "Image file")}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/gif"
-                      onChange={(e) => onPlatformBannerUpload(slot.slotIndex, e)}
-                      style={{ display: "block", marginTop: 6 }}
-                    />
-                  </label>
-                  <input
-                    placeholder="https://…"
-                    value={ed.linkUrl}
-                    onChange={(e) =>
-                      setPlatformBannerEdits((prev) => ({
-                        ...prev,
-                        [slot.slotIndex]: { ...ed, linkUrl: e.target.value }
-                      }))
-                    }
-                  />
-                  <input
-                    placeholder={t("Texte alternatif (accessibilité)", "Alt text (accessibility)")}
-                    value={ed.altText}
-                    onChange={(e) =>
-                      setPlatformBannerEdits((prev) => ({
-                        ...prev,
-                        [slot.slotIndex]: { ...ed, altText: e.target.value }
-                      }))
-                    }
-                  />
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-                    <input
-                      type="checkbox"
-                      checked={ed.isActive}
-                      onChange={(e) =>
-                        setPlatformBannerEdits((prev) => ({
-                          ...prev,
-                          [slot.slotIndex]: { ...ed, isActive: e.target.checked }
-                        }))
-                      }
-                    />
-                    {t("Afficher dans le carrousel", "Show in carousel")}
-                  </label>
-                  <div className="platform-banner-card__actions">
-                    <button type="button" onClick={() => onPlatformBannerSaveMeta(slot.slotIndex)}>
-                      {t("Enregistrer", "Save")}
-                    </button>
-                    {platformBannerHasStoredImage(slot) ? (
-                      <button type="button" className="btn-secondary-outline" onClick={() => onPlatformBannerDeleteImage(slot.slotIndex)}>
-                        {t("Supprimer l'image", "Remove image")}
-                      </button>
-                    ) : null}
+              <details className="dash-platform-admin panel">
+                <summary>{t("Administration plateforme", "Platform administration")}</summary>
+                <section className="panel" id="platform-banners">
+                  <h2>{t("Bannières", "Banners")}</h2>
+                  <div className="grid">
+                    {platformBannerSlots.map((slot) => {
+                      const ed = platformBannerEdits[slot.slotIndex] || {
+                        linkUrl: "",
+                        altText: "",
+                        isActive: true
+                      };
+                      return (
+                        <div key={slot.slotIndex} className="panel" style={{ margin: 0 }}>
+                          <h3 style={{ marginTop: 0 }}>
+                            {t("Bannière", "Banner")} {slot.slotIndex + 1}
+                          </h3>
+                          {platformBannerHasStoredImage(slot) ? (
+                            <p style={{ margin: "8px 0" }}>
+                              <img
+                                src={platformBannerThumbSrc(slot)}
+                                alt={ed.altText || slot.altText || ""}
+                                style={{ maxWidth: "100%", maxHeight: 120, objectFit: "contain" }}
+                              />
+                            </p>
+                          ) : (
+                            <p className="app-meta">{t("Aucune image", "No image yet")}</p>
+                          )}
+                          <label style={{ display: "block", marginBottom: 8 }}>
+                            {t("Fichier image", "Image file")}
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              onChange={(e) => onPlatformBannerUpload(slot.slotIndex, e)}
+                              style={{ display: "block", marginTop: 6 }}
+                            />
+                          </label>
+                          <input
+                            placeholder="https://…"
+                            value={ed.linkUrl}
+                            onChange={(e) =>
+                              setPlatformBannerEdits((prev) => ({
+                                ...prev,
+                                [slot.slotIndex]: { ...ed, linkUrl: e.target.value }
+                              }))
+                            }
+                          />
+                          <input
+                            placeholder={t("Texte alternatif", "Alt text")}
+                            value={ed.altText}
+                            onChange={(e) =>
+                              setPlatformBannerEdits((prev) => ({
+                                ...prev,
+                                [slot.slotIndex]: { ...ed, altText: e.target.value }
+                              }))
+                            }
+                          />
+                          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                            <input
+                              type="checkbox"
+                              checked={ed.isActive}
+                              onChange={(e) =>
+                                setPlatformBannerEdits((prev) => ({
+                                  ...prev,
+                                  [slot.slotIndex]: { ...ed, isActive: e.target.checked }
+                                }))
+                              }
+                            />
+                            {t("Afficher", "Show")}
+                          </label>
+                          <div className="platform-banner-card__actions">
+                            <button type="button" onClick={() => onPlatformBannerSaveMeta(slot.slotIndex)}>
+                              {t("Enregistrer", "Save")}
+                            </button>
+                            {platformBannerHasStoredImage(slot) ? (
+                              <button
+                                type="button"
+                                className="btn-secondary-outline"
+                                onClick={() => onPlatformBannerDeleteImage(slot.slotIndex)}
+                              >
+                                {t("Supprimer l'image", "Remove image")}
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <p className="app-meta" style={{ marginTop: 8, marginBottom: 0 }}>
-                    {t(
-                      "Enregistrer applique le lien WhatsApp, le texte alternatif et l’affichage dans le carrousel. Choisir un fichier envoie tout de suite l’image.",
-                      "Save applies the WhatsApp link, alt text, and carousel visibility. Choosing a file uploads the image immediately."
-                    )}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
+                </section>
 
-      {user.role === "system_owner" ? <PlatformHomeMarketingPanel t={t} isEn={isEn} /> : null}
+                <PlatformHomeMarketingPanel t={t} isEn={isEn} />
 
-      {user.role === "system_owner" && superDashboard?.tenants ? (
-        <section className="panel" id="system-tenants">
-          <h2>Vue créateur système</h2>
-          <p>
-            Compte propriétaire global. Les mots de passe des entreprises sont stockés de façon chiffrée et ne sont pas
-            affichables ; utilisez les invitations ou la réinitialisation pour donner un nouvel accès.
-          </p>
-          <DataTable
-            t={t}
-            title={t("Espaces entreprises", "Tenant workspaces")}
-            description={t("Recherche, tri et pagination standardisés.", "Standardized search, sorting and pagination.")}
-            rows={tenantTableView.pageRows}
-            columns={[
-              {
-                key: "name",
-                header: t("Nom", "Name"),
-                sortKey: "name",
-                cell: (ten) => `${ten.name || "—"}${ten.isDemo ? " (démo)" : ""}`
-              },
-              { key: "location", header: t("Localisation", "Location"), sortKey: "location", cell: (ten) => ten.location || "—" },
-              {
-                key: "contactPhone",
-                header: t("Téléphone", "Phone"),
-                sortKey: "contactPhone",
-                cell: (ten) => ten.contactPhone || "—"
-              },
-              {
-                key: "subscriptionStatus",
-                header: t("Abonnement", "Subscription"),
-                sortKey: "subscriptionStatus",
-                cell: (ten) => ten.subscriptionStatus || t("sans abonnement", "no subscription")
-              },
-              { key: "packageName", header: t("Forfait", "Package"), sortKey: "packageName", cell: (ten) => ten.packageName || "—" },
-              {
-                key: "createdAt",
-                header: t("Créé", "Created"),
-                sortKey: "createdAt",
-                cell: (ten) => (ten.createdAt ? new Date(ten.createdAt).toLocaleDateString("fr-FR") : "—")
-              },
-              {
-                key: "actions",
-                header: t("Actions", "Actions"),
-                cell: (ten) => (
-                  <button type="button" onClick={() => refresh(ten.id)}>
-                    {t("Ouvrir", "Open")}
-                  </button>
-                )
-              }
-            ]}
-            searchValue={tenantTable.q}
-            onSearchValueChange={(q) => setTenantTable((s) => ({ ...s, q, page: 1 }))}
-            page={tenantTable.page}
-            pageSize={tenantTable.pageSize}
-            totalRows={tenantTableView.total}
-            onPageChange={(page) => setTenantTable((s) => ({ ...s, page }))}
-            onPageSizeChange={(pageSize) => setTenantTable((s) => ({ ...s, pageSize, page: 1 }))}
-            sort={tenantTable.sort}
-            onSortChange={(sort) => setTenantTable((s) => ({ ...s, sort }))}
-          />
-        </section>
-      ) : null}
-
+                {superDashboard?.tenants ? (
+                  <section className="panel" id="system-tenants">
+                    <h2>{t("Espaces entreprises", "Tenant workspaces")}</h2>
+                    <DataTable
+                      t={t}
+                      title={t("Espaces entreprises", "Tenant workspaces")}
+                      description=""
+                      rows={tenantTableView.pageRows}
+                      columns={[
+                        {
+                          key: "name",
+                          header: t("Nom", "Name"),
+                          sortKey: "name",
+                          cell: (ten) => `${ten.name || "—"}${ten.isDemo ? " (démo)" : ""}`
+                        },
+                        {
+                          key: "location",
+                          header: t("Localisation", "Location"),
+                          sortKey: "location",
+                          cell: (ten) => ten.location || "—"
+                        },
+                        {
+                          key: "contactPhone",
+                          header: t("Téléphone", "Phone"),
+                          sortKey: "contactPhone",
+                          cell: (ten) => ten.contactPhone || "—"
+                        },
+                        {
+                          key: "subscriptionStatus",
+                          header: t("Abonnement", "Subscription"),
+                          sortKey: "subscriptionStatus",
+                          cell: (ten) => ten.subscriptionStatus || t("sans abonnement", "no subscription")
+                        },
+                        {
+                          key: "packageName",
+                          header: t("Forfait", "Package"),
+                          sortKey: "packageName",
+                          cell: (ten) => ten.packageName || "—"
+                        },
+                        {
+                          key: "createdAt",
+                          header: t("Créé", "Created"),
+                          sortKey: "createdAt",
+                          cell: (ten) =>
+                            ten.createdAt ? new Date(ten.createdAt).toLocaleDateString("fr-FR") : "—"
+                        },
+                        {
+                          key: "actions",
+                          header: t("Actions", "Actions"),
+                          cell: (ten) => (
+                            <button type="button" onClick={() => refresh(ten.id)}>
+                              {t("Ouvrir", "Open")}
+                            </button>
+                          )
+                        }
+                      ]}
+                      searchValue={tenantTable.q}
+                      onSearchValueChange={(q) => setTenantTable((s) => ({ ...s, q, page: 1 }))}
+                      page={tenantTable.page}
+                      pageSize={tenantTable.pageSize}
+                      totalRows={tenantTableView.total}
+                      onPageChange={(page) => setTenantTable((s) => ({ ...s, page }))}
+                      onPageSizeChange={(pageSize) => setTenantTable((s) => ({ ...s, pageSize, page: 1 }))}
+                      sort={tenantTable.sort}
+                      onSortChange={(sort) => setTenantTable((s) => ({ ...s, sort }))}
+                    />
+                  </section>
+                ) : null}
+              </details>
+            ) : null}
           </>
         </DashboardScreenGate>
       ) : null}
@@ -4818,8 +4579,8 @@ api.getPaymentNotifications(activeIspId)
           <h2>{t("Facturation en retard", "Overdue billing")}</h2>
           <p>
             {t(
-              "ⓘ Les impayés en retard suspendent l'accès. Traitement auto + manuel.",
-              "ⓘ Overdue unpaid invoices suspend access. Auto + manual processing."
+              "Les impayés en retard suspendent l'accès. Traitement auto + manuel.",
+              "Overdue unpaid invoices suspend access. Auto + manual processing."
             )}
           </p>
           <button type="button" disabled={!selectedIspId} onClick={onProcessBillingOverdue}>
@@ -6524,126 +6285,65 @@ api.getPaymentNotifications(activeIspId)
 
       {isFieldAgent ? (
         <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="dashboard">
-          <section className="panel dashboard-field-agent-dash">
-            <h2>{t("Synthèse terrain", "Field snapshot")}</h2>
-            <p className="app-meta">
-              {t(
-                "Les graphiques multi‑sources et la vue réseau détaillée sont réservés aux rôles d’administration ; vos filtres de période alignent toutefois la caisse sur vos clients attribués.",
-                "Multi-source charts and the detailed network view are for administrator roles; your period filters still align cashbox totals to your assigned customers."
-              )}
-            </p>
-          </section>
-          <section className="grid analytic-metric-grid">
-            <AnalyticMetricCard
-              t={t}
-              title={t("Clients (attribués)", "Customers (assigned)")}
-              value={formatCount(dashboard?.totalCustomers ?? 0, dashLocale)}
-              timeframe={t("Instantané", "Snapshot")}
-              definitionTitle={glossaryTooltip(isEn, "stock_snapshot_count")}
-            />
-            <AnalyticMetricCard
-              t={t}
-              title={t("Abonnements actifs", "Active subscriptions")}
-              value={formatCount(dashboard?.activeSubscriptions ?? 0, dashLocale)}
-              timeframe={t("Instantané", "Snapshot")}
-              definitionTitle={glossaryTooltip(isEn, "stock_snapshot_count")}
-            />
-            <AnalyticMetricCard
-              t={t}
-              title={t("Factures ouvertes", "Open invoices")}
-              value={formatCount(dashboard?.unpaidInvoices ?? 0, dashLocale)}
-              timeframe={t("Instantané", "Snapshot")}
-              definitionTitle={glossaryTooltip(isEn, "open_unpaid_invoice_count")}
-            />
-            <AnalyticMetricCard
-              t={t}
-              title={t("CA factures payées (cumul)", "Paid invoice revenue (cumulative)")}
-              value={formatUsd(dashboard?.revenueUsd ?? 0, dashLocale)}
-              timeframe={t("Cumul tout temps", "All-time cumulative")}
-              definitionTitle={glossaryTooltip(isEn, "cumulative_paid_invoice_amount_all_time")}
-            />
-          </section>
-          <section className="grid analytic-metric-grid">
-            <AnalyticMetricCard
-              t={t}
-              title={t("Cash (mois)", "Cash (month)")}
-              value={formatUsd(dashboard?.cashboxMonth?.cashUsd ?? 0, dashLocale)}
-              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-              comparison={dashboard?.meta?.monthComparison?.cashUsd}
-              deltaHint="up_good"
-              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-              locale={dashLocale}
-            />
-            <AnalyticMetricCard
-              t={t}
-              title={t("TID (mois)", "TID (month)")}
-              value={formatUsd(dashboard?.cashboxMonth?.tidUsd ?? 0, dashLocale)}
-              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-              comparison={dashboard?.meta?.monthComparison?.tidUsd}
-              deltaHint="up_good"
-              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-              locale={dashLocale}
-            />
-            <AnalyticMetricCard
-              t={t}
-              title={t("Mobile Money (mois)", "Mobile Money (month)")}
-              value={formatUsd(dashboard?.cashboxMonth?.mobileMoneyUsd ?? 0, dashLocale)}
-              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-              comparison={dashboard?.meta?.monthComparison?.mobileMoneyUsd}
-              deltaHint="up_good"
-              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-              locale={dashLocale}
-            />
-            <AnalyticMetricCard
-              t={t}
-              title={t("Binance (mois)", "Binance (month)")}
-              value={formatUsd(dashboard?.cashboxMonth?.binancePayUsd ?? 0, dashLocale)}
-              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-              comparison={dashboard?.meta?.monthComparison?.binancePayUsd}
-              deltaHint="up_good"
-              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-              locale={dashLocale}
-            />
-            <AnalyticMetricCard
-              t={t}
-              title={t("Virement (mois)", "Transfer (month)")}
-              value={formatUsd(dashboard?.cashboxMonth?.bankTransferUsd ?? 0, dashLocale)}
-              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-              comparison={dashboard?.meta?.monthComparison?.bankTransferUsd}
-              deltaHint="up_good"
-              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-              locale={dashLocale}
-            />
-            <AnalyticMetricCard
-              t={t}
-              title={t("Crypto (mois)", "Crypto (month)")}
-              value={formatUsd(dashboard?.cashboxMonth?.cryptoWalletUsd ?? 0, dashLocale)}
-              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-              comparison={dashboard?.meta?.monthComparison?.cryptoWalletUsd}
-              deltaHint="up_good"
-              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-              locale={dashLocale}
-            />
-            <AnalyticMetricCard
-              t={t}
-              title={t("Visa (mois)", "Visa (month)")}
-              value={formatUsd(dashboard?.cashboxMonth?.visaCardUsd ?? 0, dashLocale)}
-              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-              comparison={dashboard?.meta?.monthComparison?.visaCardUsd}
-              deltaHint="up_good"
-              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-              locale={dashLocale}
-            />
-            <AnalyticMetricCard
-              t={t}
-              title={t("Retirable MM", "Withdrawable MM")}
-              value={formatUsd(dashboard?.cashboxMonth?.withdrawableMobileMoneyUsd ?? 0, dashLocale)}
-              timeframe={formatIsoRange(dashboard?.cashboxMonthPeriod?.from || statsPeriod.from, dashboard?.cashboxMonthPeriod?.to || statsPeriod.to)}
-              comparison={dashboard?.meta?.monthComparison?.withdrawableMobileMoneyUsd}
-              deltaHint="up_good"
-              definitionTitle={glossaryTooltip(isEn, "cashbox_by_method_period")}
-              locale={dashLocale}
-            />
+          <DashboardKpiStrip
+            items={[
+              {
+                key: "customers",
+                label: t("Clients", "Customers"),
+                value: formatCount(dashboard?.totalCustomers ?? 0, dashLocale),
+                Icon: DASH_KPI_ICONS.people,
+                tone: "info"
+              },
+              {
+                key: "subs",
+                label: t("Actifs", "Active"),
+                value: formatCount(dashboard?.activeSubscriptions ?? 0, dashLocale),
+                Icon: DASH_KPI_ICONS.signal,
+                tone: "good"
+              },
+              {
+                key: "open",
+                label: t("Impayés", "Open"),
+                value: formatCount(dashboard?.unpaidInvoices ?? 0, dashLocale),
+                Icon: DASH_KPI_ICONS.receipt,
+                tone: "warn"
+              },
+              {
+                key: "cash",
+                label: t("Cash", "Cash"),
+                value: formatUsd(dashboard?.cashboxMonth?.cashUsd ?? 0, dashLocale),
+                Icon: DASH_KPI_ICONS.wallet,
+                tone: "accent"
+              },
+              {
+                key: "mm",
+                label: t("Mobile", "Mobile"),
+                value: formatUsd(dashboard?.cashboxMonth?.mobileMoneyUsd ?? 0, dashLocale),
+                Icon: DASH_KPI_ICONS.wallet,
+                tone: "accent"
+              }
+            ]}
+          />
+          <section className="dash-period-bar" id="reports">
+            <label className="dash-period-bar__field">
+              <span>{t("Du", "From")}</span>
+              <input
+                type="date"
+                value={statsPeriod.from}
+                onChange={(e) => setStatsPeriod((s) => ({ ...s, from: e.target.value }))}
+              />
+            </label>
+            <label className="dash-period-bar__field">
+              <span>{t("Au", "To")}</span>
+              <input
+                type="date"
+                value={statsPeriod.to}
+                onChange={(e) => setStatsPeriod((s) => ({ ...s, to: e.target.value }))}
+              />
+            </label>
+            <button type="button" className="btn-secondary-outline" onClick={() => refresh()} disabled={!selectedIspId}>
+              {t("Actualiser", "Refresh")}
+            </button>
           </section>
         </DashboardScreenGate>
       ) : null}
