@@ -7055,126 +7055,127 @@ api.getPaymentNotifications(activeIspId)
       )}
       </DashboardScreenGate>
 
-      <section className="grid" id="field-clients">
+      <section className="grid field-clients-simple" id="field-clients">
       <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
         {!isFieldAgent ? (
-          <>
-        <form className="panel" onSubmit={onCreateCustomer}>
-          <h2>{t("Créer un client", "Create customer")}</h2>
-          <input
-            placeholder={t("Nom complet", "Full name")}
-            value={customerForm.fullName}
-            onChange={(e) => setCustomerForm({ ...customerForm, fullName: e.target.value })}
-          />
-          <input
-            placeholder={t("Téléphone (+243…)", "Phone (+243…)")}
-            value={customerForm.phone}
-            onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })}
-          />
-          <input
-            placeholder={t("E-mail pour les renouvellements (facultatif)", "Email for renewals (optional)")}
-            value={customerForm.email}
-            onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })}
-          />
-          <input
-            type="password"
-            placeholder={t(
-              "Mot de passe portail initial (facultatif, min. 6 car.)",
-              "Initial portal password (optional, min. 6 chars)"
-            )}
-            value={customerForm.initialPassword}
-            onChange={(e) => setCustomerForm({ ...customerForm, initialPassword: e.target.value })}
-          />
-          <label className="app-meta" style={{ display: "block", marginBottom: 8 }}>
-            {t("Agent terrain (facultatif)", "Field agent (optional)")}
-            <select
-              value={customerForm.fieldAgentId}
-              onChange={(e) => setCustomerForm({ ...customerForm, fieldAgentId: e.target.value })}
-              style={{ display: "block", width: "100%", marginTop: 4 }}
-            >
-              <option value="">{t("— Aucun —", "— None —")}</option>
-              {fieldTeamUsers.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.fullName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" disabled={!selectedIspId}>
-            {t("Enregistrer le client", "Save customer")}
-          </button>
-        </form>
-
-        <div className="panel">
-          <h2>{t("Import / export clients (CSV)", "Import / export customers (CSV)")}</h2>
-          <p>
-            {t(
-              "Téléchargez votre liste d'abonnés ou importez depuis un autre outil ou un export MikroTik (colonnes du type nom, secret → nom abonné et mot de passe portail facultatif). Les doublons de téléphone pour ce FAI sont ignorés.",
-              "Download your subscriber list or import from another tool or a MikroTik export (e.g. name, secret → subscriber name and optional portal password). Duplicate phone numbers for this ISP are skipped."
-            )}
-          </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            <button type="button" onClick={onDownloadCustomersCsv} disabled={!selectedIspId}>
-              {t("Télécharger le CSV clients", "Download customers CSV")}
-            </button>
-            <button type="button" onClick={() => api.downloadCustomerImportTemplate()}>
-              {t("Télécharger le modèle d'import", "Download import template")}
-            </button>
-          </div>
-          <p className="app-meta" style={{ marginTop: 8, fontSize: "0.9em" }}>
-            {t("Modèle : ligne d'en-tête uniquement —", "Template: header row only —")}{" "}
-            <code>fullName,phone,email,password</code>.{" "}
-            {t(
-              "E-mail et mot de passe facultatifs par ligne (utilisez le mot de passe par défaut ci-dessous si vide). MikroTik exporte souvent name — copiez dans fullName et phone ou renommez l'en-tête pour correspondre.",
-              "Email and password are optional per row (use the default password below if empty). MikroTik often exports name — copy into fullName and phone, or rename the header to match."
-            )}
-          </p>
-          <form onSubmit={onImportCustomersCsv} style={{ marginTop: 12 }}>
-            <input ref={customerCsvInputRef} type="file" accept=".csv,text/csv" />
-            <input
-              type="password"
-              placeholder={t(
-                "Mot de passe portail par défaut pour les lignes sans (facultatif, min. 6 car.)",
-                "Default portal password for rows without one (optional, min. 6 chars)"
-              )}
-              value={customerImportPassword}
-              onChange={(e) => setCustomerImportPassword(e.target.value)}
-            />
+          <form className="panel field-clients-create" onSubmit={onCreateCustomer}>
+            <h2>{t("Nouveau client", "New customer")}</h2>
+            <div className="field-clients-create__row">
+              <input
+                placeholder={t("Nom", "Name")}
+                value={customerForm.fullName}
+                onChange={(e) => setCustomerForm({ ...customerForm, fullName: e.target.value })}
+                required
+              />
+              <input
+                placeholder={t("Téléphone", "Phone")}
+                value={customerForm.phone}
+                onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })}
+                required
+              />
+            </div>
+            <div className="field-clients-create__row">
+              <input
+                placeholder={t("E-mail (facultatif)", "Email (optional)")}
+                value={customerForm.email}
+                onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })}
+              />
+              {fieldTeamUsers.length ? (
+                <select
+                  value={customerForm.fieldAgentId}
+                  onChange={(e) => setCustomerForm({ ...customerForm, fieldAgentId: e.target.value })}
+                  aria-label={t("Agent terrain", "Field agent")}
+                >
+                  <option value="">{t("Agent — aucun", "Agent — none")}</option>
+                  {fieldTeamUsers.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.fullName}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
             <button type="submit" disabled={!selectedIspId}>
-              {t("Importer CSV", "Import CSV")}
+              {t("Ajouter", "Add")}
             </button>
           </form>
-          {customerImportReport ? (
-            <CsvImportResultBlock
-              t={t}
-              createdCount={customerImportReport.createdCount}
-              skipped={customerImportReport.skipped}
-              errors={customerImportReport.errors}
-              onDismiss={() => setCustomerImportReport(null)}
+        ) : null}
+
+        {customerEmailForm.customerId ? (
+          <form className="panel field-clients-edit" onSubmit={onPatchCustomerEmail}>
+            <h2>{t("Modifier", "Edit")}</h2>
+            <p className="app-meta field-clients-edit__who">
+              {customers.find((c) => c.id === customerEmailForm.customerId)?.fullName || "—"}
+            </p>
+            <input
+              placeholder={t("E-mail", "Email")}
+              value={customerEmailForm.email}
+              onChange={(e) => setCustomerEmailForm({ ...customerEmailForm, email: e.target.value })}
             />
-          ) : null}
-        </div>
+            {!isFieldAgent &&
+            (isPlatformSuperRole(user.role) ||
+              user.role === "company_manager" ||
+              user.role === "isp_admin" ||
+              user.role === "billing_agent") ? (
+              <select
+                value={customerEmailForm.fieldAgentId || ""}
+                onChange={(e) =>
+                  setCustomerEmailForm({ ...customerEmailForm, fieldAgentId: e.target.value })
+                }
+                aria-label={t("Agent terrain", "Field agent")}
+              >
+                <option value="">{t("Agent — aucun", "Agent — none")}</option>
+                {fieldTeamUsers.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.fullName}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <div className="field-clients-edit__actions">
+              <button type="submit" disabled={!selectedIspId}>
+                {t("Enregistrer", "Save")}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary-outline"
+                onClick={() => setCustomerEmailForm({ customerId: "", email: "", fieldAgentId: "" })}
+              >
+                {t("Fermer", "Close")}
+              </button>
+            </div>
+          </form>
+        ) : null}
 
         <div className="panel">
-          <h2>{t("Utilisateurs", "Users")}</h2>
           <DataTable
             t={t}
             title={t("Clients", "Clients")}
-            description={t("Liste standardisée (recherche, tri, pagination).", "Standardized list (search, sort, pagination).")}
+            description=""
+            emptyLabel={t("Aucun client.", "No customers.")}
             rows={customerTableView.pageRows}
             columns={[
               { key: "fullName", header: t("Nom", "Name"), sortKey: "fullName", cell: (c) => c.fullName || "—" },
-              { key: "phone", header: t("Téléphone", "Phone"), sortKey: "phone", cell: (c) => c.phone || "—" },
-              { key: "email", header: "Email", sortKey: "email", cell: (c) => c.email || "—" },
+              { key: "phone", header: t("Tél.", "Phone"), sortKey: "phone", cell: (c) => c.phone || "—" },
               {
-                key: "fieldAgentName",
-                header: t("Agent", "Agent"),
-                sortKey: "fieldAgentName",
-                cell: (c) => c.fieldAgentName || "—"
+                key: "email",
+                header: "Email",
+                sortKey: "email",
+                cell: (c) => c.email || "—"
               },
+              ...(!isFieldAgent
+                ? [
+                    {
+                      key: "fieldAgentName",
+                      header: t("Agent", "Agent"),
+                      sortKey: "fieldAgentName",
+                      cell: (c) => c.fieldAgentName || "—"
+                    }
+                  ]
+                : []),
               {
                 key: "actions",
-                header: t("Actions", "Actions"),
+                header: "",
                 cell: (c) => (
                   <button
                     type="button"
@@ -7203,151 +7204,99 @@ api.getPaymentNotifications(activeIspId)
             onSortChange={(sort) => setCustomerTable((s) => ({ ...s, sort }))}
           />
         </div>
-          </>
+
+        {!isFieldAgent ? (
+          <details className="panel field-clients-more">
+            <summary>{t("Import / export CSV", "CSV import / export")}</summary>
+            <div className="field-clients-more__body">
+              <div className="field-clients-more__actions">
+                <button type="button" onClick={onDownloadCustomersCsv} disabled={!selectedIspId}>
+                  {t("Exporter", "Export")}
+                </button>
+                <button type="button" className="btn-secondary-outline" onClick={() => api.downloadCustomerImportTemplate()}>
+                  {t("Modèle", "Template")}
+                </button>
+              </div>
+              <form onSubmit={onImportCustomersCsv} className="field-clients-more__import">
+                <input ref={customerCsvInputRef} type="file" accept=".csv,text/csv" />
+                <input
+                  type="password"
+                  placeholder={t("Mot de passe portail défaut (facultatif)", "Default portal password (optional)")}
+                  value={customerImportPassword}
+                  onChange={(e) => setCustomerImportPassword(e.target.value)}
+                />
+                <button type="submit" disabled={!selectedIspId}>
+                  {t("Importer", "Import")}
+                </button>
+              </form>
+              {customerImportReport ? (
+                <CsvImportResultBlock
+                  t={t}
+                  createdCount={customerImportReport.createdCount}
+                  skipped={customerImportReport.skipped}
+                  errors={customerImportReport.errors}
+                  onDismiss={() => setCustomerImportReport(null)}
+                />
+              ) : null}
+            </div>
+          </details>
         ) : null}
 
-        <form className="panel" onSubmit={onPatchCustomerEmail}>
-          <h2>
-            {isFieldAgent
-              ? t("E-mail client (clients assignés)", "Customer email (assigned customers)")
-              : t("E-mail et agent terrain", "Email and field agent")}
-          </h2>
-          <p>
-            {isFieldAgent
-              ? t(
-                  "Vous pouvez mettre à jour l’adresse e-mail des abonnés qui vous sont assignés.",
-                  "You can update the email address of subscribers assigned to you."
-                )
-              : t(
-                  "E-mail pour les renouvellements (SMTP) et attribution d’un agent terrain pour le suivi sur le terrain.",
-                  "Email for renewals (SMTP) and assigning a field agent for on-site follow-up."
-                )}
-          </p>
-          <select
-            value={customerEmailForm.customerId}
-            onChange={(e) => {
-              const id = e.target.value;
-              const cst = customers.find((c) => c.id === id);
-              setCustomerEmailForm({
-                customerId: id,
-                email: cst?.email || "",
-                fieldAgentId: cst?.fieldAgentId || ""
-              });
-            }}
-          >
-            <option value="">{t("Choisir un client", "Select a customer")}</option>
-            {customers.map((cst) => (
-              <option key={cst.id} value={cst.id}>
-                {cst.fullName}
-                {cst.email ? ` (${cst.email})` : ""}
-              </option>
-            ))}
-          </select>
-          <input
-            placeholder={t("E-mail (vide = effacer)", "Email (empty = clear)")}
-            value={customerEmailForm.email}
-            onChange={(e) => setCustomerEmailForm({ ...customerEmailForm, email: e.target.value })}
-          />
-          {!isFieldAgent &&
-          (isPlatformSuperRole(user.role) ||
-            user.role === "company_manager" ||
-            user.role === "isp_admin" ||
-            user.role === "billing_agent") ? (
-            <label className="app-meta" style={{ display: "block", marginBottom: 8 }}>
-              {t("Agent terrain", "Field agent")}
-              <select
-                value={customerEmailForm.fieldAgentId || ""}
-                onChange={(e) =>
-                  setCustomerEmailForm({ ...customerEmailForm, fieldAgentId: e.target.value })
-                }
-                style={{ display: "block", width: "100%", marginTop: 4 }}
-              >
-                <option value="">{t("— Aucun —", "— None —")}</option>
-                {fieldTeamUsers.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.fullName}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <button type="submit" disabled={!selectedIspId || !customerEmailForm.customerId}>
-            {isFieldAgent
-              ? t("Enregistrer l'e-mail", "Save email")
-              : t("Enregistrer e-mail et agent", "Save email and agent")}
-          </button>
-        </form>
-      </DashboardScreenGate>
-
-      <DashboardScreenGate
-        mobile={gateMobile}
-        active={mobileScreen}
-        ids={isFieldAgent ? ["billing"] : ["users"]}
-      >
         {(isPlatformSuperRole(user.role) ||
           user.role === "company_manager" ||
           user.role === "isp_admin" ||
           user.role === "billing_agent" ||
           user.role === "field_agent") && (
-          <form className="panel" onSubmit={onIssuePortalToken}>
-            <h2>{t("Portail libre-service client", "Customer self-service portal")}</h2>
-            <p>
-              {t(
-                "Générez un lien limité dans le temps pour consulter les factures et envoyer une TID Mobile Money.",
-                "Generate a time-limited link to view invoices and submit a Mobile Money TID."
-              )}
-            </p>
-            <select
-              value={portalTokenForm.customerId}
-              onChange={(e) =>
-                setPortalTokenForm({ ...portalTokenForm, customerId: e.target.value })
-              }
-            >
-              <option value="">{t("Choisir un client", "Select a customer")}</option>
-              {customers.map((cst) => (
-                <option key={cst.id} value={cst.id}>
-                  {cst.fullName}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min={1}
-              max={365}
-              title={t("Validité du lien en jours", "Link validity in days")}
-              value={portalTokenForm.expiresDays}
-              onChange={(e) =>
-                setPortalTokenForm({ ...portalTokenForm, expiresDays: e.target.value })
-              }
-            />
-            <button type="submit" disabled={!selectedIspId}>
-              {t("Générer le lien portail", "Generate portal link")}
-            </button>
-            {lastPortalIssue?.portalUrl && (
-              <p>
-                <strong>{t("Lien :", "Link:")}</strong>{" "}
-                <a href={lastPortalIssue.portalUrl} target="_blank" rel="noreferrer">
-                  {lastPortalIssue.portalUrl}
-                </a>
-              </p>
-            )}
-            {lastPortalIssue?.expiresAt && (
-              <p>
-                <small>
-                  {t("Expire le", "Expires")}{" "}
-                  {new Date(lastPortalIssue.expiresAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}
-                </small>
-              </p>
-            )}
-          </form>
+          <details className="panel field-clients-more">
+            <summary>{t("Lien portail client", "Customer portal link")}</summary>
+            <form className="field-clients-more__body" onSubmit={onIssuePortalToken}>
+              <select
+                value={portalTokenForm.customerId}
+                onChange={(e) =>
+                  setPortalTokenForm({ ...portalTokenForm, customerId: e.target.value })
+                }
+              >
+                <option value="">{t("Client", "Customer")}</option>
+                {customers.map((cst) => (
+                  <option key={cst.id} value={cst.id}>
+                    {cst.fullName}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min={1}
+                max={365}
+                aria-label={t("Jours", "Days")}
+                value={portalTokenForm.expiresDays}
+                onChange={(e) =>
+                  setPortalTokenForm({ ...portalTokenForm, expiresDays: e.target.value })
+                }
+              />
+              <button type="submit" disabled={!selectedIspId || !portalTokenForm.customerId}>
+                {t("Générer", "Generate")}
+              </button>
+              {lastPortalIssue?.portalUrl ? (
+                <p className="field-clients-portal-link">
+                  <a href={lastPortalIssue.portalUrl} target="_blank" rel="noreferrer">
+                    {lastPortalIssue.portalUrl}
+                  </a>
+                </p>
+              ) : null}
+            </form>
+          </details>
         )}
       </DashboardScreenGate>
+      </section>
 
       {!isFieldAgent ? (
         <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
-        <>
-        <form className="panel" onSubmit={onCreatePlan}>
-          <h2>{t("Créer une formule Wi‑Fi / accès", "Create Wi‑Fi / access plan")}</h2>
+          <section className="grid" id="access-plans">
+            <details className="panel field-clients-more">
+              <summary>{t("Formules & abonnements", "Plans & subscriptions")}</summary>
+              <div className="field-clients-more__body field-clients-more__body--stack">
+        <form className="panel" onSubmit={onCreatePlan} style={{ margin: 0, boxShadow: "none", border: 0, padding: 0 }}>
+          <h3>{t("Nouvelle formule", "New plan")}</h3>
           <input
             placeholder={t("Nom", "Name")}
             value={planForm.name}
@@ -7366,10 +7315,7 @@ api.getPaymentNotifications(activeIspId)
             onChange={(e) => setPlanForm({ ...planForm, durationDays: e.target.value })}
           />
           <input
-            placeholder={t(
-              "Libellé débit affiché aux clients (ex. 20 Mbps)",
-              "Speed label shown to customers (e.g. 20 Mbps)"
-            )}
+            placeholder={t("Débit affiché (ex. 20 Mbps)", "Speed label (e.g. 20 Mbps)")}
             value={planForm.speedLabel}
             onChange={(e) => setPlanForm({ ...planForm, speedLabel: e.target.value })}
           />
@@ -7388,7 +7334,7 @@ api.getPaymentNotifications(activeIspId)
           <input
             type="number"
             min={1}
-            placeholder={t("Nombre max d'appareils", "Max devices")}
+            placeholder={t("Max appareils", "Max devices")}
             value={planForm.maxDevices}
             onChange={(e) => setPlanForm({ ...planForm, maxDevices: e.target.value })}
           />
@@ -7396,7 +7342,7 @@ api.getPaymentNotifications(activeIspId)
             value={planForm.availabilityStatus}
             onChange={(e) => setPlanForm({ ...planForm, availabilityStatus: e.target.value })}
           >
-            <option value="available">{t("Disponible (pas épuisé)", "Available (not sold out)")}</option>
+            <option value="available">{t("Disponible", "Available")}</option>
             <option value="unavailable">{t("Indisponible (masqué à l'achat)", "Unavailable (hidden from buy page)")}</option>
           </select>
           <label>
@@ -7420,8 +7366,8 @@ api.getPaymentNotifications(activeIspId)
           </button>
         </form>
 
-        <form className="panel" onSubmit={onSavePlanPatch}>
-          <h2>{t("Modifier une formule", "Edit plan")}</h2>
+        <form className="panel" onSubmit={onSavePlanPatch} style={{ margin: 0, boxShadow: "none", border: 0, padding: "12px 0 0" }}>
+          <h3>{t("Modifier formule", "Edit plan")}</h3>
           <select
             value={planEditForm.planId}
             onChange={(e) => {
@@ -7446,7 +7392,7 @@ api.getPaymentNotifications(activeIspId)
               });
             }}
           >
-            <option value="">{t("Choisir une formule à modifier…", "Select a plan to edit…")}</option>
+            <option value="">{t("Choisir…", "Select…")}</option>
             {plans.map((plan) => (
               <option key={plan.id} value={plan.id}>
                 {plan.name}
@@ -7515,30 +7461,24 @@ api.getPaymentNotifications(activeIspId)
             onChange={(e) => setPlanEditForm({ ...planEditForm, successRedirectUrl: e.target.value })}
           />
           <button type="submit" disabled={!selectedIspId || !planEditForm.planId}>
-            {t("Enregistrer les modifications", "Save changes")}
+            {t("Enregistrer", "Save")}
           </button>
         </form>
 
         {selectedIspId ? (
-          <div className="panel">
-            <h2>{t("Page d’achat Wi‑Fi invité", "Guest Wi‑Fi purchase page")}</h2>
-            <p className="app-meta" style={{ marginTop: 0 }}>
-              {t(
-                "Même lien pour toutes les formules publiées : partagez-le ou le QR code près du point d’accès.",
-                "Same link for all published plans—share it or the QR code near the access point."
-              )}
-            </p>
-            <GuestWifiShare ispId={selectedIspId} caption={t("Lien invité Wi‑Fi", "Wi‑Fi guest link")} t={t} />
+          <div className="panel" style={{ margin: 0, boxShadow: "none", border: 0, padding: "12px 0 0" }}>
+            <h3>{t("Lien Wi‑Fi invité", "Guest Wi‑Fi link")}</h3>
+            <GuestWifiShare ispId={selectedIspId} caption={t("Lien invité", "Guest link")} t={t} />
           </div>
         ) : null}
 
-        <form className="panel" onSubmit={onCreateSubscription}>
-          <h2>{t("Créer un abonnement", "Create subscription")}</h2>
+        <form className="panel" onSubmit={onCreateSubscription} style={{ margin: 0, boxShadow: "none", border: 0, padding: "12px 0 0" }}>
+          <h3>{t("Nouvel abonnement", "New subscription")}</h3>
           <select
             value={subForm.customerId}
             onChange={(e) => setSubForm({ ...subForm, customerId: e.target.value })}
           >
-            <option value="">{t("Choisir un client", "Select a customer")}</option>
+            <option value="">{t("Client", "Customer")}</option>
             {customers.map((customer) => (
               <option key={customer.id} value={customer.id}>
                 {customer.fullName}
@@ -7549,7 +7489,7 @@ api.getPaymentNotifications(activeIspId)
             value={subForm.planId}
             onChange={(e) => setSubForm({ ...subForm, planId: e.target.value })}
           >
-            <option value="">{t("Choisir une formule", "Select a plan")}</option>
+            <option value="">{t("Formule", "Plan")}</option>
             {plans.map((plan) => (
               <option key={plan.id} value={plan.id}>
                 {plan.name}
@@ -7564,13 +7504,14 @@ api.getPaymentNotifications(activeIspId)
             <option value="hotspot">{t("Hotspot", "Hotspot")}</option>
           </select>
           <button type="submit" disabled={!selectedIspId}>
-            {t("Activer l'abonnement", "Activate subscription")}
+            {t("Activer", "Activate")}
           </button>
         </form>
-          </>
+              </div>
+            </details>
+          </section>
         </DashboardScreenGate>
-        ) : null}
-      </section>
+      ) : null}
 
       <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
       <section className="panel billing-invoices-panel">

@@ -2387,6 +2387,61 @@ button.btn-secondary-outline:hover:not(:disabled) {
   padding: 4px 0 10px;
 }
 
+.field-clients-simple {
+  gap: 12px;
+}
+
+.field-clients-create__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.field-clients-edit__who {
+  margin: 0 0 10px;
+}
+
+.field-clients-edit__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.field-clients-more > summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 2px 0;
+}
+
+.field-clients-more__body {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.field-clients-more__body--stack {
+  gap: 16px;
+}
+
+.field-clients-more__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.field-clients-more__import {
+  display: grid;
+  gap: 8px;
+}
+
+.field-clients-portal-link {
+  margin: 0;
+  word-break: break-all;
+  font-size: 0.9rem;
+}
+
 .dash-hist-lead {
   margin: 0 0 16px;
   font-size: 0.92rem;
