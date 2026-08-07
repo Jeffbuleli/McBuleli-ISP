@@ -37,6 +37,21 @@ Postgres **jamais** expose publiquement.
 
 Apres smoke OK sur VPS:
 
-1. Pointer DNS vers `162.35`
-2. Suspendre service Render `mcbuleli-isp` + Postgres Render
-3. Desactiver projet Vercel front
+1. Pointer DNS `app.mcbuleli.live` vers `162.35.181.98`
+2. `certbot --nginx -d app.mcbuleli.live`
+3. Suspendre service Render `mcbuleli-isp` + Postgres Render
+4. Desactiver projet Vercel front
+
+## Donnees
+
+DB fraiche initialisee par `initDb()` + migrations (52 tables).
+
+Pour importer un dump Render / local:
+
+```bash
+# Sur le VPS
+bash ops/vps/restore-db.sh /opt/mcbuleli-isp/backups/isp_billing_XXXX.dump
+bash ops/vps/deploy.sh
+```
+
+Backup quotidien: cron `15 3 * * *` -> `ops/vps/cron-backup.sh`
