@@ -68,6 +68,43 @@ function isPlatformSuperRole(role) {
   return role === "super_admin" || role === "system_owner";
 }
 
+function canManageIspPlans(role) {
+  return isPlatformSuperRole(role) || role === "company_manager" || role === "isp_admin";
+}
+
+function canMarkInvoicePaid(role) {
+  return canManageIspPlans(role) || role === "billing_agent";
+}
+
+function canManageNetworkNodes(role) {
+  return canManageIspPlans(role);
+}
+
+function canCreateSubscription(role) {
+  return canManageIspPlans(role) || role === "billing_agent" || role === "noc_operator";
+}
+
+function assignableStaffRoles(requesterRole) {
+  const map = {
+    system_owner: ["company_manager", "isp_admin", "billing_agent", "noc_operator", "field_agent"],
+    super_admin: ["company_manager", "isp_admin", "billing_agent", "noc_operator", "field_agent"],
+    company_manager: ["isp_admin", "billing_agent", "noc_operator", "field_agent"],
+    isp_admin: ["billing_agent", "noc_operator", "field_agent"]
+  };
+  return map[requesterRole] || [];
+}
+
+function staffRoleOptionLabel(role, t) {
+  const labels = {
+    company_manager: t("Dirigeant entreprise", "Company manager"),
+    isp_admin: t("Administrateur FAI", "ISP administrator"),
+    billing_agent: t("Agent facturation", "Billing agent"),
+    noc_operator: t("Opérateur NOC", "NOC operator"),
+    field_agent: t("Agent terrain", "Field agent")
+  };
+  return labels[role] || role;
+}
+
 function workspaceHeaderTitle(branding, tenantContext, isps, selectedIspId, user) {
   const fromSession = user?.workspaceDisplayName != null ? String(user.workspaceDisplayName).trim() : "";
   if (fromSession && fromSession !== "AA") return fromSession;
@@ -3032,13 +3069,16 @@ api.getPaymentNotifications(activeIspId)
     const d = teamRowDraft[userId];
     if (!d || !selectedIspId) return;
     try {
-      await api.patchTeamUser(selectedIspId, userId, {
-        role: d.role,
+      const payload = {
         phone: d.phone,
         address: d.address,
         assignedSite: d.assignedSite,
         accreditationLevel: d.accreditationLevel
-      });
+      };
+      if (assignableStaffRoles(user.role).includes(d.role)) {
+        payload.role = d.role;
+      }
+      await api.patchTeamUser(selectedIspId, userId, payload);
       setNotice(t("Membre d'équipe enregistré.", "Team member saved."));
       refresh();
     } catch (err) {
@@ -5193,17 +5233,21 @@ api.getPaymentNotifications(activeIspId)
                 header: "",
                 cell: (n) => (
                   <div className="network-ops-row-actions">
-                    <button type="button" onClick={() => onToggleNetworkNode(n.id, !n.isActive)}>
-                      {n.isActive ? t("Off", "Off") : t("On", "On")}
-                    </button>
-                    {!n.isDefault ? (
-                      <button
-                        type="button"
-                        className="btn-secondary-outline"
-                        onClick={() => onSetDefaultNetworkNode(n.id)}
-                      >
-                        {t("Defaut", "Default")}
-                      </button>
+                    {canManageNetworkNodes(user.role) ? (
+                      <>
+                        <button type="button" onClick={() => onToggleNetworkNode(n.id, !n.isActive)}>
+                          {n.isActive ? t("Off", "Off") : t("On", "On")}
+                        </button>
+                        {!n.isDefault ? (
+                          <button
+                            type="button"
+                            className="btn-secondary-outline"
+                            onClick={() => onSetDefaultNetworkNode(n.id)}
+                          >
+                            {t("Defaut", "Default")}
+                          </button>
+                        ) : null}
+                      </>
                     ) : null}
                     {isPlatformSuperRole(user.role) ||
                     user.role === "company_manager" ||
@@ -6012,13 +6056,11 @@ api.getPaymentNotifications(activeIspId)
               value={userForm.role}
               onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
             >
-              {isPlatformSuperRole(user.role) && (
-                <option value="company_manager">{t("Dirigeant entreprise", "Company manager")}</option>
-              )}
-              <option value="isp_admin">{t("Administrateur FAI", "ISP administrator")}</option>
-              <option value="billing_agent">{t("Agent facturation", "Billing agent")}</option>
-              <option value="noc_operator">{t("Opérateur NOC", "NOC operator")}</option>
-              <option value="field_agent">{t("Agent terrain", "Field agent")}</option>
+              {assignableStaffRoles(user.role).map((role) => (
+                <option key={role} value={role}>
+                  {staffRoleOptionLabel(role, t)}
+                </option>
+              ))}
             </select>
             <select
               value={userForm.accreditationLevel}
@@ -6076,13 +6118,11 @@ api.getPaymentNotifications(activeIspId)
                   onChange={(e) => setTeamImportPassword(e.target.value)}
                 />
                 <select value={teamImportRole} onChange={(e) => setTeamImportRole(e.target.value)}>
-                  {isPlatformSuperRole(user.role) && (
-                    <option value="company_manager">{t("Dirigeant entreprise", "Company manager")}</option>
-                  )}
-                  <option value="isp_admin">{t("Administrateur FAI", "ISP administrator")}</option>
-                  <option value="billing_agent">{t("Agent facturation", "Billing agent")}</option>
-                  <option value="noc_operator">{t("Opérateur NOC", "NOC operator")}</option>
-                  <option value="field_agent">{t("Agent terrain", "Field agent")}</option>
+                  {assignableStaffRoles(user.role).map((role) => (
+                    <option key={role} value={role}>
+                      {staffRoleOptionLabel(role, t)}
+                    </option>
+                  ))}
                 </select>
                 <button type="submit" disabled={!selectedIspId}>
                   {t("Importer le CSV équipe", "Import team CSV")}
@@ -6141,23 +6181,27 @@ api.getPaymentNotifications(activeIspId)
                 </p>
                 {canManageTeam ? (
                   <div className="grid" style={{ gap: 8 }}>
-                    <select
-                      value={d.role}
-                      onChange={(e) =>
-                        setTeamRowDraft({
-                          ...teamRowDraft,
-                          [item.id]: { ...d, role: e.target.value }
-                        })
-                      }
-                    >
-                      {isPlatformSuperRole(user.role) && (
-                        <option value="company_manager">{t("Dirigeant entreprise", "Company manager")}</option>
-                      )}
-                      <option value="isp_admin">{t("Administrateur FAI", "ISP administrator")}</option>
-                      <option value="billing_agent">{t("Agent facturation", "Billing agent")}</option>
-                      <option value="noc_operator">{t("Opérateur NOC", "NOC operator")}</option>
-                      <option value="field_agent">{t("Agent terrain", "Field agent")}</option>
-                    </select>
+                    {assignableStaffRoles(user.role).includes(d.role) ? (
+                      <select
+                        value={d.role}
+                        onChange={(e) =>
+                          setTeamRowDraft({
+                            ...teamRowDraft,
+                            [item.id]: { ...d, role: e.target.value }
+                          })
+                        }
+                      >
+                        {assignableStaffRoles(user.role).map((role) => (
+                          <option key={role} value={role}>
+                            {staffRoleOptionLabel(role, t)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="app-meta" style={{ margin: 0 }}>
+                        {staffRoleOptionLabel(d.role, t)}
+                      </p>
+                    )}
                     <select
                       value={d.accreditationLevel}
                       onChange={(e) =>
@@ -7315,12 +7359,14 @@ api.getPaymentNotifications(activeIspId)
       </DashboardScreenGate>
       </section>
 
-      {!isFieldAgent ? (
+      {canCreateSubscription(user.role) ? (
         <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
           <section className="grid" id="access-plans">
             <details className="panel field-clients-more">
               <summary>{t("Formules & abonnements", "Plans & subscriptions")}</summary>
               <div className="field-clients-more__body field-clients-more__body--stack">
+        {canManageIspPlans(user.role) ? (
+          <>
         <form className="panel" onSubmit={onCreatePlan} style={{ margin: 0, boxShadow: "none", border: 0, padding: 0 }}>
           <h3>{t("Nouvelle formule", "New plan")}</h3>
           <input
@@ -7490,6 +7536,8 @@ api.getPaymentNotifications(activeIspId)
             {t("Enregistrer", "Save")}
           </button>
         </form>
+          </>
+        ) : null}
 
         {selectedIspId ? (
           <div className="panel" style={{ margin: 0, boxShadow: "none", border: 0, padding: "12px 0 0" }}>
@@ -7569,7 +7617,7 @@ api.getPaymentNotifications(activeIspId)
               header: t("Paiement", "Payment"),
               cell: (inv) =>
                 inv.status === "unpaid" || inv.status === "overdue" ? (
-                  !isFieldAgent ? (
+                  canMarkInvoicePaid(user.role) ? (
                     <button type="button" onClick={() => onMarkPaid(inv.id, inv.amountUsd)}>
                       {t("Marquer payée", "Mark paid")}
                     </button>

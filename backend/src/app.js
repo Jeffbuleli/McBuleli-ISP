@@ -394,11 +394,17 @@ function teamUserImportCells(row) {
 
 function allowedRolesForUserImport(requesterRole) {
   const map = {
+    system_owner: ["company_manager", "isp_admin", "billing_agent", "noc_operator", "field_agent"],
     super_admin: ["company_manager", "isp_admin", "billing_agent", "noc_operator", "field_agent"],
     company_manager: ["isp_admin", "billing_agent", "noc_operator", "field_agent"],
     isp_admin: ["billing_agent", "noc_operator", "field_agent"]
   };
   return map[requesterRole] || [];
+}
+
+/** Roles a requester may assign when creating/updating team memberships. */
+function allowedStaffRolesByRequester(requesterRole) {
+  return allowedRolesForUserImport(requesterRole);
 }
 
 const uploadLogoMemory = multer({
@@ -4421,18 +4427,12 @@ app.post(
     return res.status(400).json({ message: "fullName, email and role are required" });
   }
 
-  const allowedRolesByRequester = {
-    super_admin: ["company_manager", "isp_admin", "billing_agent", "noc_operator", "field_agent"],
-    company_manager: ["isp_admin", "billing_agent", "noc_operator", "field_agent"],
-    isp_admin: ["billing_agent", "noc_operator", "field_agent"]
-  };
-
-  const allowed = allowedRolesByRequester[req.user.role] || [];
+  const allowed = allowedStaffRolesByRequester(req.user.role);
   if (!allowed.includes(role)) {
     return res.status(403).json({ message: "You cannot create this role" });
   }
 
-  if (req.user.role !== "super_admin" && role === "super_admin") {
+  if (req.user.role !== "super_admin" && req.user.role !== "system_owner" && role === "super_admin") {
     return res.status(403).json({ message: "Forbidden role assignment" });
   }
 
@@ -4718,22 +4718,17 @@ app.patch(
     if (!memRow.rows[0]) return res.status(404).json({ message: "User not found" });
     const currentRole = memRow.rows[0].role;
 
-    const allowedRolesByRequester = {
-      super_admin: ["company_manager", "isp_admin", "billing_agent", "noc_operator", "field_agent"],
-      company_manager: ["isp_admin", "billing_agent", "noc_operator", "field_agent"],
-      isp_admin: ["billing_agent", "noc_operator", "field_agent"]
-    };
-    const allowed = allowedRolesByRequester[req.user.role] || [];
+    const allowed = allowedStaffRolesByRequester(req.user.role);
 
     if (role != null && String(role).trim()) {
       const nextRole = String(role).trim();
       if (!allowed.includes(nextRole)) {
         return res.status(403).json({ message: "You cannot assign this role" });
       }
-      if (req.user.role !== "super_admin" && nextRole === "super_admin") {
+      if (req.user.role !== "super_admin" && req.user.role !== "system_owner" && nextRole === "super_admin") {
         return res.status(403).json({ message: "Forbidden role assignment" });
       }
-      if (req.user.role !== "super_admin" && currentRole === "super_admin") {
+      if (req.user.role !== "super_admin" && req.user.role !== "system_owner" && currentRole === "super_admin") {
         return res.status(403).json({ message: "Forbidden target user" });
       }
     }
@@ -5450,7 +5445,11 @@ app.get("/api/invoices/:invoiceId/proforma-pdf", authenticate, async (req, res) 
   streamInvoiceProformaPdf(res, { invoice: invRow, brand, ispName });
 });
 
-app.post("/api/payments/webhook", authenticate, async (req, res) => {
+app.post(
+  "/api/payments/webhook",
+  authenticate,
+  requireRoles("super_admin", "company_manager", "isp_admin", "billing_agent"),
+  async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const { invoiceId, providerRef, amountUsd, status, method } = req.body || {};
