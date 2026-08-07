@@ -138,8 +138,9 @@ async function request(path, options) {
   let response;
   try {
     response = await fetch(`${API_URL}${path}`, {
+      ...options,
       headers,
-      ...options
+      cache: options?.cache || "no-store"
     });
   } catch (err) {
     const reason = String(err?.message || "").toLowerCase();
@@ -174,7 +175,11 @@ export async function publicRequest(path, options = {}) {
   };
   let response;
   try {
-    response = await fetch(`${API_URL}${path}`, { ...options, headers });
+    response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      cache: options.cache || "no-store",
+      headers
+    });
   } catch (err) {
     const reason = String(err?.message || "").toLowerCase();
     if (reason.includes("failed to fetch") || reason.includes("networkerror")) {
@@ -203,12 +208,21 @@ function buildApiErrorMessage(status, errorPayload) {
 
 async function readJsonOrApiMisroute(response) {
   const responseCopy = response.clone();
+  const body = await responseCopy.text().catch(() => "");
+  const trimmed = String(body || "").trim();
+  if (!trimmed) {
+    const isEn = getStoredUiLang() === "en";
+    throw new Error(
+      isEn
+        ? "Empty response from the API. Refresh and try again."
+        : "Réponse vide de l'API. Actualisez puis réessayez."
+    );
+  }
   try {
-    return await response.json();
+    return JSON.parse(trimmed);
   } catch (_err) {
-    const body = await responseCopy.text().catch(() => "");
-    const sample = String(body || "").trim().split("\n")[0].slice(0, 120);
-    if (/^\s*<!doctype html>/i.test(String(body || ""))) {
+    const sample = trimmed.split("\n")[0].slice(0, 120);
+    if (/^\s*<!doctype html>/i.test(trimmed)) {
       const isEn = getStoredUiLang() === "en";
       throw new Error(
         isEn

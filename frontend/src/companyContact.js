@@ -7,6 +7,6 @@ export const COMPANY_CONTACT = {
   phoneTel: "+243997366736",
   /** Affichage lisible. */
   phoneDisplay: "+243 997 366 736",
-  whatsapp: "https://wa.me/mcbuleli",
+  whatsapp: "https://wa.me/message/IF6DXNT6Q2VSI1",
   rccm: "CD/KNG/RCCM/26-A-00382"
 };

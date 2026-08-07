@@ -4,7 +4,7 @@ import homePromo1 from "./assets/public-promos/home-promo-1.png";
 import homePromo2 from "./assets/public-promos/home-promo-2.png";
 import homePromo3 from "./assets/public-promos/home-promo-3.png";
 
-const WHATSAPP_MC = "https://wa.me/mcbuleli";
+const WHATSAPP_MC = "https://wa.me/message/IF6DXNT6Q2VSI1";
 
 const HOME_PROMO_ADS = [
   {

@@ -5,7 +5,7 @@
  * - /api/* : toujours reseau, jamais mis en cache
  */
 
-const VERSION = "mcbuleli-sw-v6";
+const VERSION = "mcbuleli-sw-v7";
 const CACHE_STATIC = `${VERSION}-static`;
 const CACHE_RUNTIME = `${VERSION}-runtime`;
 

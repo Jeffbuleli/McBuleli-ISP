@@ -28,7 +28,7 @@ export async function query(text, params = []) {
 async function seedDefaultPlatformBannersFromFiles() {
   const force = ["1", "true", "yes"].includes(String(process.env.SEED_PLATFORM_BANNERS_FORCE || "").toLowerCase());
   const seedDir = path.join(__dirnameDb, "..", "seeds", "platform-banners");
-  const linkUrl = "https://wa.me/mcbuleli";
+  const linkUrl = "https://wa.me/message/IF6DXNT6Q2VSI1";
   const altText = "McBulei";
   for (let slot = 0; slot < 3; slot++) {
     const fp = path.join(seedDir, `${slot}.png`);

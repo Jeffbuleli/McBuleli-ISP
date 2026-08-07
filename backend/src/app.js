@@ -82,6 +82,8 @@ function authenticate(req, res, next) {
 
 const app = express();
 app.set("trust proxy", process.env.TRUST_PROXY === "true" ? 1 : 0);
+/** Avoid empty 304 bodies that break browser JSON parsing on /api GETs. */
+app.set("etag", false);
 
 function configuredCorsOrigins() {
   return String(process.env.CORS_ORIGINS || "")
@@ -1010,17 +1012,41 @@ async function fetchTeamUserRow(ispId, userId) {
 }
 
 async function dashboardPayloadFromDb() {
+  // Auth payloads must stay small: serve images via /api/public/platform-banner/:slot,
+  // never inline multi-hundred-KB data URLs (breaks login JSON on some clients).
   const r = await query(
-    `SELECT slot_index AS "slotIndex", image_url AS "imageUrl", image_bytes AS "imageBytes", image_mime AS "imageMime",
-            link_url AS "linkUrl", alt_text AS "altText", is_active AS "isActive"
+    `SELECT slot_index AS "slotIndex",
+            image_url AS "imageUrl",
+            link_url AS "linkUrl",
+            alt_text AS "altText",
+            is_active AS "isActive",
+            updated_at AS "updatedAt",
+            (image_bytes IS NOT NULL AND octet_length(image_bytes) > 0) AS "hasBytes"
      FROM platform_dashboard_banners
      WHERE slot_index BETWEEN 0 AND 2
      ORDER BY slot_index`
   );
   const slides = r.rows
-    .filter((row) => row.isActive !== false && (row.imageBytes?.length || row.imageUrl))
-    .map((row) => mapPlatformBannerSlideRow(row))
-    .filter((s) => s?.imageUrl);
+    .filter((row) => row.isActive !== false && (row.hasBytes || String(row.imageUrl || "").trim()))
+    .map((row) => {
+      const slotIndex = row.slotIndex;
+      const legacy = row.imageUrl != null ? String(row.imageUrl).trim() : "";
+      const bust =
+        row.updatedAt != null ? `?v=${encodeURIComponent(new Date(row.updatedAt).getTime())}` : "";
+      const imageUrl = row.hasBytes
+        ? `/api/public/platform-banner/${slotIndex}${bust}`
+        : legacy || null;
+      if (!imageUrl) return null;
+      return {
+        slotIndex,
+        imageUrl,
+        linkUrl: row.linkUrl ?? null,
+        altText: row.altText ?? null,
+        hasImage: true,
+        isActive: row.isActive !== false
+      };
+    })
+    .filter(Boolean);
   return slides.length ? { dashboardBanners: slides } : {};
 }
 
