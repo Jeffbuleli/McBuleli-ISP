@@ -1288,9 +1288,27 @@ function App() {
     function onDashboardNavSelect(event) {
       const href = event?.detail?.href;
       if (href === "#team-chat") setTeamChatOpen(true);
+      const main = document.querySelector(".dashboard-main-column, main.container");
+      if (main && typeof main.scrollTo === "function") {
+        main.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+    function onHashChange() {
+      const main = document.querySelector(".dashboard-main-column, main.container");
+      if (main && typeof main.scrollTo === "function") {
+        main.scrollTo({ top: 0, behavior: "auto" });
+      } else {
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }
     }
     window.addEventListener("dashboard-nav-select", onDashboardNavSelect);
-    return () => window.removeEventListener("dashboard-nav-select", onDashboardNavSelect);
+    window.addEventListener("hashchange", onHashChange);
+    return () => {
+      window.removeEventListener("dashboard-nav-select", onDashboardNavSelect);
+      window.removeEventListener("hashchange", onHashChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -3981,7 +3999,13 @@ api.getPaymentNotifications(activeIspId)
           arr.findIndex((x) => String(x.code || "").toLowerCase() === String(p.code || "").toLowerCase()) === idx
       );
     return (
-      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="billing"
+        hash="#mcbuleli-billing"
+        isFieldAgent={isFieldAgent}
+      >
         <section className={`panel ${locked ? "error" : ""}`} id="mcbuleli-billing">
           <h2>{t("Abonnement McBuleli (paiements standards)", "McBuleli subscription (standard payments)")}</h2>
           {locked ? <p>{t("⚠ Espace verrouillé jusqu'au paiement.", "⚠ Workspace locked until payment.")}</p> : null}
@@ -4301,7 +4325,13 @@ api.getPaymentNotifications(activeIspId)
       ) : null}
 
       {!isFieldAgent ? (
-        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="dashboard">
+        <DashboardScreenGate
+          mobile={gateMobile}
+          active={mobileScreen}
+          id="dashboard"
+          hash="#dashboard-overview"
+          isFieldAgent={isFieldAgent}
+        >
           <>
             {selectedIspId || user.role === "system_owner" ? (
               <DashboardKpiStrip
@@ -4431,171 +4461,194 @@ api.getPaymentNotifications(activeIspId)
                 />
               </Suspense>
             ) : null}
-
-            {user.role === "system_owner" ? (
-              <details className="dash-platform-admin panel">
-                <summary>{t("Administration plateforme", "Platform administration")}</summary>
-                <section className="panel" id="platform-banners">
-                  <h2>{t("Bannières", "Banners")}</h2>
-                  <div className="grid">
-                    {platformBannerSlots.map((slot) => {
-                      const ed = platformBannerEdits[slot.slotIndex] || {
-                        linkUrl: "",
-                        altText: "",
-                        isActive: true
-                      };
-                      return (
-                        <div key={slot.slotIndex} className="panel" style={{ margin: 0 }}>
-                          <h3 style={{ marginTop: 0 }}>
-                            {t("Bannière", "Banner")} {slot.slotIndex + 1}
-                          </h3>
-                          {platformBannerHasStoredImage(slot) ? (
-                            <p style={{ margin: "8px 0" }}>
-                              <img
-                                src={platformBannerThumbSrc(slot)}
-                                alt={ed.altText || slot.altText || ""}
-                                style={{ maxWidth: "100%", maxHeight: 120, objectFit: "contain" }}
-                              />
-                            </p>
-                          ) : (
-                            <p className="app-meta">{t("Aucune image", "No image yet")}</p>
-                          )}
-                          <label style={{ display: "block", marginBottom: 8 }}>
-                            {t("Fichier image", "Image file")}
-                            <input
-                              type="file"
-                              accept="image/png,image/jpeg,image/webp,image/gif"
-                              onChange={(e) => onPlatformBannerUpload(slot.slotIndex, e)}
-                              style={{ display: "block", marginTop: 6 }}
-                            />
-                          </label>
-                          <input
-                            placeholder="https://…"
-                            value={ed.linkUrl}
-                            onChange={(e) =>
-                              setPlatformBannerEdits((prev) => ({
-                                ...prev,
-                                [slot.slotIndex]: { ...ed, linkUrl: e.target.value }
-                              }))
-                            }
-                          />
-                          <input
-                            placeholder={t("Texte alternatif", "Alt text")}
-                            value={ed.altText}
-                            onChange={(e) =>
-                              setPlatformBannerEdits((prev) => ({
-                                ...prev,
-                                [slot.slotIndex]: { ...ed, altText: e.target.value }
-                              }))
-                            }
-                          />
-                          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-                            <input
-                              type="checkbox"
-                              checked={ed.isActive}
-                              onChange={(e) =>
-                                setPlatformBannerEdits((prev) => ({
-                                  ...prev,
-                                  [slot.slotIndex]: { ...ed, isActive: e.target.checked }
-                                }))
-                              }
-                            />
-                            {t("Afficher", "Show")}
-                          </label>
-                          <div className="platform-banner-card__actions">
-                            <button type="button" onClick={() => onPlatformBannerSaveMeta(slot.slotIndex)}>
-                              {t("Enregistrer", "Save")}
-                            </button>
-                            {platformBannerHasStoredImage(slot) ? (
-                              <button
-                                type="button"
-                                className="btn-secondary-outline"
-                                onClick={() => onPlatformBannerDeleteImage(slot.slotIndex)}
-                              >
-                                {t("Supprimer l'image", "Remove image")}
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-
-                <PlatformHomeMarketingPanel t={t} isEn={isEn} />
-
-                {superDashboard?.tenants ? (
-                  <section className="panel" id="system-tenants">
-                    <h2>{t("Espaces entreprises", "Tenant workspaces")}</h2>
-                    <DataTable
-                      t={t}
-                      title={t("Espaces entreprises", "Tenant workspaces")}
-                      description=""
-                      rows={tenantTableView.pageRows}
-                      columns={[
-                        {
-                          key: "name",
-                          header: t("Nom", "Name"),
-                          sortKey: "name",
-                          cell: (ten) => `${ten.name || "—"}${ten.isDemo ? " (démo)" : ""}`
-                        },
-                        {
-                          key: "location",
-                          header: t("Localisation", "Location"),
-                          sortKey: "location",
-                          cell: (ten) => ten.location || "—"
-                        },
-                        {
-                          key: "contactPhone",
-                          header: t("Téléphone", "Phone"),
-                          sortKey: "contactPhone",
-                          cell: (ten) => ten.contactPhone || "—"
-                        },
-                        {
-                          key: "subscriptionStatus",
-                          header: t("Abonnement", "Subscription"),
-                          sortKey: "subscriptionStatus",
-                          cell: (ten) => ten.subscriptionStatus || t("sans abonnement", "no subscription")
-                        },
-                        {
-                          key: "packageName",
-                          header: t("Forfait", "Package"),
-                          sortKey: "packageName",
-                          cell: (ten) => ten.packageName || "—"
-                        },
-                        {
-                          key: "createdAt",
-                          header: t("Créé", "Created"),
-                          sortKey: "createdAt",
-                          cell: (ten) =>
-                            ten.createdAt ? new Date(ten.createdAt).toLocaleDateString("fr-FR") : "—"
-                        },
-                        {
-                          key: "actions",
-                          header: t("Actions", "Actions"),
-                          cell: (ten) => (
-                            <button type="button" onClick={() => refresh(ten.id)}>
-                              {t("Ouvrir", "Open")}
-                            </button>
-                          )
-                        }
-                      ]}
-                      searchValue={tenantTable.q}
-                      onSearchValueChange={(q) => setTenantTable((s) => ({ ...s, q, page: 1 }))}
-                      page={tenantTable.page}
-                      pageSize={tenantTable.pageSize}
-                      totalRows={tenantTableView.total}
-                      onPageChange={(page) => setTenantTable((s) => ({ ...s, page }))}
-                      onPageSizeChange={(pageSize) => setTenantTable((s) => ({ ...s, pageSize, page: 1 }))}
-                      sort={tenantTable.sort}
-                      onSortChange={(sort) => setTenantTable((s) => ({ ...s, sort }))}
-                    />
-                  </section>
-                ) : null}
-              </details>
-            ) : null}
           </>
         </DashboardScreenGate>
+      ) : null}
+
+      {!isFieldAgent && user.role === "system_owner" ? (
+        <>
+          <DashboardScreenGate
+            mobile={gateMobile}
+            active={mobileScreen}
+            id="dashboard"
+            hash="#platform-banners"
+            isFieldAgent={isFieldAgent}
+          >
+            <section className="panel" id="platform-banners">
+              <h2>{t("Bannières", "Banners")}</h2>
+              <div className="grid">
+                {platformBannerSlots.map((slot) => {
+                  const ed = platformBannerEdits[slot.slotIndex] || {
+                    linkUrl: "",
+                    altText: "",
+                    isActive: true
+                  };
+                  return (
+                    <div key={slot.slotIndex} className="panel" style={{ margin: 0 }}>
+                      <h3 style={{ marginTop: 0 }}>
+                        {t("Bannière", "Banner")} {slot.slotIndex + 1}
+                      </h3>
+                      {platformBannerHasStoredImage(slot) ? (
+                        <p style={{ margin: "8px 0" }}>
+                          <img
+                            src={platformBannerThumbSrc(slot)}
+                            alt={ed.altText || slot.altText || ""}
+                            style={{ maxWidth: "100%", maxHeight: 120, objectFit: "contain" }}
+                          />
+                        </p>
+                      ) : (
+                        <p className="app-meta">{t("Aucune image", "No image yet")}</p>
+                      )}
+                      <label style={{ display: "block", marginBottom: 8 }}>
+                        {t("Fichier image", "Image file")}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          onChange={(e) => onPlatformBannerUpload(slot.slotIndex, e)}
+                          style={{ display: "block", marginTop: 6 }}
+                        />
+                      </label>
+                      <input
+                        placeholder="https://…"
+                        value={ed.linkUrl}
+                        onChange={(e) =>
+                          setPlatformBannerEdits((prev) => ({
+                            ...prev,
+                            [slot.slotIndex]: { ...ed, linkUrl: e.target.value }
+                          }))
+                        }
+                      />
+                      <input
+                        placeholder={t("Texte alternatif", "Alt text")}
+                        value={ed.altText}
+                        onChange={(e) =>
+                          setPlatformBannerEdits((prev) => ({
+                            ...prev,
+                            [slot.slotIndex]: { ...ed, altText: e.target.value }
+                          }))
+                        }
+                      />
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={ed.isActive}
+                          onChange={(e) =>
+                            setPlatformBannerEdits((prev) => ({
+                              ...prev,
+                              [slot.slotIndex]: { ...ed, isActive: e.target.checked }
+                            }))
+                          }
+                        />
+                        {t("Afficher", "Show")}
+                      </label>
+                      <div className="platform-banner-card__actions">
+                        <button type="button" onClick={() => onPlatformBannerSaveMeta(slot.slotIndex)}>
+                          {t("Enregistrer", "Save")}
+                        </button>
+                        {platformBannerHasStoredImage(slot) ? (
+                          <button
+                            type="button"
+                            className="btn-secondary-outline"
+                            onClick={() => onPlatformBannerDeleteImage(slot.slotIndex)}
+                          >
+                            {t("Supprimer l'image", "Remove image")}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </DashboardScreenGate>
+
+          <DashboardScreenGate
+            mobile={gateMobile}
+            active={mobileScreen}
+            id="dashboard"
+            hash="#platform-home-marketing"
+            isFieldAgent={isFieldAgent}
+          >
+            <PlatformHomeMarketingPanel t={t} isEn={isEn} />
+          </DashboardScreenGate>
+
+          <DashboardScreenGate
+            mobile={gateMobile}
+            active={mobileScreen}
+            id="dashboard"
+            hash="#system-tenants"
+            isFieldAgent={isFieldAgent}
+          >
+            {superDashboard?.tenants ? (
+              <section className="panel" id="system-tenants">
+                <h2>{t("Espaces entreprises", "Tenant workspaces")}</h2>
+                <DataTable
+                  t={t}
+                  title={t("Espaces entreprises", "Tenant workspaces")}
+                  description=""
+                  rows={tenantTableView.pageRows}
+                  columns={[
+                    {
+                      key: "name",
+                      header: t("Nom", "Name"),
+                      sortKey: "name",
+                      cell: (ten) => `${ten.name || "—"}${ten.isDemo ? " (démo)" : ""}`
+                    },
+                    {
+                      key: "location",
+                      header: t("Localisation", "Location"),
+                      sortKey: "location",
+                      cell: (ten) => ten.location || "—"
+                    },
+                    {
+                      key: "contactPhone",
+                      header: t("Téléphone", "Phone"),
+                      sortKey: "contactPhone",
+                      cell: (ten) => ten.contactPhone || "—"
+                    },
+                    {
+                      key: "subscriptionStatus",
+                      header: t("Abonnement", "Subscription"),
+                      sortKey: "subscriptionStatus",
+                      cell: (ten) => ten.subscriptionStatus || t("sans abonnement", "no subscription")
+                    },
+                    {
+                      key: "packageName",
+                      header: t("Forfait", "Package"),
+                      sortKey: "packageName",
+                      cell: (ten) => ten.packageName || "—"
+                    },
+                    {
+                      key: "createdAt",
+                      header: t("Créé", "Created"),
+                      sortKey: "createdAt",
+                      cell: (ten) =>
+                        ten.createdAt ? new Date(ten.createdAt).toLocaleDateString("fr-FR") : "—"
+                    },
+                    {
+                      key: "actions",
+                      header: t("Actions", "Actions"),
+                      cell: (ten) => (
+                        <button type="button" onClick={() => refresh(ten.id)}>
+                          {t("Ouvrir", "Open")}
+                        </button>
+                      )
+                    }
+                  ]}
+                  searchValue={tenantTable.q}
+                  onSearchValueChange={(q) => setTenantTable((s) => ({ ...s, q, page: 1 }))}
+                  page={tenantTable.page}
+                  pageSize={tenantTable.pageSize}
+                  totalRows={tenantTableView.total}
+                  onPageChange={(page) => setTenantTable((s) => ({ ...s, page }))}
+                  onPageSizeChange={(pageSize) => setTenantTable((s) => ({ ...s, pageSize, page: 1 }))}
+                  sort={tenantTable.sort}
+                  onSortChange={(sort) => setTenantTable((s) => ({ ...s, sort }))}
+                />
+              </section>
+            ) : null}
+          </DashboardScreenGate>
+        </>
       ) : null}
 
       {(isPlatformSuperRole(user.role) ||
@@ -4604,7 +4657,13 @@ api.getPaymentNotifications(activeIspId)
         user.role === "noc_operator" ||
         user.role === "billing_agent") &&
         !isFieldAgent && (
-        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
+        <DashboardScreenGate
+          mobile={gateMobile}
+          active={mobileScreen}
+          id="billing"
+          hash="#billing-ops"
+          isFieldAgent={isFieldAgent}
+        >
         <section className="panel">
           <h2>{t("Facturation en retard", "Overdue billing")}</h2>
           <p>
@@ -4667,7 +4726,13 @@ api.getPaymentNotifications(activeIspId)
 
       {!isFieldAgent && (
         <>
-      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="settings"
+        hash="#workspace-settings"
+        isFieldAgent={isFieldAgent}
+      >
       <section className="grid" id="workspace-settings">
         {(isPlatformSuperRole(user.role) ||
           user.role === "company_manager" ||
@@ -4895,7 +4960,13 @@ api.getPaymentNotifications(activeIspId)
       </section>
       </DashboardScreenGate>
 
-      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="billing"
+        hash="#billing-ops"
+        isFieldAgent={isFieldAgent}
+      >
       <section className="grid" id="billing-ops">
         <PaymentPrimaryToggle
           t={t}
@@ -5096,7 +5167,13 @@ api.getPaymentNotifications(activeIspId)
       </section>
       </DashboardScreenGate>
 
-      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="network">
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="network"
+        hash="#network-ops"
+        isFieldAgent={isFieldAgent}
+      >
       <section className="grid network-ops-simple" id="network-ops">
         <NetworkHappyPath
           t={t}
@@ -5359,7 +5436,13 @@ api.getPaymentNotifications(activeIspId)
       </section>
       </DashboardScreenGate>
 
-      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="users"
+        hash="#team-settings"
+        isFieldAgent={isFieldAgent}
+      >
       <section className="grid" id="team-settings">
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onUpsertNotificationProvider}>
@@ -6269,7 +6352,13 @@ api.getPaymentNotifications(activeIspId)
       </section>
       </DashboardScreenGate>
 
-      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="settings"
+        hash="#audit"
+        isFieldAgent={isFieldAgent}
+      >
       {user.role === "system_owner" ? (
         <section className="panel" id="audit">
           <h2>{t("Journal d'audit récent", "Recent audit log")}</h2>
@@ -6286,7 +6375,15 @@ api.getPaymentNotifications(activeIspId)
         ))}
       </section>
       ) : null}
+      </DashboardScreenGate>
 
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="users"
+        hash="#team-settings"
+        isFieldAgent={isFieldAgent}
+      >
       <section className="panel">
         <h2>{t("File d'attente des notifications", "Notification outbox")}</h2>
         <p>
@@ -6344,7 +6441,13 @@ api.getPaymentNotifications(activeIspId)
       )}
 
       {isFieldAgent ? (
-        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="dashboard">
+        <DashboardScreenGate
+          mobile={gateMobile}
+          active={mobileScreen}
+          id="dashboard"
+          hash="#dashboard-overview"
+          isFieldAgent={isFieldAgent}
+        >
           <DashboardKpiStrip
             items={[
               {
@@ -6409,7 +6512,13 @@ api.getPaymentNotifications(activeIspId)
       ) : null}
 
       {isFieldAgent ? (
-        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="network">
+        <DashboardScreenGate
+          mobile={gateMobile}
+          active={mobileScreen}
+          id="network"
+          hash="#network-ops"
+          isFieldAgent={isFieldAgent}
+        >
           <section className="panel">
             <h2>{t("Reseau", "Network")}</h2>
             <p className="app-meta">
@@ -6423,7 +6532,13 @@ api.getPaymentNotifications(activeIspId)
       ) : null}
 
       {isFieldAgent ? (
-        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
+        <DashboardScreenGate
+          mobile={gateMobile}
+          active={mobileScreen}
+          id="settings"
+          hash="#workspace-settings"
+          isFieldAgent={isFieldAgent}
+        >
           <section className="grid" id="workspace-settings">
             <section className="panel">
               <h2>{t("Réglages", "Settings")}</h2>
@@ -6450,7 +6565,13 @@ api.getPaymentNotifications(activeIspId)
         </DashboardScreenGate>
       ) : null}
 
-      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="settings">
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="settings"
+        hash="#security-settings"
+        isFieldAgent={isFieldAgent}
+      >
       {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
         <section className="panel" id="security-settings">
           <h2>{t("Retrait Mobile Money sécurisé", "Secure Mobile Money withdrawal")}</h2>
@@ -6581,7 +6702,13 @@ api.getPaymentNotifications(activeIspId)
       )}
       </DashboardScreenGate>
 
-      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="billing"
+        hash="#billing-ops"
+        isFieldAgent={isFieldAgent}
+      >
       {!isFieldAgent &&
         (isPlatformSuperRole(user.role) ||
         user.role === "company_manager" ||
@@ -7116,7 +7243,13 @@ api.getPaymentNotifications(activeIspId)
       </DashboardScreenGate>
 
       <section className="grid field-clients-simple" id="field-clients">
-      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="users"
+        hash="#field-clients"
+        isFieldAgent={isFieldAgent}
+      >
         {!isFieldAgent ? (
           <form className="panel field-clients-create" onSubmit={onCreateCustomer}>
             <h2>{t("Nouveau client", "New customer")}</h2>
@@ -7350,7 +7483,13 @@ api.getPaymentNotifications(activeIspId)
       </section>
 
       {canCreateSubscription(user.role) ? (
-        <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="users">
+        <DashboardScreenGate
+          mobile={gateMobile}
+          active={mobileScreen}
+          id="users"
+          hash="#field-clients"
+          isFieldAgent={isFieldAgent}
+        >
           <section className="grid" id="access-plans">
             <details className="panel field-clients-more">
               <summary>{t("Formules & abonnements", "Plans & subscriptions")}</summary>
@@ -7577,7 +7716,13 @@ api.getPaymentNotifications(activeIspId)
         </DashboardScreenGate>
       ) : null}
 
-      <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
+      <DashboardScreenGate
+        mobile={gateMobile}
+        active={mobileScreen}
+        id="billing"
+        hash="#billing-ops"
+        isFieldAgent={isFieldAgent}
+      >
       <section className="panel billing-invoices-panel">
         <h2>{t("Factures", "Invoices")}</h2>
         <DataTable

@@ -49,6 +49,15 @@ export default function DashboardSideNav({
       } else {
         setActiveHash(defaultHash);
         setExpandedCategory(defaultExpand);
+        if (!raw && typeof window !== "undefined") {
+          const next = `${window.location.pathname}${window.location.search}${defaultHash}`;
+          window.history.replaceState(null, "", next);
+          try {
+            window.dispatchEvent(new HashChangeEvent("hashchange"));
+          } catch {
+            window.dispatchEvent(new Event("hashchange"));
+          }
+        }
       }
     };
     applyHash();
