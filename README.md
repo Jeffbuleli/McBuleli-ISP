@@ -32,7 +32,7 @@ bash ops/vps/install.sh
 # editer ops/vps/.env
 bash ops/vps/deploy.sh
 # optionnel restore: bash ops/vps/restore-db.sh backups/isp_billing_XXXX.dump
-certbot --nginx -d app.mcbuleli.live
+certbot --nginx -d mcbuleli.live
 ```
 
 ## Roles

@@ -30,15 +30,15 @@ Postgres **jamais** expose publiquement.
 
 ## Domaine
 
-- App: `https://app.mcbuleli.live` (ou sous-domaine equivalent)
+- App: `https://mcbuleli.live` (ou sous-domaine equivalent)
 - Origin DNS A/CNAME -> `162.35.181.98` (Cloudflare)
 
 ## Cutover Render / Vercel
 
 Apres smoke OK sur VPS:
 
-1. Pointer DNS `app.mcbuleli.live` vers `162.35.181.98`
-2. `certbot --nginx -d app.mcbuleli.live`
+1. Pointer DNS `mcbuleli.live` vers `162.35.181.98`
+2. `certbot --nginx -d mcbuleli.live`
 3. Suspendre service Render `mcbuleli-isp` + Postgres Render
 4. Desactiver projet Vercel front
 
