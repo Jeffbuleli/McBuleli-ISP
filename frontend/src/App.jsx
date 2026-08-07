@@ -5067,235 +5067,261 @@ api.getPaymentNotifications(activeIspId)
       </DashboardScreenGate>
 
       <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="network">
-      <section className="grid" id="network-ops">
+      <section className="grid network-ops-simple" id="network-ops">
         <NetworkHappyPath
           t={t}
           hasDefaultNode={Array.isArray(networkNodes) && networkNodes.some((n) => n.isDefault || n.is_default)}
           lastProvisionOk={
             Array.isArray(provisioningEvents) &&
-            provisioningEvents.some((e) => String(e.status || "").toLowerCase() === "ok" || String(e.status || "").toLowerCase() === "success" || String(e.status || "").toLowerCase() === "applied")
+            provisioningEvents.some((e) => {
+              const s = String(e.status || "").toLowerCase();
+              return s === "ok" || s === "success" || s === "applied";
+            })
           }
           freeradiusEnabled={String(import.meta.env.VITE_FREERADIUS_SYNC_ENABLED || "").toLowerCase() === "true"}
         />
+
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
-          <form className="panel" onSubmit={onCreateNetworkNode}>
-            <h2>{t("Noeud MikroTik", "MikroTik node")}</h2>
-            <p className="app-meta" style={{ maxWidth: "56rem", marginBottom: 12 }}>
-              {t(
-                "API REST RouterOS: http(s)://hote:port/rest",
-                "RouterOS REST API: http(s)://host:port/rest"
-              )}
-            </p>
-            <input
-              placeholder="Nom du nœud"
-              value={networkNodeForm.name}
-              onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, name: e.target.value })}
-            />
-            <input
-              placeholder="Hôte routeur (IP ou domaine)"
-              value={networkNodeForm.host}
-              onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, host: e.target.value })}
-            />
-            <input
-              type="number"
-              placeholder="Port API"
-              value={networkNodeForm.apiPort}
-              onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, apiPort: e.target.value })}
-            />
-            <input
-              placeholder="Utilisateur routeur"
-              value={networkNodeForm.username}
-              onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, username: e.target.value })}
-            />
-            <input
-              type="password"
-              placeholder="Mot de passe routeur"
-              value={networkNodeForm.password}
-              onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, password: e.target.value })}
-            />
-            <input
-              placeholder="Profil PPPoE par défaut"
-              value={networkNodeForm.defaultPppoeProfile}
-              onChange={(e) =>
-                setNetworkNodeForm({ ...networkNodeForm, defaultPppoeProfile: e.target.value })
-              }
-            />
-            <input
-              placeholder="Profil hotspot par défaut"
-              value={networkNodeForm.defaultHotspotProfile}
-              onChange={(e) =>
-                setNetworkNodeForm({ ...networkNodeForm, defaultHotspotProfile: e.target.value })
-              }
-            />
-            <label>
-              <input
-                type="checkbox"
-                checked={networkNodeForm.useTls}
-                onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, useTls: e.target.checked })}
-              />{" "}
-              Utiliser TLS
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={networkNodeForm.isDefault}
-                onChange={(e) =>
-                  setNetworkNodeForm({ ...networkNodeForm, isDefault: e.target.checked })
-                }
-              />{" "}
-              Définir comme nœud par défaut
-            </label>
-            <button type="submit" disabled={!selectedIspId}>
-              Enregistrer le nœud
-            </button>
-          </form>
+          <details className="panel field-clients-more" open={!networkNodes?.length}>
+            <summary>{t("Ajouter un noeud MikroTik", "Add MikroTik node")}</summary>
+            <form className="field-clients-more__body" onSubmit={onCreateNetworkNode}>
+              <div className="field-clients-create__row">
+                <input
+                  placeholder={t("Nom", "Name")}
+                  value={networkNodeForm.name}
+                  onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, name: e.target.value })}
+                  required
+                />
+                <input
+                  placeholder={t("Hote (IP / domaine)", "Host (IP / domain)")}
+                  value={networkNodeForm.host}
+                  onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, host: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="field-clients-create__row">
+                <input
+                  type="number"
+                  placeholder={t("Port API", "API port")}
+                  value={networkNodeForm.apiPort}
+                  onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, apiPort: e.target.value })}
+                />
+                <input
+                  placeholder={t("Utilisateur", "Username")}
+                  value={networkNodeForm.username}
+                  onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, username: e.target.value })}
+                />
+                <input
+                  type="password"
+                  placeholder={t("Mot de passe", "Password")}
+                  value={networkNodeForm.password}
+                  onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, password: e.target.value })}
+                />
+              </div>
+              <div className="field-clients-create__row">
+                <input
+                  placeholder={t("Profil PPPoE", "PPPoE profile")}
+                  value={networkNodeForm.defaultPppoeProfile}
+                  onChange={(e) =>
+                    setNetworkNodeForm({ ...networkNodeForm, defaultPppoeProfile: e.target.value })
+                  }
+                />
+                <input
+                  placeholder={t("Profil hotspot", "Hotspot profile")}
+                  value={networkNodeForm.defaultHotspotProfile}
+                  onChange={(e) =>
+                    setNetworkNodeForm({ ...networkNodeForm, defaultHotspotProfile: e.target.value })
+                  }
+                />
+              </div>
+              <div className="network-ops-checks">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={networkNodeForm.useTls}
+                    onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, useTls: e.target.checked })}
+                  />{" "}
+                  TLS
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={networkNodeForm.isDefault}
+                    onChange={(e) =>
+                      setNetworkNodeForm({ ...networkNodeForm, isDefault: e.target.checked })
+                    }
+                  />{" "}
+                  {t("Par defaut", "Default")}
+                </label>
+              </div>
+              <button type="submit" disabled={!selectedIspId}>
+                {t("Enregistrer", "Save")}
+              </button>
+            </form>
+          </details>
         )}
 
-        <DataTable
-          t={t}
-          title={t("Appareils MikroTik (nœuds)", "MikroTik devices (nodes)")}
-          description={t("Liste standardisée avec actions rapides.", "Standardized list with quick actions.")}
-          rows={networkNodeTableView.pageRows}
-          columns={[
-            { key: "name", header: t("Nom", "Name"), sortKey: "name", cell: (n) => n.name || "—" },
-            { key: "host", header: t("Hôte", "Host"), sortKey: "host", cell: (n) => `${n.host || "—"}:${n.apiPort || "—"}` },
-            {
-              key: "status",
-              header: t("Statut", "Status"),
-              sortKey: "isActive",
-              cell: (n) => (n.isActive ? t("En ligne", "Online") : t("Hors ligne", "Offline"))
-            },
-            { key: "default", header: t("Défaut", "Default"), sortKey: "isDefault", cell: (n) => (n.isDefault ? "✓" : "—") },
-            {
-              key: "actions",
-              header: t("Actions", "Actions"),
-              cell: (n) => (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  <button type="button" onClick={() => onToggleNetworkNode(n.id, !n.isActive)}>
-                    {n.isActive ? t("Désactiver", "Disable") : t("Activer", "Enable")}
-                  </button>
-                  {!n.isDefault ? (
-                    <button type="button" className="btn-secondary-outline" onClick={() => onSetDefaultNetworkNode(n.id)}>
-                      {t("Par défaut", "Set default")}
+        <div className="panel">
+          <DataTable
+            t={t}
+            title={t("Noeuds MikroTik", "MikroTik nodes")}
+            description=""
+            emptyLabel={t("Aucun noeud.", "No nodes.")}
+            rows={networkNodeTableView.pageRows}
+            columns={[
+              { key: "name", header: t("Nom", "Name"), sortKey: "name", cell: (n) => n.name || "—" },
+              {
+                key: "host",
+                header: t("Hote", "Host"),
+                sortKey: "host",
+                cell: (n) => `${n.host || "—"}:${n.apiPort || "—"}`
+              },
+              {
+                key: "status",
+                header: t("Statut", "Status"),
+                sortKey: "isActive",
+                cell: (n) => (n.isActive ? t("Actif", "Active") : t("Off", "Off"))
+              },
+              {
+                key: "default",
+                header: t("Defaut", "Default"),
+                sortKey: "isDefault",
+                cell: (n) => (n.isDefault ? t("Oui", "Yes") : "—")
+              },
+              {
+                key: "actions",
+                header: "",
+                cell: (n) => (
+                  <div className="network-ops-row-actions">
+                    <button type="button" onClick={() => onToggleNetworkNode(n.id, !n.isActive)}>
+                      {n.isActive ? t("Off", "Off") : t("On", "On")}
                     </button>
-                  ) : null}
-                  {(isPlatformSuperRole(user.role) ||
+                    {!n.isDefault ? (
+                      <button
+                        type="button"
+                        className="btn-secondary-outline"
+                        onClick={() => onSetDefaultNetworkNode(n.id)}
+                      >
+                        {t("Defaut", "Default")}
+                      </button>
+                    ) : null}
+                    {isPlatformSuperRole(user.role) ||
                     user.role === "company_manager" ||
                     user.role === "isp_admin" ||
-                    user.role === "noc_operator") ? (
-                    <button type="button" className="btn-secondary-outline" onClick={() => onCollectTelemetry(n.id)}>
-                      {t("Télémétrie", "Telemetry")}
-                    </button>
-                  ) : null}
-                </div>
-              )
-            }
-          ]}
-          searchValue={networkNodeTable.q}
-          onSearchValueChange={(q) => setNetworkNodeTable((s) => ({ ...s, q, page: 1 }))}
-          page={networkNodeTable.page}
-          pageSize={networkNodeTable.pageSize}
-          totalRows={networkNodeTableView.total}
-          onPageChange={(page) => setNetworkNodeTable((s) => ({ ...s, page }))}
-          onPageSizeChange={(pageSize) => setNetworkNodeTable((s) => ({ ...s, pageSize, page: 1 }))}
-          sort={networkNodeTable.sort}
-          onSortChange={(sort) => setNetworkNodeTable((s) => ({ ...s, sort }))}
-        />
+                    user.role === "noc_operator" ? (
+                      <button
+                        type="button"
+                        className="btn-secondary-outline"
+                        onClick={() => onCollectTelemetry(n.id)}
+                      >
+                        {t("Poll", "Poll")}
+                      </button>
+                    ) : null}
+                  </div>
+                )
+              }
+            ]}
+            searchValue={networkNodeTable.q}
+            onSearchValueChange={(q) => setNetworkNodeTable((s) => ({ ...s, q, page: 1 }))}
+            page={networkNodeTable.page}
+            pageSize={networkNodeTable.pageSize}
+            totalRows={networkNodeTableView.total}
+            onPageChange={(page) => setNetworkNodeTable((s) => ({ ...s, page }))}
+            onPageSizeChange={(pageSize) => setNetworkNodeTable((s) => ({ ...s, pageSize, page: 1 }))}
+            sort={networkNodeTable.sort}
+            onSortChange={(sort) => setNetworkNodeTable((s) => ({ ...s, sort }))}
+          />
+        </div>
 
-        <section className="panel">
-          <h2>{t("Événements de provisionnement", "Provisioning events")}</h2>
-          <p className="app-meta">
-            {t(
-              "Résumé lisible des tentatives d'activation ou de suspension sur MikroTik (PPPoE / hotspot). Un statut « Ignoré » indique souvent qu'aucun nœud par défaut n'était prêt, pas une erreur client.",
-              "Readable summary of activation or suspension attempts on MikroTik (PPPoE / hotspot). “Skipped” usually means no default node was ready—not necessarily a subscriber error."
+        <details className="panel field-clients-more">
+          <summary>
+            {t("Provisionnement", "Provisioning")} ({Math.min(provisioningEvents.length, 12)})
+          </summary>
+          <div className="field-clients-more__body network-ops-log">
+            {provisioningEvents.length === 0 ? (
+              <p className="app-meta">{t("Aucun evenement.", "No events.")}</p>
+            ) : (
+              provisioningEvents.slice(0, 12).map((event) => {
+                const hint = humanizeProvisioningEvent(event, isEn);
+                return (
+                  <p key={event.id} className="network-event-line">
+                    <span className="network-event-line__meta">
+                      {new Date(event.createdAt).toLocaleString()} — {event.action} (
+                      {event.accessType || "n/a"}) [{event.status}]
+                    </span>
+                    {hint ? <span className="network-event-line__hint">{hint}</span> : null}
+                  </p>
+                );
+              })
             )}
-          </p>
-          {provisioningEvents.slice(0, 12).map((event) => {
-            const hint = humanizeProvisioningEvent(event, isEn);
-            return (
-              <p key={event.id} className="network-event-line">
-                <span className="network-event-line__meta">
-                  {new Date(event.createdAt).toLocaleString()} — {event.action} ({event.accessType || "n/a"}) [
-                  {event.status}]
-                </span>
-                {hint ? <span className="network-event-line__hint">{hint}</span> : null}
-              </p>
-            );
-          })}
-        </section>
+          </div>
+        </details>
 
-        <section className="panel">
-          <h2>{t("Synchronisation FreeRADIUS", "FreeRADIUS synchronization")}</h2>
-          <p className="app-meta">
-            {t(
-              "Quand la synchro est active, McBuleli écrit dans les tables RADIUS locales. Si elle est désactivée globalement, les événements restent visibles à titre d'historique avec le motif « ignoré ».",
-              "When sync is enabled, McBuleli writes to local RADIUS tables. If it is disabled globally, events remain visible for history with an “ignored” reason."
+        <details className="panel field-clients-more">
+          <summary>
+            {t("Sync FreeRADIUS", "FreeRADIUS sync")} ({Math.min(radiusSyncEvents.length, 12)})
+          </summary>
+          <div className="field-clients-more__body network-ops-log">
+            {radiusSyncEvents.length === 0 ? (
+              <p className="app-meta">{t("Aucun evenement.", "No events.")}</p>
+            ) : (
+              radiusSyncEvents.slice(0, 12).map((event) => {
+                const hint = humanizeRadiusSyncEvent(event, isEn);
+                return (
+                  <p key={event.id} className="network-event-line">
+                    <span className="network-event-line__meta">
+                      {new Date(event.createdAt).toLocaleString()} — {event.action} {event.username} [
+                      {event.status}]
+                    </span>
+                    {hint ? <span className="network-event-line__hint">{hint}</span> : null}
+                  </p>
+                );
+              })
             )}
-          </p>
-          {radiusSyncEvents.slice(0, 12).map((event) => {
-            const hint = humanizeRadiusSyncEvent(event, isEn);
-            return (
-              <p key={event.id} className="network-event-line">
-                <span className="network-event-line__meta">
-                  {new Date(event.createdAt).toLocaleString()} — {event.action} {event.username} [{event.status}]
-                </span>
-                {hint ? <span className="network-event-line__hint">{hint}</span> : null}
-              </p>
-            );
-          })}
-        </section>
+          </div>
+        </details>
 
-        <section className="panel">
-          <h2>Télémétrie réseau (MikroTik)</h2>
-          <p>
-            Derniers instantanés depuis <strong>Collecter la télémétrie</strong> sur chaque nœud. Les compteurs
-            alimentent le graphique du jour (sessions PPPoE / hotspot de pointe).
-          </p>
-          <p className="app-meta">
-            Les valeurs reflètent l&apos;instant de la collecte : peu de sessions peut être normal hors heures de pointe.
-            En cas de baisse brutale ou de zéro prolongé alors que le trafic attendu est élevé, vérifiez le nœud et la
-            connectivité API avant d&apos;ouvrir un ticket matériel.
-          </p>
-          {telemetrySnapshots.length === 0 ? (
-            <p>Aucun instantané pour le moment.</p>
-          ) : (
-            telemetrySnapshots.slice(0, 20).map((row) => (
-              <p key={row.id}>
-                {new Date(row.createdAt).toLocaleString()} — {row.nodeName || row.nodeId?.slice(0, 8)}: PPPoE{" "}
-                {row.pppoeActive}, Hotspot {row.hotspotActive}, devices {row.connectedDevices}
-                {row.details?.pppoeSessionsSample?.length ? (
-                  <small>
-                    {" "}
-                    (noms PPPoE :{" "}
-                    {row.details.pppoeSessionsSample
-                      .map((x) => x.name)
-                      .filter(Boolean)
-                      .join(", ") || "—"}
-                    )
-                  </small>
-                ) : null}
-              </p>
-            ))
-          )}
-        </section>
+        <details className="panel field-clients-more">
+          <summary>
+            {t("Telemetrie", "Telemetry")} ({Math.min(telemetrySnapshots.length, 20)})
+          </summary>
+          <div className="field-clients-more__body network-ops-log">
+            {telemetrySnapshots.length === 0 ? (
+              <p className="app-meta">{t("Aucun instantane.", "No snapshots.")}</p>
+            ) : (
+              telemetrySnapshots.slice(0, 20).map((row) => (
+                <p key={row.id} className="network-event-line">
+                  <span className="network-event-line__meta">
+                    {new Date(row.createdAt).toLocaleString()} — {row.nodeName || row.nodeId?.slice(0, 8)}:
+                    PPPoE {row.pppoeActive}, Hotspot {row.hotspotActive},{" "}
+                    {t("appareils", "devices")} {row.connectedDevices}
+                  </span>
+                </p>
+              ))
+            )}
+          </div>
+        </details>
 
-        <section className="panel">
-          <h2>Comptabilité RADIUS (reçue)</h2>
-          <p>
-            Lignes issues de <code>POST /api/webhooks/radius-accounting</code> (configurez FreeRADIUS rlm_rest ou exec
-            pour transférer le JSON ; définissez <code>RADIUS_ACCOUNTING_WEBHOOK_SECRET</code> en production).
-          </p>
-          {radiusAccountingIngest.length === 0 ? (
-            <p>Aucun enregistrement de comptabilité pour ce locataire.</p>
-          ) : (
-            radiusAccountingIngest.slice(0, 25).map((row) => (
-              <p key={row.id}>
-                {new Date(row.createdAt).toLocaleString()} — {row.username || "?"} / {row.acctStatusType || "?"}{" "}
-                {row.framedIpAddress ? `IP ${row.framedIpAddress}` : ""}
-              </p>
-            ))
-          )}
-        </section>
+        <details className="panel field-clients-more">
+          <summary>
+            {t("Compta RADIUS", "RADIUS accounting")} ({Math.min(radiusAccountingIngest.length, 25)})
+          </summary>
+          <div className="field-clients-more__body network-ops-log">
+            {radiusAccountingIngest.length === 0 ? (
+              <p className="app-meta">{t("Aucun enregistrement.", "No records.")}</p>
+            ) : (
+              radiusAccountingIngest.slice(0, 25).map((row) => (
+                <p key={row.id} className="network-event-line">
+                  <span className="network-event-line__meta">
+                    {new Date(row.createdAt).toLocaleString()} — {row.username || "?"} /{" "}
+                    {row.acctStatusType || "?"}
+                    {row.framedIpAddress ? ` · ${row.framedIpAddress}` : ""}
+                  </span>
+                </p>
+              ))
+            )}
+          </div>
+        </details>
       </section>
       </DashboardScreenGate>
 
@@ -6351,11 +6377,11 @@ api.getPaymentNotifications(activeIspId)
       {isFieldAgent ? (
         <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="network">
           <section className="panel">
-            <h2>{t("Réseau", "Network")}</h2>
+            <h2>{t("Reseau", "Network")}</h2>
             <p className="app-meta">
               {t(
-                "La configuration réseau (routeurs, RADIUS, télémétrie) est réservée aux administrateurs. En cas de panne d’accès abonné, contactez votre NOC ou votre responsable FAI.",
-                "Network configuration (routers, RADIUS, telemetry) is managed by administrators. If a subscriber cannot connect, contact your NOC or ISP manager."
+                "Configuration reservee aux administrateurs. Contactez le NOC en cas de panne abonne.",
+                "Configuration is for admins. Contact NOC if a subscriber is offline."
               )}
             </p>
           </section>

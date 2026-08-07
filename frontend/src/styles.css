@@ -2442,6 +2442,84 @@ button.btn-secondary-outline:hover:not(:disabled) {
   font-size: 0.9rem;
 }
 
+.network-ops-simple {
+  gap: 12px;
+}
+
+.network-ops-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+
+.network-ops-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.network-ops-log {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.network-happy-path__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.network-happy-path__head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.network-happy-path__badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--mb-border, #d6d3d1);
+  color: var(--mb-muted, #57534e);
+}
+
+.network-happy-path__badge.is-on {
+  color: #0f9d7a;
+  border-color: rgba(15, 157, 122, 0.35);
+  background: rgba(15, 157, 122, 0.08);
+}
+
+.network-happy-path__steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.network-happy-path__step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--mb-border, #d6d3d1);
+  opacity: 0.78;
+  font-size: 13px;
+}
+
+.network-happy-path__step.is-done {
+  opacity: 1;
+  background: rgba(15, 157, 122, 0.08);
+  border-color: rgba(15, 157, 122, 0.28);
+}
+
 .dash-hist-lead {
   margin: 0 0 16px;
   font-size: 0.92rem;
