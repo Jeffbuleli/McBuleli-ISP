@@ -1,6 +1,7 @@
 import "dotenv/config";
 import app from "./app.js";
 import { initDb, query } from "./db.js";
+import { runMigrations } from "./migrate.js";
 import { ensureBrandingUploadDir } from "./uploadsConfig.js";
 import { processNotificationOutboxBatch } from "./notifications.js";
 import { processExpiredSubscriptions, processOverdueInvoices, processRenewalInvoices } from "./billingJobs.js";
@@ -76,6 +77,11 @@ async function start() {
     );
   }
   await initDb();
+  const mig = await runMigrations();
+  if (mig.applied?.length) {
+    // eslint-disable-next-line no-console
+    console.log("migrations applied:", mig.applied.join(", "));
+  }
   ensureBrandingUploadDir();
   app.listen(port, "0.0.0.0", () => {
     // eslint-disable-next-line no-console

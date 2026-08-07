@@ -1,3 +1,7 @@
+# McBuleli ISP - Render (LEGACY)
+# Production is VPS 162.35.181.98 via ops/vps/. Do not use Render for new deploys.
+# Kept only for historical reference until the Render service is fully suspended.
+
 services:
   - type: web
     name: mcbuleli-isp

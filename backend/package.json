@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node tests/tenant-isolation.test.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.750.0",

@@ -16,6 +16,8 @@ import { buildDashboardNavCategories } from "./dashboardNavCategories.js";
 import PlatformHomeMarketingPanel from "./PlatformHomeMarketingPanel.jsx";
 import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
 import PoweredByMcBuleli from "./PoweredByMcBuleli.jsx";
+import NetworkHappyPath from "./components/NetworkHappyPath.jsx";
+import { PaymentPrimaryToggle } from "./components/PaymentPrimaryToggle.jsx";
 import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
@@ -801,6 +803,7 @@ function App() {
   const [tidConflicts, setTidConflicts] = useState([]);
   const [paymentIntents, setPaymentIntents] = useState([]);
   const [unifiedPayments, setUnifiedPayments] = useState([]);
+  const [showAdvancedPayments, setShowAdvancedPayments] = useState(false);
   const [paymentNotifications, setPaymentNotifications] = useState([]);
   const [paymentNotifUnread, setPaymentNotifUnread] = useState(0);
   const [paymentIntentTable, setPaymentIntentTable] = useState({
@@ -5103,13 +5106,18 @@ api.getPaymentNotifications(activeIspId)
 
       <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="billing">
       <section className="grid" id="billing-ops">
+        <PaymentPrimaryToggle
+          t={t}
+          showAdvanced={showAdvancedPayments}
+          onToggle={() => setShowAdvancedPayments((v) => !v)}
+        />
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreatePaymentMethod}>
-            <h2>{t("Moyens de paiement FAI", "ISP payment methods")}</h2>
+            <h2>{t("Moyens de paiement", "Payment methods")}</h2>
             <p className="app-meta">
               {t(
-                "Catalogue standard disponible: Cash, Mobile Money, Binance Pay, Virement bancaire, Portefeuille crypto et Visa Card. Les autres méthodes sont réservées aux demandes Premium.",
-                "Standard catalog enabled: Cash, Mobile Money, Binance Pay, Bank transfer, Crypto wallet and Visa Card. Other methods are reserved for Premium requests."
+                "Cash, Mobile Money (TID), Pawapay. Autres methodes en avance.",
+                "Cash, Mobile Money (TID), Pawapay. Other methods under advanced."
               )}
             </p>
             <select
@@ -5299,17 +5307,23 @@ api.getPaymentNotifications(activeIspId)
 
       <DashboardScreenGate mobile={gateMobile} active={mobileScreen} id="network">
       <section className="grid" id="network-ops">
+        <NetworkHappyPath
+          t={t}
+          hasDefaultNode={Array.isArray(networkNodes) && networkNodes.some((n) => n.isDefault || n.is_default)}
+          lastProvisionOk={
+            Array.isArray(provisioningEvents) &&
+            provisioningEvents.some((e) => String(e.status || "").toLowerCase() === "ok" || String(e.status || "").toLowerCase() === "success" || String(e.status || "").toLowerCase() === "applied")
+          }
+          freeradiusEnabled={String(import.meta.env.VITE_FREERADIUS_SYNC_ENABLED || "").toLowerCase() === "true"}
+        />
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <form className="panel" onSubmit={onCreateNetworkNode}>
-            <h2>Nœud réseau MikroTik</h2>
+            <h2>{t("Noeud MikroTik", "MikroTik node")}</h2>
             <p className="app-meta" style={{ maxWidth: "56rem", marginBottom: 12 }}>
-              Connexion à l&apos;API REST RouterOS via{" "}
-              <code>
-                {networkNodeForm.useTls ? "https" : "http"}://hôte:port/rest
-              </code>
-              . Le port <strong>443</strong> avec <strong>TLS</strong> est l&apos;usage courant lorsque le service REST
-              est exposé en HTTPS. Vérifiez que l&apos;utilisateur API existe sur le routeur, que le service REST/API est
-              activé, et que le pare-feu autorise ce port depuis le serveur McBuleli.
+              {t(
+                "API REST RouterOS: http(s)://hote:port/rest",
+                "RouterOS REST API: http(s)://host:port/rest"
+              )}
             </p>
             <input
               placeholder="Nom du nœud"
@@ -5862,8 +5876,9 @@ api.getPaymentNotifications(activeIspId)
           )}
         </section>
 
+        {showAdvancedPayments ? (
         <section className="panel">
-          <h2>{t("Finance - Validation paiements (canonique)", "Finance - Canonical payment validation")}</h2>
+          <h2>{t("Validation avancee", "Advanced validation")}</h2>
           <DataTable
             t={t}
             title={null}
@@ -5919,10 +5934,11 @@ api.getPaymentNotifications(activeIspId)
             emptyLabel={t("Aucun paiement canonique.", "No canonical payment records.")}
           />
         </section>
+        ) : null}
 
         <section className="panel">
           <h2>
-            {t("Historique notifications paiements", "Payment notification history")}{" "}
+            {t("Notifications", "Notifications")}{" "}
             {paymentNotifUnread > 0 ? <span className="badge">{paymentNotifUnread}</span> : null}
           </h2>
           {paymentNotifications.map((n) => (
@@ -5937,18 +5953,19 @@ api.getPaymentNotifications(activeIspId)
           ))}
         </section>
 
+        {showAdvancedPayments ? (
         <section className="panel">
-          <h2>{t("Paiements manuels à valider", "Manual payments to validate")}</h2>
+          <h2>{t("Paiements manuels (avance)", "Manual payments (advanced)")}</h2>
           <DataTable
             t={t}
             title={null}
             rows={paymentIntentTableView.pageRows}
             columns={[
-              { key: "channel", header: t("Canal", "Channel"), sortKey: "channel", cell: (r) => r.channel || "—" },
-              { key: "externalRef", header: t("Référence", "Reference"), sortKey: "externalRef", cell: (r) => r.externalRef || "—" },
+              { key: "channel", header: t("Canal", "Channel"), sortKey: "channel", cell: (r) => r.channel || "-" },
+              { key: "externalRef", header: t("Référence", "Reference"), sortKey: "externalRef", cell: (r) => r.externalRef || "-" },
               { key: "amountUsd", header: "USD", sortKey: "amountUsd", cell: (r) => Number(r.amountUsd || 0).toFixed(2) },
               { key: "status", header: t("Statut", "Status"), sortKey: "status", cell: (r) => paymentIntentStatusLabel(r.status, isEn) },
-              { key: "createdAt", header: t("Créé", "Created"), sortKey: "createdAt", cell: (r) => (r.createdAt ? new Date(r.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "—") },
+              { key: "createdAt", header: t("Créé", "Created"), sortKey: "createdAt", cell: (r) => (r.createdAt ? new Date(r.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "-") },
               {
                 key: "actions",
                 header: t("Actions", "Actions"),
@@ -5959,7 +5976,7 @@ api.getPaymentNotifications(activeIspId)
                       <button type="button" onClick={() => onReviewPaymentIntent(r.id, "approved")}>{t("Approuver", "Approve")}</button>
                       <button type="button" className="btn-secondary-outline" onClick={() => onReviewPaymentIntent(r.id, "rejected")}>{t("Rejeter", "Reject")}</button>
                     </div>
-                  ) : "—"
+                  ) : "-"
               }
             ]}
             searchValue={paymentIntentTable.q}
@@ -5988,6 +6005,7 @@ api.getPaymentNotifications(activeIspId)
             onSortChange={(sort) => setPaymentIntentTable((s) => ({ ...s, sort }))}
           />
         </section>
+        ) : null}
       </section>
 
       <section className="grid">

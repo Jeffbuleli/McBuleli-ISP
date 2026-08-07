@@ -14,7 +14,7 @@ const connectionString = process.env.DATABASE_URL || "postgresql://postgres:post
 
 if (nodeEnv === "production" && !process.env.DATABASE_URL) {
   throw new Error(
-    "DATABASE_URL is required when NODE_ENV=production. Configure your managed Postgres connection string in Render environment variables."
+    "DATABASE_URL is required when NODE_ENV=production. Set it in ops/vps/.env on the VPS."
   );
 }
 

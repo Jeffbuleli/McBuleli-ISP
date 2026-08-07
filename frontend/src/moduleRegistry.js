@@ -1,41 +1,40 @@
 import {
   IconAntenna,
   IconHome,
-  IconMail,
   IconPeople,
-  IconPresentation,
   IconReceipt,
   IconSliders,
   IconSmartphone,
-  IconUserCheck,
   IconWallet
 } from "./icons.jsx";
 
 /**
- * Extensible module registry.
- *
- * - Add new modules without changing layout/navigation code.
- * - Each module defines its nav grouping, hash route, mobile tab, and visibility rules.
+ * ISP operator nav - 5 zones max.
+ * Platform CMS only for system_owner.
  */
 export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
   const role = user?.role || "";
   const isSystemOwner = role === "system_owner";
-  const canSeeSecurity = role === "system_owner" || role === "super_admin" || role === "company_manager" || role === "isp_admin";
+  const canSeeSecurity =
+    role === "system_owner" ||
+    role === "super_admin" ||
+    role === "company_manager" ||
+    role === "isp_admin";
 
   if (isFieldAgent) {
     return [
       {
         key: "field.clients",
-        nav: { category: "field", categoryLabel: t("Terrain", "Field"), categoryIcon: IconSmartphone },
+        nav: { category: "clients", categoryLabel: t("Clients", "Clients"), categoryIcon: IconSmartphone },
         href: "#field-clients",
-        label: t("Clients et portail", "Clients & portal"),
+        label: t("Clients", "Clients"),
         mobileScreen: "users"
       },
       {
         key: "settings.workspace",
-        nav: { category: "settings", categoryLabel: t("Paramètres", "Settings"), categoryIcon: IconSliders },
+        nav: { category: "settings", categoryLabel: t("Reglages", "Settings"), categoryIcon: IconSliders },
         href: "#workspace-settings",
-        label: t("Paramètres", "Settings"),
+        label: t("Reglages", "Settings"),
         mobileScreen: "settings"
       }
     ];
@@ -46,125 +45,104 @@ export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
 
   modules.push({
     key: "dashboard.overview",
-    nav: { category: "dashboard", categoryLabel: t("Dashboard", "Dashboard"), categoryIcon: IconHome },
+    nav: { category: "home", categoryLabel: t("Accueil", "Home"), categoryIcon: IconHome },
     href: "#dashboard-overview",
-    label: t("Indicateurs", "KPIs & summary"),
+    label: t("Tableau de bord", "Dashboard"),
     mobileScreen: "dashboard"
   });
 
-  if (isSystemOwner) {
-    modules.push(
-      {
-        key: "platform.banners",
-        nav: { category: "platform", categoryLabel: t("Plateforme", "Platform"), categoryIcon: IconPresentation },
-        href: "#platform-banners",
-        label: t("Bannières publiques", "Public banners"),
-        mobileScreen: "dashboard"
-      },
-      {
-        key: "platform.home",
-        nav: { category: "platform", categoryLabel: t("Plateforme", "Platform"), categoryIcon: IconPresentation },
-        href: "#platform-home-marketing",
-        label: t("Accueil public", "Public home"),
-        mobileScreen: "dashboard"
-      },
-      {
-        key: "platform.tenants",
-        nav: { category: "platform", categoryLabel: t("Plateforme", "Platform"), categoryIcon: IconPresentation },
-        href: "#system-tenants",
-        label: t("Espaces entreprises", "Tenant workspaces"),
-        mobileScreen: "dashboard"
-      }
-    );
-  }
-
-  // User management (future-proof): use existing anchors today; expand later without changing nav.
   modules.push(
     {
-      key: "users.management",
-      nav: { category: "users", categoryLabel: t("Utilisateurs", "Users"), categoryIcon: IconPeople },
+      key: "clients.list",
+      nav: { category: "clients", categoryLabel: t("Clients", "Clients"), categoryIcon: IconPeople },
       href: "#field-clients",
       label: t("Clients", "Clients"),
       mobileScreen: "users"
     },
     {
-      key: "users.team",
-      nav: { category: "users", categoryLabel: t("Utilisateurs", "Users"), categoryIcon: IconPeople },
+      key: "clients.team",
+      nav: { category: "clients", categoryLabel: t("Clients", "Clients"), categoryIcon: IconPeople },
       href: "#team-settings",
-      label: t("Équipe & rôles", "Team & roles"),
+      label: t("Equipe", "Team"),
       mobileScreen: "users"
     }
   );
 
   modules.push({
     key: "network.ops",
-    nav: { category: "network", categoryLabel: t("Réseau", "Network"), categoryIcon: IconAntenna },
+    nav: { category: "network", categoryLabel: t("Reseau", "Network"), categoryIcon: IconAntenna },
     href: "#network-ops",
-    label: t("MikroTik & télémétrie", "MikroTik & telemetry"),
+    label: t("MikroTik", "MikroTik"),
     mobileScreen: "network"
   });
 
   modules.push({
     key: "finance.billing",
-    nav: { category: "finance", categoryLabel: t("Finance", "Finance"), categoryIcon: IconWallet },
+    nav: { category: "billing", categoryLabel: t("Facturation", "Billing"), categoryIcon: IconWallet },
     href: "#billing-ops",
-    label: t("Facturation & paiements", "Billing & payments"),
+    label: t("Paiements", "Payments"),
     mobileScreen: "billing"
   });
 
   if (role !== "system_owner") {
     modules.push({
       key: "finance.subscription",
-      nav: { category: "finance", categoryLabel: t("Finance", "Finance"), categoryIcon: IconWallet },
+      nav: { category: "billing", categoryLabel: t("Facturation", "Billing"), categoryIcon: IconWallet },
       href: "#mcbuleli-billing",
-      label: t("Abonnement McBuleli", "McBuleli subscription"),
+      label: t("Abonnement SaaS", "SaaS plan"),
       mobileScreen: "billing"
     });
   }
 
-  // Reports / analytics (placeholder route today, can map to future page later)
-  modules.push({
-    key: "reports.analytics",
-    nav: { category: "reports", categoryLabel: t("Rapports", "Reports"), categoryIcon: IconReceipt },
-    href: "#reports",
-    label: t("Analyses", "Analytics"),
-    mobileScreen: "dashboard"
-  });
-
-  modules.push({
-    key: "communication.chat",
-    nav: { category: "communication", categoryLabel: t("Communication", "Communication"), categoryIcon: IconMail },
-    href: "#team-chat",
-    label: t("Chat équipe", "Team chat"),
-    mobileScreen: "dashboard"
-  });
-
   modules.push({
     key: "settings.workspace",
-    nav: { category: "settings", categoryLabel: t("Paramètres", "Settings"), categoryIcon: IconSliders },
+    nav: { category: "settings", categoryLabel: t("Reglages", "Settings"), categoryIcon: IconSliders },
     href: "#workspace-settings",
-    label: t("Paramètres", "Settings"),
+    label: t("Espace", "Workspace"),
     mobileScreen: "settings"
   });
 
   if (canSeeSecurity) {
     modules.push({
       key: "settings.security",
-      nav: { category: "settings", categoryLabel: t("Paramètres", "Settings"), categoryIcon: IconSliders },
+      nav: { category: "settings", categoryLabel: t("Reglages", "Settings"), categoryIcon: IconSliders },
       href: "#security-settings",
-      label: t("Sécurité & API", "Security & API"),
+      label: t("Securite", "Security"),
       mobileScreen: "settings"
     });
   }
 
   if (isSystemOwner) {
-    modules.push({
-      key: "settings.audit",
-      nav: { category: "settings", categoryLabel: t("Paramètres", "Settings"), categoryIcon: IconUserCheck },
-      href: "#audit",
-      label: t("Journal d'audit", "Audit log"),
-      mobileScreen: "settings"
-    });
+    modules.push(
+      {
+        key: "platform.banners",
+        nav: { category: "platform", categoryLabel: t("Plateforme", "Platform"), categoryIcon: IconReceipt },
+        href: "#platform-banners",
+        label: t("Bannieres", "Banners"),
+        mobileScreen: "dashboard"
+      },
+      {
+        key: "platform.home",
+        nav: { category: "platform", categoryLabel: t("Plateforme", "Platform"), categoryIcon: IconReceipt },
+        href: "#platform-home-marketing",
+        label: t("Accueil public", "Public home"),
+        mobileScreen: "dashboard"
+      },
+      {
+        key: "platform.tenants",
+        nav: { category: "platform", categoryLabel: t("Plateforme", "Platform"), categoryIcon: IconReceipt },
+        href: "#system-tenants",
+        label: t("Tenants", "Tenants"),
+        mobileScreen: "dashboard"
+      },
+      {
+        key: "settings.audit",
+        nav: { category: "settings", categoryLabel: t("Reglages", "Settings"), categoryIcon: IconSliders },
+        href: "#audit",
+        label: t("Audit", "Audit"),
+        mobileScreen: "settings"
+      }
+    );
   }
 
   return modules.filter((m) => !m.hidden);
@@ -189,4 +167,3 @@ export function modulesToMobileHashMap(modules) {
   for (const m of modules) out[m.href] = m.mobileScreen;
   return out;
 }
-

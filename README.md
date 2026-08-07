@@ -1,151 +1,44 @@
-# 🎯 McBuleli ISP - SaaS Management System
+# McBuleli ISP
 
-## Complete UI/UX Redesign & Architecture
+SaaS multi-tenant pour FAI / Wi-Fi : clients, plans, facturation, vouchers, provision MikroTik (PPPoE / hotspot), FreeRADIUS optionnel.
 
-A modern, production-ready SaaS ISP management application with:
+## Stack
 
-- ✅ **Sticky Header + Announcement Banner** (2-level fixed layout)
-- ✅ **Responsive Sidebar** (mobile overlay, tablet/desktop collapsible)
-- ✅ **Reusable DataTable** (pagination, filtering, sorting, search)
-- ✅ **Dark Mode UI** (Green + Brown branding)
-- ✅ **Mobile-First Design** (PWA-ready, low-bandwidth optimized)
-- ✅ **Team Chat System** (real-time messaging)
-- ✅ **Extensible Architecture** (support unlimited modules)
-- ✅ **Production-Ready Code** (TypeScript, React, fully responsive)
+| Couche | Techno |
+|--------|--------|
+| Frontend | React 18 + Vite (`frontend/`) |
+| Backend | Node.js + Express (`backend/`) |
+| DB | PostgreSQL 16 (`isp_billing`) |
+| Prod | VPS `162.35.181.98` - Docker + Nginx (plus de Render / Vercel) |
 
-## 🏗️ Project Structure
+Legacy UI sous `archive/legacy-src-ui/` - ignoree.
 
-```
-src/
-├── components/
-│   ├── layout/
-│   │   ├── Header/ (TopBar + AnnouncementBanner)
-│   │   ├── Sidebar/ (Navigation, Menu)
-│   │   └── MainLayout.tsx
-│   ├── common/
-│   │   ├── Table/ (DataTable, Pagination)
-│   │   ├── Chat/ (TeamChat, ChatMessage)
-│   │   ├── Cards/ (StatCard)
-│   │   └── Search/ (GlobalSearch)
-│   └── modules/
-│       ├── Dashboard/
-│       ├── UserManagement/
-│       ├── Finance/
-│       ├── Network/
-│       └── Settings/
-├── styles/
-│   ├── variables.css (Design tokens)
-│   └── globals.css (Global styles)
-└── App.tsx
-```
+## Local
 
-## 🎨 Design System
+1. Postgres : `docker compose up -d` (racine) ou DB locale `isp_billing`
+2. `cp backend/.env.example backend/.env` - `DATABASE_URL`, `JWT_SECRET`
+3. Backend : `cd backend && npm run dev` (port 4000)
+4. Frontend : `cd frontend && npm run dev` (port 5173, proxy `/api`)
 
-### Colors
-- **Primary:** Green (#10b981)
-- **Secondary:** Brown (#92400e)
-- **Background:** Dark (#0f1419)
-- **Status:** Success, Warning, Error, Info
+Details : [`AGENTS.md`](AGENTS.md)
 
-### Spacing
-- xs, sm, md, lg, xl, 2xl, 3xl (CSS variables)
+## Prod VPS
 
-### Responsive Breakpoints
-- Mobile: ≤ 768px
-- Tablet: ≤ 1024px
-- Desktop: > 1024px
-
-## 🚀 Key Features
-
-### 1. Global Header (Fixed)
-- Left: Hamburger + User Avatar
-- Center: Global Search (Ctrl+K)
-- Right: Chat, Settings, Home
-- Sticky announcement banner below
-
-### 2. Sidebar Navigation
-- Collapsible menu with icons & badges
-- Submenu support
-- Mobile overlay on small screens
-- Logout button at bottom
-
-### 3. Reusable DataTable
-- Server-side pagination (10/20/50/100 rows)
-- Search & filtering
-- Column sorting
-- Row actions dropdown
-- Responsive horizontal scroll on mobile
-- Empty states & loading indicators
-
-### 4. Team Chat
-- Real-time messaging
-- User avatars & timestamps
-- Auto-scroll to latest message
-- Emoji & file attachment buttons
-
-### 5. Dashboard Module
-- Stat cards with trends
-- Revenue & usage charts
-- Top consumers table
-- Customizable filters
-
-## 📦 Installation
+Voir [`ops/vps/SERVER.md`](ops/vps/SERVER.md).
 
 ```bash
-npm install
-npm run dev
+# Sur 162.35.181.98
+bash ops/vps/install.sh
+# editer ops/vps/.env
+bash ops/vps/deploy.sh
+# optionnel restore: bash ops/vps/restore-db.sh backups/isp_billing_XXXX.dump
+certbot --nginx -d app.mcbuleli.live
 ```
 
-## 🔧 Usage
+## Roles
 
-### DataTable Example
-```tsx
-import DataTable from '@/components/common/Table/DataTable';
+`system_owner`, `super_admin`, `company_manager`, `isp_admin`, `billing_agent`, `noc_operator`, `field_agent`
 
-<DataTable
-  data={users}
-  columns={[
-    { id: 'name', header: 'Name', sortable: true },
-    { id: 'email', header: 'Email', sortable: true },
-    { id: 'status', header: 'Status', cell: (val) => <Badge>{val}</Badge> }
-  ]}
-  searchable={true}
-  pageSize={10}
-/>
-```
+## Parcours coeur
 
-### MainLayout Example
-```tsx
-import MainLayout from '@/components/layout/MainLayout';
-
-<MainLayout onMenuSelect={(menuId) => console.log(menuId)}>
-  <Dashboard />
-</MainLayout>
-```
-
-## 📱 Responsive Behavior
-
-- **Mobile:** Sidebar slides as overlay, main content full width
-- **Tablet:** Sidebar narrower, half-width charts
-- **Desktop:** Full sidebar, multi-column layouts
-
-## 🎯 Extensibility
-
-The system is designed to scale:
-
-1. **Add New Modules:** Create folder in `/modules`, follow same pattern
-2. **Reuse DataTable:** Apply to any list view
-3. **Custom Filters:** Define filter config for any table
-4. **Global Search:** Index and query any data source
-5. **Custom Banners:** Slides system for announcements
-
-## 🌍 Optimization for Africa
-
-- Low bandwidth: Optimized images, lazy loading
-- Dark mode: Reduced battery drain on mobile
-- Intuitive UX: Minimal clicks, clear navigation
-- Offline support: PWA-ready architecture
-
-## 📄 License
-
-MIT
+Clients -> Offres -> Paiement -> Acces MikroTik

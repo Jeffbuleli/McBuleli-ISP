@@ -5,6 +5,7 @@ node_modules/
 .env
 backend/.env
 frontend/.env
+ops/vps/.env
 *.local
 
 # OS and editor
@@ -23,6 +24,10 @@ dist/
 frontend/dist/
 *.log
 npm-debug.log*
+
+# DB dumps
+backups/
+*.dump
 
 # Cursor / agent (optional local artifacts)
 .cursor/

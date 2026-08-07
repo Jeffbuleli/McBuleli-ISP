@@ -339,7 +339,6 @@ export const api = {
       body: JSON.stringify(payload)
     }),
   getIsps: () => request("/isps"),
-  getSystemOwnerOverview: () => request("/system-owner/overview"),
   getSystemOwnerAuthCopy: () => request("/system-owner/auth-copy"),
   patchSystemOwnerAuthCopy: (payload) =>
     request("/system-owner/auth-copy", { method: "PATCH", body: JSON.stringify(payload) }),

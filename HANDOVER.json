@@ -1,9 +1,11 @@
 {
   "project": {
-    "name": "McBuleli",
+    "name": "McBuleli ISP",
     "type": "Multi-tenant SaaS for ISP billing and access operations",
-    "current_phase": "MVP+ (tenant isolation, white-labeling, manual payments, vouchers, analytics)",
-    "status": "active_development"
+    "current_phase": "VPS cutover + UX simplification",
+    "status": "active_development",
+    "host": "162.35.181.98",
+    "host_note": "153.75.235.176 refused (RAM ~1.6G). Full stack on mcbuleli.org VPS."
   },
   "architecture": {
     "backend": {
@@ -12,12 +14,19 @@
         "backend/src/app.js",
         "backend/src/db.js",
         "backend/src/auth.js",
-        "backend/src/server.js"
+        "backend/src/server.js",
+        "backend/src/networkProvisioning.js",
+        "backend/src/routes/"
       ]
     },
     "frontend": {
       "stack": ["React", "Vite"],
-      "key_files": ["frontend/src/App.jsx", "frontend/src/api.js"]
+      "key_files": ["frontend/src/App.jsx", "frontend/src/api.js", "frontend/src/moduleRegistry.js"]
+    },
+    "hosting": {
+      "prod": "VPS 162.35.181.98 Docker+Nginx",
+      "deprecated": ["Render", "Vercel"],
+      "ops": "ops/vps/"
     },
     "auth": {
       "method": "JWT bearer tokens",
@@ -27,152 +36,47 @@
         "isp_admin",
         "billing_agent",
         "noc_operator",
-        "field_agent"
+        "field_agent",
+        "system_owner"
       ]
     },
     "multi_tenancy": {
       "strategy": "tenant_id scoping + host/subdomain resolution",
-      "tenant_context_endpoint": "/api/tenant/context",
-      "host_resolution_sources": ["x-tenant-host", "x-forwarded-host", "host"]
+      "tenant_context_endpoint": "/api/tenant/context"
     }
   },
-  "features_completed": {
-    "isp_management": [
-      "Create/list ISPs",
-      "Subdomain support per ISP",
-      "Host-based tenant resolution"
-    ],
-    "white_labeling": [
-      "Display name, logo, colors",
-      "Invoice footer, address, contacts",
-      "Subdomain + custom domain fields",
-      "Tenant-branded UI title"
-    ],
-    "user_lifecycle_rbac": [
-      "Create tenant users with role and accreditation",
-      "Invite token flow",
-      "Accept invite flow",
-      "Reset password",
-      "Force password change",
-      "Deactivate/reactivate users",
-      "Role profile management with permissions JSON"
-    ],
-    "billing_core": [
-      "Customers/plans/subscriptions CRUD-like flows",
-      "Subscription activation with invoice generation",
-      "Invoice listing and status transitions"
-    ],
-    "payments": [
-      "Per-tenant payment method configuration",
-      "Payment processing gate (method must be active for tenant)",
-      "Manual Mobile Money TID submission",
-      "Admin TID queue review (approve/reject)",
-      "Auto-reactivation on approved TID",
-      "Duplicate TID protection",
-      "Duplicate TID conflict report endpoint"
-    ],
-    "vouchers": [
-      "Voucher generation from plan bandwidth/duration",
-      "Voucher redemption",
-      "Voucher CSV export",
-      "Branded voucher print template"
-    ],
-    "analytics_dashboard": [
-      "Hotspot users in period",
-      "PPPoE users in period",
-      "Connected devices",
-      "Bandwidth usage",
-      "Revenue collected in selected period"
-    ],
-    "saas_platform_billing": [
-      "Platform packages (starter/growth/enterprise)",
-      "Tenant platform subscriptions",
-      "Feature flag storage",
-      "maxUsers enforcement during user creation"
-    ],
-    "audit_notifications": [
-      "Audit logs for sensitive admin actions",
-      "Audit logs API + UI",
-      "Notification outbox table",
-      "TID reminder queue endpoint"
+  "network": {
+    "mikrotik_rest": "implemented",
+    "pppoe_hotspot_provision": "implemented",
+    "freeradius_sync": "optional via FREERADIUS_SYNC_ENABLED",
+    "files": [
+      "backend/src/networkProvisioning.js",
+      "backend/src/networkTelemetry.js",
+      "backend/src/freeradiusTables.js",
+      "backend/src/radiusAccountingIngest.js"
     ]
   },
   "database_entities": [
     "isps",
     "users",
-    "invite_tokens",
     "customers",
     "plans",
     "subscriptions",
     "invoices",
     "payments",
-    "isp_payment_methods",
-    "platform_packages",
-    "isp_platform_subscriptions",
-    "isp_role_profiles",
-    "isp_branding",
-    "network_usage_daily",
-    "payment_tid_submissions",
     "access_vouchers",
-    "audit_logs",
-    "notification_outbox"
+    "isp_network_nodes",
+    "network_provisioning_events",
+    "freeradius_sync_events"
   ],
-  "api_surface_highlights": {
-    "auth": [
-      "/api/auth/login",
-      "/api/auth/me",
-      "/api/auth/change-password",
-      "/api/auth/accept-invite"
-    ],
-    "tenant_context": ["/api/tenant/context"],
-    "branding": ["/api/branding"],
-    "users_roles": [
-      "/api/users",
-      "/api/users/:userId/reset-password",
-      "/api/users/:userId/deactivate",
-      "/api/users/:userId/reactivate",
-      "/api/users/:userId/invite",
-      "/api/role-profiles"
-    ],
-    "payments_tid": [
-      "/api/payments/tid-submissions",
-      "/api/payments/tid-submissions/:submissionId/review",
-      "/api/payments/tid-submissions/reminders",
-      "/api/payments/tid-conflicts"
-    ],
-    "payment_methods": ["/api/payment-methods", "/api/payment-methods/:methodId/toggle"],
-    "vouchers": ["/api/vouchers/generate", "/api/vouchers", "/api/vouchers/redeem", "/api/vouchers/export"],
-    "analytics": ["/api/network/stats", "/api/dashboard", "/api/super/dashboard"],
-    "audit": ["/api/audit-logs"],
-    "saas_packages": ["/api/platform/packages", "/api/platform/subscriptions"]
-  },
-  "operational_notes": {
-    "environment": [
-      "Local setup used native PostgreSQL instead of Docker",
-      "Backend may require PGUSER=mac on this machine"
-    ],
-    "important_env": [
-      "DATABASE_URL",
-      "JWT_SECRET",
-      "PLATFORM_PUBLIC_BASE_URL",
-      "TID_REMINDER_INTERVAL_MIN"
-    ],
-    "known_constraints": [
-      "No external SMS/email sender worker yet; outbox queues are ready",
-      "MikroTik/FreeRADIUS integration not yet implemented",
-      "Frontend is currently monolithic in App.jsx and should be modularized"
-    ]
-  },
-  "next_recommended_steps": [
-    "Implement notification worker to dispatch outbox via SMS/email/WhatsApp",
-    "Integrate MikroTik API and FreeRADIUS sync for real access enforcement",
-    "Refactor frontend into modules/pages/components",
-    "Add automated tests for RBAC and tenant boundary enforcement",
-    "Add production deployment config (reverse proxy, TLS, DNS automation)"
+  "known_constraints": [
+    "Notification outbox ready; SMS/email worker partial",
+    "Frontend still largely monolithic in App.jsx (incremental page split)",
+    "initDb() + versioned migrations under backend/migrations/"
   ],
-  "handover": {
-    "prepared_for": "next_agent",
-    "format": "machine_readable_json",
-    "file_path": "HANDOVER.json"
-  }
+  "next_steps": [
+    "Complete Render/Vercel decommission after DNS smoke",
+    "Continue App.jsx page extraction",
+    "Enable FreeRADIUS sync only via wizard"
+  ]
 }
