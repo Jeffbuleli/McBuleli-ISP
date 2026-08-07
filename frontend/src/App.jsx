@@ -2024,7 +2024,7 @@ api.getPaymentNotifications(activeIspId)
       if (t) {
         applyWorkspacePwaManifest(t);
       } else if (link) {
-        link.href = "/api/public/pwa-manifest";
+        link.href = "/manifest.webmanifest";
       }
       return;
     }

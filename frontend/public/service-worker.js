@@ -1,11 +1,11 @@
 /**
- * McBuleli — Service Worker (PWA)
+ * McBuleli - Service Worker (PWA)
  * - Statiques : cache-first (hors /api)
  * - Navigation : network-first, repli offline.html
- * - /api/* : toujours réseau, jamais mis en cache (données sensibles)
+ * - /api/* : toujours reseau, jamais mis en cache
  */
 
-const VERSION = "mcbuleli-sw-v5";
+const VERSION = "mcbuleli-sw-v6";
 const CACHE_STATIC = `${VERSION}-static`;
 const CACHE_RUNTIME = `${VERSION}-runtime`;
 
@@ -14,16 +14,23 @@ const PRECACHE_URLS = [
   "/mcbuleli-logo.svg",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
-  "/icons/icon-maskable-512.png"
+  "/icons/icon-maskable-512.png",
+  "/manifest.webmanifest"
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_STATIC)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting())
-      .catch((err) => console.warn("[SW] precache", err))
+    (async () => {
+      const cache = await caches.open(CACHE_STATIC);
+      await Promise.all(
+        PRECACHE_URLS.map((url) =>
+          cache.add(url).catch((err) => {
+            console.warn("[SW] precache skip", url, err);
+          })
+        )
+      );
+      await self.skipWaiting();
+    })()
   );
 });
 
@@ -49,7 +56,6 @@ function isApiRequest(url) {
   return url.pathname.startsWith("/api/");
 }
 
-/** Ne jamais intercepter les requêtes avec jetons. */
 function hasSensitiveHeader(request) {
   const a = request.headers.get("Authorization");
   const x = request.headers.get("X-Portal-Token");

@@ -1,54 +1,19 @@
 /**
- * Manifest Web App dynamique : « {nom de l’espace} — McBuleli »
- * (blob URL, même origine — requis pour installation après connexion).
+ * Manifest PWA dynamique via URL HTTP (jamais blob: - Chrome refuse l'install).
+ * Exemple: /api/public/pwa-manifest?name=MonFAI
  */
 
-const MANIFEST_SUFFIX = {
-  start_url: "/",
-  scope: "/",
-  display: "standalone",
-  orientation: "portrait",
-  dir: "ltr",
-  lang: "fr",
-  background_color: "#0a0a0a",
-  theme_color: "#0a0a0a",
-  categories: ["business", "finance", "productivity"],
-  icons: [
-    { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-    { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-    { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
-  ]
-};
-
-let lastManifestBlobUrl = null;
-
-/**
- * @param {string} workspaceTitle - Nom affiché de l’entreprise / espace (sans « McBuleli »)
- */
 export function applyWorkspacePwaManifest(workspaceTitle) {
   if (typeof document === "undefined") return;
 
   const clean = workspaceTitle != null ? String(workspaceTitle).trim() : "";
   const partner = clean && clean !== "AA" ? clean : "";
-  const name = partner ? `${partner} — McBuleli` : "McBuleli";
-  const short_name = partner ? (partner.length > 16 ? `${partner.slice(0, 15)}…` : partner) : "McBuleli";
 
-  const manifest = {
-    id: `${window.location.origin}/`,
-    name,
-    short_name,
-    description:
-      "Plateforme d'exploitation pour opérateurs FAI : facturation, réseau, portail abonnés.",
-    ...MANIFEST_SUFFIX
-  };
-
-  if (lastManifestBlobUrl) {
-    URL.revokeObjectURL(lastManifestBlobUrl);
-    lastManifestBlobUrl = null;
+  let href = "/api/public/pwa-manifest";
+  if (partner) {
+    const q = new URLSearchParams({ name: partner });
+    href = `${href}?${q.toString()}`;
   }
-
-  const blob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json;charset=utf-8" });
-  lastManifestBlobUrl = URL.createObjectURL(blob);
 
   let link = document.querySelector('link[rel="manifest"]');
   if (!link) {
@@ -56,5 +21,19 @@ export function applyWorkspacePwaManifest(workspaceTitle) {
     link.rel = "manifest";
     document.head.appendChild(link);
   }
-  link.href = lastManifestBlobUrl;
+  if (link.href !== new URL(href, window.location.origin).href) {
+    link.href = href;
+  }
+
+  const title = partner ? `${partner} - McBuleli` : "McBuleli";
+  let appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (!appleTitle) {
+    appleTitle = document.createElement("meta");
+    appleTitle.name = "apple-mobile-web-app-title";
+    document.head.appendChild(appleTitle);
+  }
+  appleTitle.content = partner ? (partner.length > 12 ? partner.slice(0, 12) : partner) : "McBuleli";
+  if (document.title !== title && !document.title.startsWith(partner || "McBuleli")) {
+    /* keep page-specific titles; only set app title meta */
+  }
 }

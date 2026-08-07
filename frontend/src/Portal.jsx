@@ -186,7 +186,7 @@ export default function Portal() {
     if (!import.meta.env.PROD) return;
     if (!session) {
       const link = document.querySelector('link[rel="manifest"]');
-      if (link) link.href = "/api/public/pwa-manifest";
+      if (link) link.href = "/manifest.webmanifest";
       return;
     }
     const d = session.branding?.displayName;

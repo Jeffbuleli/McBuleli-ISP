@@ -7,6 +7,7 @@ import PublicMobileNavMenu from "./PublicMobileNavMenu.jsx";
 import PublicHomePromos from "./PublicHomePromos.jsx";
 import PublicMarketingSlot from "./PublicMarketingSlot.jsx";
 import PublicCeoSection from "./PublicCeoSection.jsx";
+import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import { COMPANY_CONTACT } from "./companyContact.js";
 import { setIndependentPublicPageTitle } from "./pageTitle.js";
@@ -904,6 +905,7 @@ export default function PublicSite() {
           </p>
         </div>
       </footer>
+      <PwaInstallPrompt enabled={import.meta.env.PROD} workspaceLabel="" isEn={isEn} />
     </main>
   );
 }

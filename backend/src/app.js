@@ -1521,31 +1521,39 @@ function resolveRequestPublicOrigin(req) {
 function buildPwaWebManifest(req) {
   const origin = resolveRequestPublicOrigin(req);
   const icons = [
-    { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-    { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-    { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
+    { src: `${origin}/icons/icon-192.png`, sizes: "192x192", type: "image/png", purpose: "any" },
+    { src: `${origin}/icons/icon-512.png`, sizes: "512x512", type: "image/png", purpose: "any" },
+    {
+      src: `${origin}/icons/icon-maskable-512.png`,
+      sizes: "512x512",
+      type: "image/png",
+      purpose: "maskable"
+    }
   ];
 
   let partner = null;
-  if (req.tenantContext) {
+  const qName = req.query?.name != null ? String(req.query.name).trim() : "";
+  if (qName && qName !== "AA") {
+    partner = qName.slice(0, 64);
+  } else if (req.tenantContext) {
     const raw = req.tenantContext.displayName || req.tenantContext.name;
     const s = raw != null ? String(raw).trim() : "";
     if (s && s !== "AA") partner = s;
   }
 
-  const name = partner ? `${partner} — McBuleli` : "McBuleli ISP";
-  const short_name = partner ? (partner.length > 16 ? `${partner.slice(0, 15)}…` : partner) : "McBuleli";
+  const name = partner ? `${partner} - McBuleli` : "McBuleli";
+  const short_name = partner ? (partner.length > 12 ? partner.slice(0, 12) : partner) : "McBuleli";
 
   return {
     id: `${origin}/`,
     name,
     short_name,
     description:
-      "Plateforme d'exploitation pour opérateurs FAI : facturation, réseau, portail abonnés.",
-    start_url: "/",
-    scope: "/",
+      "Plateforme d'exploitation pour operateurs FAI : facturation, reseau, portail abonnes.",
+    start_url: `${origin}/`,
+    scope: `${origin}/`,
     display: "standalone",
-    orientation: "portrait",
+    orientation: "any",
     dir: "ltr",
     lang: "fr",
     background_color: "#0a0a0a",
