@@ -9,10 +9,14 @@ import {
   IconPhone,
   IconSignalBars,
   IconSmartphone,
+  IconTicket,
   IconWallet,
   IconX,
   IconZap
 } from "./icons.jsx";
+
+/** Guest catalog accent (mint) — ignore ISP branding blue/brown. */
+const WIFI_ACCENT = "#63b38f";
 import { wifiT } from "./wifiCopy.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 import { setIndependentPublicPageTitle } from "./pageTitle.js";
@@ -73,6 +77,13 @@ export default function WifiPortal() {
     externalRef: "",
     payerContact: ""
   });
+  const [checkoutMode, setCheckoutMode] = useState("mm");
+  const [checkoutVoucher, setCheckoutVoucher] = useState({
+    code: "",
+    phone: "",
+    password: ""
+  });
+  const [voucherBusy, setVoucherBusy] = useState(false);
   const [depositId, setDepositId] = useState(null);
   const [redirectUrl, setRedirectUrl] = useState(null);
   const [polling, setPolling] = useState(false);
@@ -213,6 +224,55 @@ export default function WifiPortal() {
     }
   }
 
+  async function onRedeemVoucher(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (!selectedPlan || !activeIspId) return;
+    const code = String(checkoutVoucher.code || "").trim();
+    if (!code) {
+      setError(t("errVoucherCode"));
+      return;
+    }
+    const phone = normalizeDrCongoMsisdn(checkoutVoucher.phone);
+    if (!isLikelyDrCongoMsisdn(phone)) {
+      setError(t("errPhone"));
+      return;
+    }
+    const password = String(checkoutVoucher.password || "");
+    if (password.length < 6) {
+      setError(t("errVoucherPassword"));
+      return;
+    }
+    setVoucherBusy(true);
+    try {
+      const res = await publicRequest("/public/wifi-voucher/redeem", {
+        method: "POST",
+        body: JSON.stringify({
+          ispId: activeIspId,
+          code,
+          phoneNumber: phone,
+          newPassword: password
+        })
+      });
+      const nextUrl = res.redirectUrl || "https://www.google.com";
+      setSelectedPlan(null);
+      if (res.setupToken) {
+        setPostPaySetup({ setupToken: res.setupToken, redirectUrl: nextUrl });
+        setNotice(t("noticePostPay"));
+      } else {
+        setNotice(t("voucherOk"));
+        window.setTimeout(() => {
+          window.location.href = nextUrl;
+        }, 700);
+      }
+    } catch (err) {
+      setError(wifiErr(err.message || t("errPayStart")));
+    } finally {
+      setVoucherBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (!polling || !depositId) return;
     let cancelled = false;
@@ -271,10 +331,15 @@ export default function WifiPortal() {
   );
 
   const brandName = wifiDisplayName(branding?.displayName, uiLang);
-  const accent = branding?.primaryColor || "#2f7439";
+  const accent = WIFI_ACCENT;
   const phoneNorm = normalizeDrCongoMsisdn(checkoutMm.phone);
   const phoneRawDigits = String(checkoutMm.phone).replace(/\D/g, "").replace(/^00/, "");
   const showPhoneNorm = Boolean(checkoutMm.phone.trim() && phoneNorm && phoneNorm !== phoneRawDigits);
+  const voucherPhoneNorm = normalizeDrCongoMsisdn(checkoutVoucher.phone);
+  const voucherPhoneRaw = String(checkoutVoucher.phone).replace(/\D/g, "").replace(/^00/, "");
+  const showVoucherPhoneNorm = Boolean(
+    checkoutVoucher.phone.trim() && voucherPhoneNorm && voucherPhoneNorm !== voucherPhoneRaw
+  );
 
   return (
     <main className="container wifi-portal-page wifi-portal-page--dark wifi-portal-page--v2">
@@ -380,6 +445,7 @@ export default function WifiPortal() {
               onClick={() => {
                 setSelectedPlan(plan);
                 setDepositId(null);
+                setCheckoutMode("mm");
                 setNotice("");
                 setError("");
               }}
@@ -442,122 +508,232 @@ export default function WifiPortal() {
             </button>
 
             <div className="wifi-checkout-modal__head">
+              <span className="wifi-checkout-modal__wifi-mark" aria-hidden="true">
+                <IconAntenna width={26} height={26} />
+              </span>
               <p className="wifi-checkout-modal__plan">{selectedPlan.name}</p>
               <p id="wifi-checkout-summary" className="wifi-checkout-modal__summary">
                 <strong className="wifi-checkout-modal__amount">
                   {Number(selectedPlan.priceUsd).toFixed(2)} $
                 </strong>
-                <span className="wifi-checkout-modal__sep">-</span>
+                <span className="wifi-checkout-modal__sep">·</span>
                 <span>
                   {selectedPlan.durationDays}{" "}
                   {selectedPlan.durationDays === 1 ? t("daySingular") : t("dayPlural")}
                 </span>
               </p>
+              <span className="wifi-checkout-pay-head" aria-hidden="true">
+                <IconWallet width={22} height={22} />
+              </span>
             </div>
 
-            <p className="wifi-checkout-section-title">{t("pawapayBlockTitle")}</p>
-            <form className="wifi-checkout-form" onSubmit={onStartPawapayPayment}>
-              <label className="wifi-field">
-                <span className="wifi-field__label">{t("phoneLabel")}</span>
-                <div className="wifi-input-row">
-                  <span className="wifi-input-row__lead" aria-hidden="true">
-                    <IconSmartphone width={18} height={18} />
-                  </span>
-                  <input
-                    id="wifi-checkout-phone"
-                    autoComplete="tel"
-                    inputMode="tel"
-                    placeholder={t("phonePh")}
-                    value={checkoutMm.phone}
-                    onChange={(e) => setCheckoutMm({ ...checkoutMm, phone: e.target.value })}
-                  />
-                </div>
-                {showPhoneNorm ? <span className="wifi-checkout-phone-norm">{phoneNorm}</span> : null}
-              </label>
-              <label className="wifi-field">
-                <span className="wifi-field__label">{t("network")}</span>
-                <div className="wifi-input-row">
-                  <span className="wifi-input-row__lead" aria-hidden="true">
-                    <IconSignalBars width={18} height={18} />
-                  </span>
-                  <select
-                    id="wifi-checkout-network"
-                    value={checkoutMm.networkKey}
-                    onChange={(e) => setCheckoutMm({ ...checkoutMm, networkKey: e.target.value })}
-                  >
-                    {networks.map((n) => (
-                      <option key={n.key} value={n.key}>
-                        {n.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-              <button type="submit" className="wifi-pay-submit" disabled={polling || !checkoutMm.phone}>
-                <span>{polling ? t("paying") : t("paySubmit")}</span>
+            <div className="wifi-checkout-tabs" role="tablist" aria-label={t("payTitle")}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={checkoutMode === "mm"}
+                className={`wifi-checkout-tab${checkoutMode === "mm" ? " is-active" : ""}`}
+                onClick={() => setCheckoutMode("mm")}
+              >
+                {t("payTabMm")}
               </button>
-            </form>
-            {pawapayMethodDetails?.instructions?.note ? (
-              <p className="wifi-checkout-foot">
-                <small>{String(pawapayMethodDetails.instructions.note).replace(/pawapay/gi, "Mobile Money")}</small>
-              </p>
-            ) : null}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={checkoutMode === "voucher"}
+                className={`wifi-checkout-tab${checkoutMode === "voucher" ? " is-active" : ""}`}
+                onClick={() => setCheckoutMode("voucher")}
+              >
+                <IconTicket width={14} height={14} aria-hidden />
+                {t("payTabVoucher")}
+              </button>
+            </div>
 
-            {alternateMethodOptions.length ? (
+            {checkoutMode === "mm" ? (
               <>
-                <hr className="wifi-checkout-split" />
-                <p className="wifi-checkout-section-title">{t("alternateBlockTitle")}</p>
-                <form className="wifi-checkout-form" onSubmit={onStartAlternatePayment}>
-                  <div className="wifi-input-row">
-                    <span className="wifi-input-row__lead" aria-hidden="true">
-                      <IconWallet width={18} height={18} />
-                    </span>
-                    <select
-                      aria-label={t("method")}
-                      value={checkoutAlt.methodType}
-                      onChange={(e) => setCheckoutAlt({ ...checkoutAlt, methodType: e.target.value })}
-                    >
-                      {alternateMethodOptions.map((m) => (
-                        <option key={m.id} value={m.methodType}>
-                          {m.providerName}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="wifi-input-row">
-                    <span className="wifi-input-row__lead" aria-hidden="true">
-                      <IconSmartphone width={18} height={18} />
-                    </span>
-                    <input
-                      autoComplete="off"
-                      aria-label={t("reference")}
-                      placeholder={t("referencePh")}
-                      value={checkoutAlt.externalRef}
-                      onChange={(e) => setCheckoutAlt({ ...checkoutAlt, externalRef: e.target.value })}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="wifi-pay-submit wifi-pay-submit--secondary"
-                    disabled={polling || !String(checkoutAlt.externalRef || "").trim()}
-                  >
-                    <span>{t("alternateSubmit")}</span>
+                <p className="wifi-checkout-section-title">{t("pawapayBlockTitle")}</p>
+                <form className="wifi-checkout-form" onSubmit={onStartPawapayPayment}>
+                  <label className="wifi-field">
+                    <span className="wifi-field__label">{t("phoneLabel")}</span>
+                    <div className="wifi-input-row">
+                      <span className="wifi-input-row__lead" aria-hidden="true">
+                        <IconSmartphone width={18} height={18} />
+                      </span>
+                      <input
+                        id="wifi-checkout-phone"
+                        autoComplete="tel"
+                        inputMode="tel"
+                        placeholder={t("phonePh")}
+                        value={checkoutMm.phone}
+                        onChange={(e) => setCheckoutMm({ ...checkoutMm, phone: e.target.value })}
+                      />
+                    </div>
+                    {showPhoneNorm ? (
+                      <span className="wifi-checkout-phone-norm">
+                        {t("phoneHint")}: {phoneNorm}
+                      </span>
+                    ) : null}
+                  </label>
+                  <label className="wifi-field">
+                    <span className="wifi-field__label">{t("network")}</span>
+                    <div className="wifi-input-row">
+                      <span className="wifi-input-row__lead" aria-hidden="true">
+                        <IconSignalBars width={18} height={18} />
+                      </span>
+                      <select
+                        id="wifi-checkout-network"
+                        value={checkoutMm.networkKey}
+                        onChange={(e) => setCheckoutMm({ ...checkoutMm, networkKey: e.target.value })}
+                      >
+                        {networks.map((n) => (
+                          <option key={n.key} value={n.key}>
+                            {n.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+                  <button type="submit" className="wifi-pay-submit" disabled={polling || !checkoutMm.phone}>
+                    <IconWallet width={18} height={18} aria-hidden />
+                    <span>{polling ? t("paying") : t("paySubmit")}</span>
                   </button>
                 </form>
-                {alternateMethodDetails ? (
+                {pawapayMethodDetails?.instructions?.note ? (
                   <p className="wifi-checkout-foot">
                     <small>
-                      {alternateMethodDetails.instructions?.collectionPoint ||
-                        alternateMethodDetails.instructions?.bankName ||
-                        alternateMethodDetails.instructions?.walletAddress ||
-                        alternateMethodDetails.instructions?.processorName ||
-                        alternateMethodDetails.instructions?.note ||
-                        ""}
+                      {String(pawapayMethodDetails.instructions.note).replace(/pawapay/gi, "Mobile Money")}
                     </small>
                   </p>
                 ) : null}
+
+                {alternateMethodOptions.length ? (
+                  <>
+                    <hr className="wifi-checkout-split" />
+                    <p className="wifi-checkout-section-title">{t("alternateBlockTitle")}</p>
+                    <form className="wifi-checkout-form" onSubmit={onStartAlternatePayment}>
+                      <div className="wifi-input-row">
+                        <span className="wifi-input-row__lead" aria-hidden="true">
+                          <IconWallet width={18} height={18} />
+                        </span>
+                        <select
+                          aria-label={t("method")}
+                          value={checkoutAlt.methodType}
+                          onChange={(e) => setCheckoutAlt({ ...checkoutAlt, methodType: e.target.value })}
+                        >
+                          {alternateMethodOptions.map((m) => (
+                            <option key={m.id} value={m.methodType}>
+                              {m.providerName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="wifi-input-row">
+                        <span className="wifi-input-row__lead" aria-hidden="true">
+                          <IconSmartphone width={18} height={18} />
+                        </span>
+                        <input
+                          autoComplete="off"
+                          aria-label={t("reference")}
+                          placeholder={t("referencePh")}
+                          value={checkoutAlt.externalRef}
+                          onChange={(e) => setCheckoutAlt({ ...checkoutAlt, externalRef: e.target.value })}
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="wifi-pay-submit wifi-pay-submit--secondary"
+                        disabled={polling || !String(checkoutAlt.externalRef || "").trim()}
+                      >
+                        <span>{t("alternateSubmit")}</span>
+                      </button>
+                    </form>
+                    {alternateMethodDetails ? (
+                      <p className="wifi-checkout-foot">
+                        <small>
+                          {alternateMethodDetails.instructions?.collectionPoint ||
+                            alternateMethodDetails.instructions?.bankName ||
+                            alternateMethodDetails.instructions?.walletAddress ||
+                            alternateMethodDetails.instructions?.processorName ||
+                            alternateMethodDetails.instructions?.note ||
+                            ""}
+                        </small>
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
               </>
-            ) : null}
+            ) : (
+              <>
+                <p className="wifi-checkout-section-title">{t("payTabVoucher")}</p>
+                <form className="wifi-checkout-form" onSubmit={onRedeemVoucher}>
+                  <label className="wifi-field">
+                    <span className="wifi-field__label">{t("voucherCodeLabel")}</span>
+                    <div className="wifi-input-row">
+                      <span className="wifi-input-row__lead" aria-hidden="true">
+                        <IconTicket width={18} height={18} />
+                      </span>
+                      <input
+                        id="wifi-checkout-voucher"
+                        autoComplete="off"
+                        spellCheck={false}
+                        placeholder={t("voucherCodePh")}
+                        value={checkoutVoucher.code}
+                        onChange={(e) => setCheckoutVoucher({ ...checkoutVoucher, code: e.target.value })}
+                      />
+                    </div>
+                  </label>
+                  <label className="wifi-field">
+                    <span className="wifi-field__label">{t("phoneLabel")}</span>
+                    <div className="wifi-input-row">
+                      <span className="wifi-input-row__lead" aria-hidden="true">
+                        <IconSmartphone width={18} height={18} />
+                      </span>
+                      <input
+                        id="wifi-checkout-voucher-phone"
+                        autoComplete="tel"
+                        inputMode="tel"
+                        placeholder={t("phonePh")}
+                        value={checkoutVoucher.phone}
+                        onChange={(e) => setCheckoutVoucher({ ...checkoutVoucher, phone: e.target.value })}
+                      />
+                    </div>
+                    {showVoucherPhoneNorm ? (
+                      <span className="wifi-checkout-phone-norm">
+                        {t("phoneHint")}: {voucherPhoneNorm}
+                      </span>
+                    ) : null}
+                  </label>
+                  <label className="wifi-field">
+                    <span className="wifi-field__label">{t("voucherPasswordLabel")}</span>
+                    <div className="wifi-input-row">
+                      <span className="wifi-input-row__lead" aria-hidden="true">
+                        <IconWallet width={18} height={18} />
+                      </span>
+                      <input
+                        id="wifi-checkout-voucher-password"
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder={t("voucherPasswordPh")}
+                        value={checkoutVoucher.password}
+                        onChange={(e) => setCheckoutVoucher({ ...checkoutVoucher, password: e.target.value })}
+                      />
+                    </div>
+                  </label>
+                  <button
+                    type="submit"
+                    className="wifi-pay-submit"
+                    disabled={
+                      voucherBusy ||
+                      !String(checkoutVoucher.code || "").trim() ||
+                      !String(checkoutVoucher.phone || "").trim()
+                    }
+                  >
+                    <IconTicket width={18} height={18} aria-hidden />
+                    <span>{voucherBusy ? t("voucherBusy") : t("voucherSubmit")}</span>
+                  </button>
+                </form>
+              </>
+            )}
             {import.meta.env.DEV ? (
               <p>
                 <small>API: {API_URL}</small>

@@ -15,6 +15,19 @@ export function IconSliders(props) {
   );
 }
 
+export function IconTicket(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden {...props}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 9V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 1 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 1 0 0-4z"
+      />
+      <path strokeLinecap="round" d="M9 8v8" />
+    </svg>
+  );
+}
+
 export function IconWallet(props) {
   return (
     <svg {...base} {...props}>

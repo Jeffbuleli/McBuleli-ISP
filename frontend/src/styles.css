@@ -1997,27 +1997,27 @@ a:hover {
 }
 
 .app-home-shortcut {
-  width: auto;
-  min-width: 52px;
+  width: 48px;
+  min-width: 48px;
   height: 48px;
-  padding: 0 14px;
-  gap: 8px;
+  padding: 0;
+  gap: 0;
   border-radius: 12px;
   font-weight: 750;
-  background: #2f7439 !important;
-  border: 1px solid rgba(197, 228, 201, 0.55) !important;
-  color: #f4fff6 !important;
-  box-shadow: 0 8px 22px rgba(47, 116, 57, 0.32) !important;
+  background: #63b38f !important;
+  border: 1px solid rgba(99, 179, 143, 0.65) !important;
+  color: #0a0a0a !important;
+  box-shadow: 0 8px 22px rgba(99, 179, 143, 0.35) !important;
 }
 
 .app-home-shortcut:hover {
-  background: #3a8a46 !important;
-  border-color: #c5e4c7 !important;
-  color: #fff !important;
+  background: #7fd4ae !important;
+  border-color: #a8e6c8 !important;
+  color: #0a0a0a !important;
 }
 
 .app-home-shortcut .home-shortcut__label {
-  display: inline;
+  display: none !important;
 }
 
 .dashboard-ad-slot {
@@ -7548,8 +7548,8 @@ body:has(.wifi-portal-page--dark) {
 
 .portal-page--dark button[type="submit"],
 .wifi-portal-page--dark button[type="submit"] {
-  background: #2f7439;
-  color: #f4fff6;
+  background: #63b38f;
+  color: #0a0a0a;
   font-weight: 750;
   border: none;
   border-radius: 12px;
@@ -7624,8 +7624,8 @@ body:has(.wifi-portal-page--dark) {
 
 /* ---- Wi-Fi catalog v2: simple professional checkout ---- */
 .wifi-portal-page--v2 {
-  /* Restore classic McBuleli green (pre-v2 mint) */
-  --wifi-accent: #2f7439;
+  /* Original mint accent (not ISP branding blue) */
+  --wifi-accent: #63b38f;
   --wifi-ink: #f4f6f8;
   --wifi-muted: #aeb4bf;
   --wifi-line: rgba(255, 255, 255, 0.1);
@@ -7646,8 +7646,8 @@ body:has(.wifi-portal-page--dark) {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(900px 420px at 12% -10%, rgba(47, 116, 57, 0.22), transparent 60%),
-    radial-gradient(700px 360px at 90% 8%, rgba(47, 116, 57, 0.1), transparent 55%),
+    radial-gradient(900px 420px at 12% -10%, rgba(99, 179, 143, 0.22), transparent 60%),
+    radial-gradient(700px 360px at 90% 8%, rgba(99, 179, 143, 0.1), transparent 55%),
     linear-gradient(180deg, #0f0f0f 0%, #141414 48%, #0f0f0f 100%);
 }
 
@@ -7672,23 +7672,21 @@ body:has(.wifi-portal-page--dark) {
 
 .wifi-portal-page--v2 .wifi-topbar__home,
 .wifi-portal-page--dark .wifi-topbar__home {
-  background: #2f7439 !important;
-  border: 1px solid rgba(197, 228, 201, 0.55) !important;
-  color: #f4fff6 !important;
-  box-shadow: 0 8px 22px rgba(47, 116, 57, 0.35) !important;
-  min-width: 52px;
+  background: #63b38f !important;
+  border: 1px solid rgba(168, 230, 200, 0.55) !important;
+  color: #0a0a0a !important;
+  box-shadow: 0 8px 22px rgba(99, 179, 143, 0.4) !important;
+  width: 48px;
+  min-width: 48px;
   height: 48px;
+  padding: 0;
 }
 
 .wifi-portal-page--v2 .wifi-topbar__home:hover,
 .wifi-portal-page--dark .wifi-topbar__home:hover {
-  background: #3a8a46 !important;
-  color: #fff !important;
+  background: #7fd4ae !important;
+  color: #0a0a0a !important;
   border-color: #c5e4c7 !important;
-}
-
-.wifi-portal-page--v2 .wifi-topbar__home .home-shortcut__label {
-  display: inline;
 }
 
 .wifi-topbar__brand {
@@ -7975,14 +7973,30 @@ button.wifi-plan-card--v2:focus-visible {
 }
 
 .wifi-checkout-modal--v2 .wifi-checkout-modal__head {
-  text-align: left;
-  padding: 0 36px 0 0;
-  margin-bottom: 18px;
+  text-align: center;
+  padding: 4px 36px 0;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.wifi-checkout-modal__wifi-mark {
+  display: inline-flex;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 2px;
+}
+
+.wifi-checkout-pay-head {
+  display: inline-flex;
+  color: #b98b66;
+  margin-top: 2px;
 }
 
 .wifi-checkout-modal__plan {
-  margin: 0 0 4px;
-  font-size: 0.82rem;
+  margin: 0;
+  font-size: 0.78rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--wifi-muted);
@@ -7992,10 +8006,12 @@ button.wifi-plan-card--v2:focus-visible {
 .wifi-checkout-modal--v2 .wifi-checkout-modal__summary {
   display: flex;
   align-items: baseline;
+  justify-content: center;
   gap: 8px;
   flex-wrap: wrap;
   color: #dce2ea;
   font-size: 0.95rem;
+  margin: 0;
 }
 
 .wifi-checkout-modal--v2 .wifi-checkout-modal__amount {
@@ -8007,6 +8023,34 @@ button.wifi-plan-card--v2:focus-visible {
 
 .wifi-checkout-modal__sep {
   color: var(--wifi-muted);
+}
+
+.wifi-checkout-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.wifi-checkout-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #c5ccd6;
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.wifi-checkout-tab.is-active {
+  background: color-mix(in srgb, var(--wifi-accent) 22%, transparent);
+  border-color: color-mix(in srgb, var(--wifi-accent) 55%, transparent);
+  color: #e8fff3;
 }
 
 .wifi-checkout-modal--v2 .wifi-checkout-section-title {
@@ -8071,6 +8115,10 @@ button.wifi-plan-card--v2:focus-visible {
   font-weight: 750;
   font-size: 1rem;
   border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .wifi-checkout-modal--v2 .wifi-pay-submit:disabled {

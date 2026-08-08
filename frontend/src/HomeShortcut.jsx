@@ -1,7 +1,7 @@
 import { IconHome } from "./icons.jsx";
 
 /**
- * Raccourci vers l’accueil public McBuleli (même esprit que le sélecteur de langue).
+ * Raccourci vers l’accueil public McBuleli (icône seule).
  */
 export default function HomeShortcut({ title, className = "", idPrefix = "home" }) {
   const t = title || "Accueil";
@@ -14,7 +14,6 @@ export default function HomeShortcut({ title, className = "", idPrefix = "home" 
       aria-label={t}
     >
       <IconHome width={24} height={24} className="home-shortcut__icon" />
-      <span className="home-shortcut__label">Home</span>
     </a>
   );
 }

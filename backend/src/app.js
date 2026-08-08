@@ -48,7 +48,8 @@ import {
 import {
   completeWifiGuestPurchase,
   defaultRedirectUrl,
-  markWifiGuestPurchaseFailed
+  markWifiGuestPurchaseFailed,
+  redeemWifiGuestVoucher
 } from "./wifiGuestCheckout.js";
 import { WIFI_GUEST_NETWORK_OPTIONS, resolveWifiGuestPawapayProvider } from "./wifiGuestProviders.js";
 import { createPublicRateLimiter } from "./publicRateLimit.js";
@@ -2079,6 +2080,48 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
     });
   } catch (err) {
     return res.status(400).json({ message: publicMobileMoneyError(err.message || "Mobile Money initiation failed") });
+  }
+});
+
+app.post("/api/public/wifi-voucher/redeem", rlWifiInit, async (req, res) => {
+  const { ispId, code, phoneNumber, newPassword, planId } = req.body || {};
+  if (!ispId) {
+    return res.status(400).json({ message: "ispId is required" });
+  }
+  if (!(await ispGuestWifiPubliclyAllowed(String(ispId)))) {
+    return res.status(403).json({
+      message:
+        "Cet opérateur n'a pas d'abonnement plateforme McBuleli actif. L'accès Wi‑Fi invité n'est pas disponible pour le moment."
+    });
+  }
+  try {
+    const result = await redeemWifiGuestVoucher({
+      ispId: String(ispId),
+      code,
+      phoneNumber,
+      newPassword,
+      expectPlanId: planId || undefined
+    });
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ message: result.message || "Voucher redeem failed" });
+    }
+    await logAudit({
+      ispId: String(ispId),
+      action: "wifi_guest.voucher_redeemed",
+      entityType: "voucher",
+      entityId: result.customerId,
+      details: { subscriptionId: result.subscriptionId, planId: planId || null }
+    });
+    return res.status(200).json({
+      message: result.message,
+      redirectUrl: result.redirectUrl,
+      setupToken: result.setupToken || null,
+      subscriberToken: result.subscriberToken || null,
+      durationDays: result.durationDays,
+      maxDevices: result.maxDevices
+    });
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "Voucher redeem failed" });
   }
 });
 
