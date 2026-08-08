@@ -16,17 +16,18 @@ import {
 import { wifiT } from "./wifiCopy.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 import { setIndependentPublicPageTitle } from "./pageTitle.js";
+import { isLikelyDrCongoMsisdn, normalizeDrCongoMsisdn } from "./phoneNormalize.js";
 
 function wifiDisplayName(name, lang) {
   const s = name != null ? String(name).trim() : "";
-  if (!s || s === "AA") return lang === "en" ? "Guest Wi‑Fi catalog" : "Catalogue Wi‑Fi invité";
+  if (!s || s === "AA") return lang === "en" ? "Guest Wi-Fi" : "Wi-Fi invité";
   return s;
 }
 
 function wifiEyebrowText(branding, lang, t) {
   const base = t("eyebrow");
   const n = branding?.displayName != null ? String(branding.displayName).trim() : "";
-  if (n && n !== "AA") return `${base} — ${n}`;
+  if (n && n !== "AA") return `${base} - ${n}`;
   return base;
 }
 
@@ -165,14 +166,14 @@ export default function WifiPortal() {
     setError("");
     setNotice("");
     if (!selectedPlan || !activeIspId) return;
-    const phone = checkoutMm.phone.replace(/\s+/g, "").replace(/^\+/, "");
-    if (phone.length < 9) {
+    const phone = normalizeDrCongoMsisdn(checkoutMm.phone);
+    if (!isLikelyDrCongoMsisdn(phone)) {
       setError(t("errPhone"));
       return;
     }
     try {
       const res = await initiateWifiPurchase("mobile_money", {
-        phoneNumber: phone || undefined,
+        phoneNumber: phone,
         networkKey: checkoutMm.networkKey
       });
       setDepositId(res.depositId);
@@ -426,14 +427,14 @@ export default function WifiPortal() {
 
       <section className="grid wifi-plan-grid">
         {plans.map((plan, planIndex) => {
-          const cardLabel = `${plan.name}. ${plan.priceUsd} $, ${plan.durationDays} ${
-            plan.durationDays === 1 ? t("daySingular") : t("dayPlural")
-          }. ${t("speed")} ${plan.speedLabel || plan.rateLimit}, ${plan.defaultAccessType}, ${plan.maxDevices} ${t("devices")}.`;
+          const daysLabel =
+            plan.durationDays === 1 ? t("daySingular") : t("dayPlural");
+          const cardLabel = `${plan.name}. ${plan.priceUsd} $, ${plan.durationDays} ${daysLabel}.`;
           return (
             <button
               key={plan.id}
               type="button"
-              className="panel pricing-card wifi-plan-card"
+              className="panel pricing-card wifi-plan-card wifi-plan-card--renew"
               aria-label={cardLabel}
               onClick={() => {
                 setSelectedPlan(plan);
@@ -445,18 +446,17 @@ export default function WifiPortal() {
               <div className="wifi-plan-card__icon-wrap">
                 <WifiPlanHeroIcon plan={plan} index={planIndex} />
               </div>
-              <span className="visually-hidden">{plan.name}</span>
-              <hr className="wifi-plan-card__divider" />
+              <p className="wifi-plan-card__name">{plan.name}</p>
               <p className="wifi-plan-card__price">
                 <strong>
-                  {plan.priceUsd}&nbsp;$ — {plan.durationDays}{" "}
-                  {plan.durationDays === 1 ? t("daySingular") : t("dayPlural")}
+                  {plan.priceUsd}&nbsp;$ - {plan.durationDays} {daysLabel}
                 </strong>
               </p>
               <p className="wifi-plan-card__meta">
-                {t("speed")} : {plan.speedLabel || plan.rateLimit} · {t("type")} : {plan.defaultAccessType} ·{" "}
-                {t("devices")} : {plan.maxDevices}
+                {plan.speedLabel || plan.rateLimit}
+                {plan.maxDevices > 1 ? ` - ${plan.maxDevices} ${t("devices")}` : ""}
               </p>
+              <span className="wifi-plan-card__cta">{t("renewCta")}</span>
             </button>
           );
         })}
@@ -504,7 +504,6 @@ export default function WifiPortal() {
           </div>
 
           <p className="wifi-checkout-section-title">{t("pawapayBlockTitle")}</p>
-          <p className="wifi-checkout-section-lead app-meta">{t("pawapayBlockLead")}</p>
           <form className="wifi-checkout-form" onSubmit={onStartPawapayPayment}>
             <div className="wifi-input-row">
               <span className="wifi-input-row__lead" aria-hidden="true">
@@ -513,12 +512,18 @@ export default function WifiPortal() {
               <input
                 id="wifi-checkout-phone"
                 autoComplete="tel"
+                inputMode="tel"
                 aria-label={t("phoneLabel")}
                 placeholder={t("phonePh")}
                 value={checkoutMm.phone}
                 onChange={(e) => setCheckoutMm({ ...checkoutMm, phone: e.target.value })}
               />
             </div>
+            {checkoutMm.phone.trim() ? (
+              <p className="wifi-checkout-phone-norm app-meta">
+                {t("phoneHint")}: {normalizeDrCongoMsisdn(checkoutMm.phone) || "..."}
+              </p>
+            ) : null}
             <div className="wifi-input-row">
               <span className="wifi-input-row__lead" aria-hidden="true">
                 <IconSignalBars width={20} height={20} />
@@ -541,20 +546,16 @@ export default function WifiPortal() {
               <span>{polling ? t("paying") : t("paySubmit")}</span>
             </button>
           </form>
-          {pawapayMethodDetails ? (
+          {pawapayMethodDetails?.instructions?.note ? (
             <p className="wifi-checkout-foot">
-              <small>
-                {pawapayMethodDetails.instructions?.collectionPoint ||
-                  pawapayMethodDetails.instructions?.mobileMoneyNumber ||
-                  pawapayMethodDetails.instructions?.note ||
-                  ""}
-              </small>
+              <small>{String(pawapayMethodDetails.instructions.note).replace(/pawapay/gi, "Mobile Money")}</small>
             </p>
           ) : null}
 
+          {alternateMethodOptions.length ? (
+            <>
           <hr className="wifi-checkout-split" />
           <p className="wifi-checkout-section-title">{t("alternateBlockTitle")}</p>
-          <p className="wifi-checkout-section-lead app-meta">{t("alternateBlockLead")}</p>
           <form className="wifi-checkout-form" onSubmit={onStartAlternatePayment}>
             <div className="wifi-input-row">
               <span className="wifi-input-row__lead" aria-hidden="true">
@@ -627,9 +628,8 @@ export default function WifiPortal() {
               </small>
             </p>
           ) : null}
-          <p className="wifi-checkout-foot">
-            <small>{t("payFoot")}</small>
-          </p>
+            </>
+          ) : null}
           {import.meta.env.DEV ? (
             <p>
               <small>API: {API_URL}</small>

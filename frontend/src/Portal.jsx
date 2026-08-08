@@ -10,6 +10,7 @@ import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { portalBrandTitle, portalInvoiceStatusLabel, portalT } from "./portalCopy.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 import { setIndependentPublicPageTitle, setWorkspaceTabTitle } from "./pageTitle.js";
+import { normalizeDrCongoMsisdn } from "./phoneNormalize.js";
 
 const SUBSCRIBER_JWT_KEY = "subscriberJwt";
 const DEFAULT_PAWAPAY_NETWORKS = [
@@ -28,7 +29,7 @@ function money(value, currency = "USD", lang = "fr") {
 
 function daysUntil(dateValue) {
   const t = new Date(dateValue).getTime();
-  if (!Number.isFinite(t)) return "—";
+  if (!Number.isFinite(t)) return "-";
   return Math.max(0, Math.ceil((t - Date.now()) / 86400000));
 }
 
@@ -303,7 +304,10 @@ export default function Portal() {
     try {
       const res = await portalFetch("/portal/mobile-money/initiate", auth, {
         method: "POST",
-        body: JSON.stringify(mobilePayForm)
+        body: JSON.stringify({
+          ...mobilePayForm,
+          phoneNumber: normalizeDrCongoMsisdn(mobilePayForm.phoneNumber)
+        })
       });
       setMobilePaySession(res);
       setNotice(res.message || t("noticeMobileSent"));
@@ -664,7 +668,7 @@ export default function Portal() {
                 .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
                 .map((inv) => (
                   <option key={inv.id} value={inv.id}>
-                    {inv.id.slice(0, 8)} — {inv.amountUsd}&nbsp;$ ({portalInvoiceStatusLabel(uiLang, inv.status)})
+                    {inv.id.slice(0, 8)} - {inv.amountUsd}&nbsp;$ ({portalInvoiceStatusLabel(uiLang, inv.status)})
                   </option>
                 ))}
             </select>
@@ -717,7 +721,7 @@ export default function Portal() {
                 .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
                 .map((inv) => (
                   <option key={inv.id} value={inv.id}>
-                    {inv.id.slice(0, 8)} — {inv.amountUsd}&nbsp;$ ({portalInvoiceStatusLabel(uiLang, inv.status)})
+                    {inv.id.slice(0, 8)} - {inv.amountUsd}&nbsp;$ ({portalInvoiceStatusLabel(uiLang, inv.status)})
                   </option>
                 ))}
             </select>

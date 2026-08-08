@@ -4121,7 +4121,7 @@ api.getPaymentNotifications(activeIspId)
               </div>
 
               <h4 className="app-meta" style={{ margin: "16px 0 8px", fontWeight: 700 }}>
-                {t("Mobile Money (PawaPay)", "Mobile Money (PawaPay)")}
+                {t("Mobile Money", "Mobile Money")}
               </h4>
               <p className="app-meta" style={{ marginBottom: 8 }}>
                 {t(
@@ -4161,7 +4161,7 @@ api.getPaymentNotifications(activeIspId)
                   ))}
                 </select>
                 <button type="submit" disabled={!selectedIspId || !pawaConfigured}>
-                  {t("Payer avec Mobile Money (PawaPay)", "Pay with Mobile Money (PawaPay)")}
+                  {t("Payer avec Mobile Money", "Pay with Mobile Money")}
                 </button>
               </form>
 

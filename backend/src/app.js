@@ -25,6 +25,7 @@ import {
   usdAmountString
 } from "./platformBilling.js";
 import { fetchPawapayDepositStatus, initiatePawapayDeposit, initiatePawapayPayout } from "./pawapayClient.js";
+import { isLikelyDrCongoMsisdn, normalizeDrCongoMsisdn } from "./phoneNormalize.js";
 import { processNotificationOutboxBatch, sendNotificationDirect } from "./notifications.js";
 import { provisionSubscriptionAccess } from "./networkProvisioning.js";
 import {
@@ -1914,7 +1915,7 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
         }
       : null;
   const allowedManualMethods = new Set(["cash", "bank_transfer", "visa_card", "crypto_wallet", "binance_pay"]);
-  const phone = String(phoneNumber || "").replace(/\s+/g, "").replace(/^\+/, "");
+  const phone = normalizeDrCongoMsisdn(phoneNumber);
   const manualRef = String(externalRef || "").trim().slice(0, 255);
   const planRow = await query(
     `SELECT p.id, p.isp_id AS "ispId", p.name, p.price_usd AS "priceUsd", p.duration_days AS "durationDays",
@@ -1987,6 +1988,11 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
   if (!phone || !networkKey) {
     return res.status(400).json({ message: "phoneNumber and networkKey are required for mobile_money." });
   }
+  if (!isLikelyDrCongoMsisdn(phone)) {
+    return res.status(400).json({
+      message: "Numéro invalide. Exemple: 0812345678 (converti en 243812345678)."
+    });
+  }
   const pawapayProvider = resolveWifiGuestPawapayProvider(networkKey);
   if (!pawapayProvider) {
     return res.status(400).json({ message: "networkKey must be one of: orange, airtel, mpesa" });
@@ -2008,9 +2014,9 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
   try {
     const pw = await initiatePawapayDeposit(body);
     if (pw.status !== "ACCEPTED" && pw.status !== "DUPLICATE_IGNORED") {
+      const failMsg = pw.failureReason?.failureMessage || "Le paiement Mobile Money n'a pas été accepté.";
       return res.status(400).json({
-        message: pw.failureReason?.failureMessage || "Pawapay did not accept this deposit",
-        pawapay: pw
+        message: String(failMsg).replace(/pawapay/gi, "Mobile Money")
       });
     }
     if (pw.status === "ACCEPTED") {
@@ -2050,17 +2056,17 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
     });
     return res.status(201).json({
       depositId,
-      pawapay: pw,
       amount,
       currency: "USD",
       redirectUrlAfterPayment: redirectUrl,
       message:
         pw.status === "ACCEPTED"
           ? "Confirm the payment on your phone. This page will redirect when payment is confirmed."
-          : "Duplicate request ignored by Pawapay."
+          : "Request already received. Confirm on your phone if prompted."
     });
   } catch (err) {
-    return res.status(400).json({ message: err.message || "Pawapay initiation failed" });
+    const msg = String(err.message || "Mobile Money initiation failed").replace(/pawapay/gi, "Mobile Money");
+    return res.status(400).json({ message: msg });
   }
 });
 
@@ -2101,7 +2107,6 @@ app.get("/api/public/wifi-purchase/status/:depositId", rlWifiStatus, async (req,
         );
         return res.json({
           status: "completed",
-          pawapay: pw,
           redirectUrl: done.redirectUrl || row.redirectUrl,
           subscriptionId: done.subscriptionId,
           setupToken: done.setupToken || null
@@ -2118,11 +2123,11 @@ app.get("/api/public/wifi-purchase/status/:depositId", rlWifiStatus, async (req,
          WHERE source_table = 'wifi_guest_purchases' AND source_id = $1::uuid`,
         [row.id]
       );
-      return res.json({ status: "failed", pawapay: pw });
+      return res.json({ status: "failed" });
     }
-    return res.json({ status: "pending", pawapay: pw });
+    return res.json({ status: "pending" });
   } catch (err) {
-    return res.json({ status: "pending", pawapayError: err.message });
+    return res.json({ status: "pending" });
   }
 });
 
@@ -2379,7 +2384,12 @@ app.post("/api/portal/mobile-money/initiate", authenticatePortal, async (req, re
     return res.status(400).json({ message: "This invoice is not open for Mobile Money payment" });
   }
   const depositId = uuidv4();
-  const phone = String(phoneNumber).replace(/\s+/g, "").replace(/^\+/, "");
+  const phone = normalizeDrCongoMsisdn(phoneNumber);
+  if (!isLikelyDrCongoMsisdn(phone)) {
+    return res.status(400).json({
+      message: "Numéro invalide. Exemple: 0812345678 (converti en 243812345678)."
+    });
+  }
   const amount = cur === "USD" ? usdAmountString(invoice.amount_usd) : cdfAmountForUsd(invoice.amount_usd);
   try {
     await query(

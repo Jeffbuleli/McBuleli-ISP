@@ -5019,6 +5019,35 @@ button.wifi-plan-card:focus-visible {
   color: var(--mb-muted);
 }
 
+.wifi-plan-card--renew {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 168px;
+}
+
+.wifi-plan-card__name {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--mb-text);
+}
+
+.wifi-plan-card__cta {
+  margin-top: auto;
+  align-self: flex-start;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #2f7439;
+}
+
+.wifi-checkout-phone-norm {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+}
+
 .wifi-checkout-backdrop {
   position: fixed;
   inset: 0;

@@ -1378,6 +1378,41 @@ export async function initDb() {
     [demoIspId]
   );
 
+  // Two published guest Wi-Fi catalog examples for demo@mcbuleli.live
+  await query(
+    `INSERT INTO plans (
+       id, isp_id, name, price_usd, duration_days, rate_limit, speed_label,
+       default_access_type, max_devices, is_published, availability_status
+     )
+     SELECT $2::uuid, $1::uuid, 'Accès jour', 1.00, 1, '5M/5M', '5 Mbps',
+            'hotspot', 1, TRUE, 'available'
+     WHERE NOT EXISTS (
+       SELECT 1 FROM plans WHERE isp_id = $1::uuid AND name = 'Accès jour'
+     )`,
+    [demoIspId, "00000000-0000-4000-8000-000000000201"]
+  );
+  await query(
+    `INSERT INTO plans (
+       id, isp_id, name, price_usd, duration_days, rate_limit, speed_label,
+       default_access_type, max_devices, is_published, availability_status
+     )
+     SELECT $2::uuid, $1::uuid, 'Accès semaine', 5.00, 7, '10M/10M', '10 Mbps',
+            'hotspot', 2, TRUE, 'available'
+     WHERE NOT EXISTS (
+       SELECT 1 FROM plans WHERE isp_id = $1::uuid AND name = 'Accès semaine'
+     )`,
+    [demoIspId, "00000000-0000-4000-8000-000000000207"]
+  );
+  await query(
+    `INSERT INTO isp_payment_methods (id, isp_id, method_type, provider_name, is_active)
+     SELECT gen_random_uuid(), $1::uuid, 'mobile_money', 'Mobile Money', TRUE
+     WHERE NOT EXISTS (
+       SELECT 1 FROM isp_payment_methods
+       WHERE isp_id = $1::uuid AND method_type = 'mobile_money' AND is_active = TRUE
+     )`,
+    [demoIspId]
+  );
+
   await query(`
     INSERT INTO platform_packages (id, code, name, monthly_price_usd, feature_flags) VALUES
       (gen_random_uuid(), 'essential', 'Essential', 10,
