@@ -5,9 +5,15 @@ const PAWAPAY_API_TOKEN = process.env.PAWAPAY_API_TOKEN || "";
  * Initiate a mobile-money deposit (funds move from customer wallet to your Pawapay wallet).
  * @param {object} body - Pawapay DepositInitiationRequest (depositId, amount, currency, payer, ...)
  */
+function missingTokenError() {
+  const err = new Error("Mobile Money payment is temporarily unavailable. Please try again later.");
+  err.code = "MM_NOT_CONFIGURED";
+  return err;
+}
+
 export async function initiatePawapayDeposit(body) {
   if (!PAWAPAY_API_TOKEN) {
-    throw new Error("PAWAPAY_API_TOKEN is not configured");
+    throw missingTokenError();
   }
   const response = await fetch(`${PAWAPAY_API_BASE}/v2/deposits`, {
     method: "POST",
@@ -22,7 +28,7 @@ export async function initiatePawapayDeposit(body) {
     const msg =
       data?.failureReason?.failureMessage ||
       data?.message ||
-      `Pawapay request failed (${response.status})`;
+      `Mobile Money request failed (${response.status})`;
     throw new Error(msg);
   }
   return data;
@@ -30,7 +36,7 @@ export async function initiatePawapayDeposit(body) {
 
 export async function fetchPawapayDepositStatus(depositId) {
   if (!PAWAPAY_API_TOKEN) {
-    throw new Error("PAWAPAY_API_TOKEN is not configured");
+    throw missingTokenError();
   }
   const response = await fetch(`${PAWAPAY_API_BASE}/v2/deposits/${encodeURIComponent(depositId)}`, {
     method: "GET",
@@ -43,7 +49,7 @@ export async function fetchPawapayDepositStatus(depositId) {
     const msg =
       data?.failureReason?.failureMessage ||
       data?.message ||
-      `Pawapay status check failed (${response.status})`;
+      `Mobile Money status check failed (${response.status})`;
     throw new Error(msg);
   }
   if (data?.status === "FOUND" && data?.data && typeof data.data === "object") {
@@ -54,7 +60,7 @@ export async function fetchPawapayDepositStatus(depositId) {
 
 export async function initiatePawapayPayout(body) {
   if (!PAWAPAY_API_TOKEN) {
-    throw new Error("PAWAPAY_API_TOKEN is not configured");
+    throw missingTokenError();
   }
   const response = await fetch(`${PAWAPAY_API_BASE}/v2/payouts`, {
     method: "POST",
@@ -69,7 +75,7 @@ export async function initiatePawapayPayout(body) {
     const msg =
       data?.failureReason?.failureMessage ||
       data?.message ||
-      `Pawapay payout request failed (${response.status})`;
+      `Mobile Money payout request failed (${response.status})`;
     throw new Error(msg);
   }
   return data;

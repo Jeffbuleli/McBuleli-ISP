@@ -493,14 +493,10 @@ export default function WifiPortal() {
             <p id="wifi-checkout-summary" className="wifi-checkout-modal__summary">
               <span className="visually-hidden">{selectedPlan.name}. </span>
               <strong className="wifi-checkout-modal__amount">
-                {selectedPlan.priceUsd}&nbsp;$ · {selectedPlan.durationDays}{" "}
+                {selectedPlan.priceUsd}&nbsp;$ - {selectedPlan.durationDays}{" "}
                 {selectedPlan.durationDays === 1 ? t("daySingular") : t("dayPlural")}
               </strong>
             </p>
-          </div>
-
-          <div className="wifi-checkout-pay-head" role="group" aria-label={t("payTitle")}>
-            <IconWallet width={22} height={22} aria-hidden />
           </div>
 
           <p className="wifi-checkout-section-title">{t("pawapayBlockTitle")}</p>
@@ -519,9 +515,11 @@ export default function WifiPortal() {
                 onChange={(e) => setCheckoutMm({ ...checkoutMm, phone: e.target.value })}
               />
             </div>
-            {checkoutMm.phone.trim() ? (
+            {checkoutMm.phone.trim() &&
+            normalizeDrCongoMsisdn(checkoutMm.phone) !==
+              String(checkoutMm.phone).replace(/\D/g, "").replace(/^00/, "") ? (
               <p className="wifi-checkout-phone-norm app-meta">
-                {t("phoneHint")}: {normalizeDrCongoMsisdn(checkoutMm.phone) || "..."}
+                {normalizeDrCongoMsisdn(checkoutMm.phone)}
               </p>
             ) : null}
             <div className="wifi-input-row">

@@ -123,6 +123,19 @@ function normalizeMethodType(value) {
     .toLowerCase();
 }
 
+/** Public-facing Mobile Money errors: no env var names, no gateway brand. */
+function publicMobileMoneyError(raw) {
+  const msg = String(raw || "").trim();
+  if (!msg) return "Paiement Mobile Money indisponible. Réessayez plus tard.";
+  if (/not configured|MM_NOT_CONFIGURED|API_TOKEN/i.test(msg)) {
+    return "Paiement Mobile Money indisponible. Réessayez plus tard.";
+  }
+  return msg
+    .replace(/PAWAPAY[_A-Z0-9]*/gi, "Mobile Money")
+    .replace(/\bpawapay\b/gi, "Mobile Money")
+    .replace(/Mobile Money_API_TOKEN/gi, "Mobile Money");
+}
+
 const FINANCE_TIERS = {
   L1: "L1",
   L2: "L2",
@@ -2016,7 +2029,7 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
     if (pw.status !== "ACCEPTED" && pw.status !== "DUPLICATE_IGNORED") {
       const failMsg = pw.failureReason?.failureMessage || "Le paiement Mobile Money n'a pas été accepté.";
       return res.status(400).json({
-        message: String(failMsg).replace(/pawapay/gi, "Mobile Money")
+        message: publicMobileMoneyError(failMsg)
       });
     }
     if (pw.status === "ACCEPTED") {
@@ -2065,8 +2078,7 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
           : "Request already received. Confirm on your phone if prompted."
     });
   } catch (err) {
-    const msg = String(err.message || "Mobile Money initiation failed").replace(/pawapay/gi, "Mobile Money");
-    return res.status(400).json({ message: msg });
+    return res.status(400).json({ message: publicMobileMoneyError(err.message || "Mobile Money initiation failed") });
   }
 });
 
