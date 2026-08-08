@@ -8,7 +8,7 @@ export async function markWifiGuestPurchaseFailed(depositId) {
   await query(
     `UPDATE wifi_guest_purchases
      SET status = 'failed', completed_at = NOW()
-     WHERE deposit_id = $1::uuid AND status = 'pending'`,
+     WHERE deposit_id = $1::uuid AND status IN ('pending', 'pending_manual')`,
     [depositId]
   );
 }
@@ -226,11 +226,12 @@ export async function completeWifiGuestPurchase(depositId) {
       setupToken: r.subscriberSetupToken || null
     };
   }
-  if (r.status !== "pending") {
+  if (r.status !== "pending" && r.status !== "pending_manual") {
     return { ok: false, reason: "not_pending" };
   }
 
   const { purchaseId, ispId, planId, phone, redirectUrl } = r;
+  const payMethod = r.status === "pending_manual" ? "manual" : "pawapay";
 
   try {
     const plan = await query(
@@ -243,56 +244,86 @@ export async function completeWifiGuestPurchase(depositId) {
     }
     const p = plan.rows[0];
     const accessType = p.defaultAccessType === "hotspot" ? "hotspot" : "pppoe";
+    const phoneKey = String(phone || "").trim() || "manual";
 
     let customer = await query(
       `SELECT id FROM customers WHERE isp_id = $1 AND phone = $2 LIMIT 1`,
-      [ispId, phone]
+      [ispId, phoneKey]
     );
     let customerId;
     if (customer.rows[0]) {
       customerId = customer.rows[0].id;
     } else {
-      const guestName = `Wi‑Fi guest ${phone.slice(-4)}`;
+      const guestName = `Wi‑Fi guest ${phoneKey.slice(-4)}`;
       const ins = await query(
         `INSERT INTO customers (id, isp_id, full_name, phone, status)
          VALUES (gen_random_uuid(), $1, $2, $3, 'active')
          RETURNING id`,
-        [ispId, guestName, phone]
+        [ispId, guestName, phoneKey]
       );
       customerId = ins.rows[0].id;
     }
 
     const now = new Date();
-    const endDate = new Date(now);
-    endDate.setDate(endDate.getDate() + Number(p.duration_days));
-
+    const durationDays = Number(p.duration_days) || 0;
+    const extendMs = durationDays * 86400000;
     const maxDev = Math.max(1, Number(p.maxDevices) || 1);
-    const subIns = await query(
-      `INSERT INTO subscriptions (id, isp_id, customer_id, plan_id, status, access_type, start_date, end_date, max_simultaneous_devices)
-       VALUES (gen_random_uuid(), $1, $2, $3, 'active', $4, $5, $6, $7)
-       RETURNING id`,
-      [ispId, customerId, planId, accessType, now.toISOString(), endDate.toISOString(), maxDev]
-    );
-    const subscriptionId = subIns.rows[0].id;
 
-    const invIns = await query(
-      `INSERT INTO invoices (id, isp_id, subscription_id, customer_id, amount_usd, status, due_date)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, 'paid', $5)
-       RETURNING id`,
-      [ispId, subscriptionId, customerId, Number(p.price_usd), endDate.toISOString()]
+    const activeSub = await query(
+      `SELECT id, end_date AS "endDate" FROM subscriptions
+       WHERE customer_id = $1 AND isp_id = $2 AND status = 'active'
+       ORDER BY end_date DESC LIMIT 1`,
+      [customerId, ispId]
     );
-    const invoiceId = invIns.rows[0].id;
+
+    let subscriptionId = null;
+    let invoiceId = null;
+    if (activeSub.rows[0]) {
+      subscriptionId = activeSub.rows[0].id;
+      const curEnd = new Date(activeSub.rows[0].endDate);
+      const base = curEnd.getTime() > now.getTime() ? curEnd : now;
+      const newEnd = new Date(base.getTime() + extendMs);
+      await query(
+        `UPDATE subscriptions
+         SET end_date = $1, max_simultaneous_devices = $2, plan_id = $3, status = 'active'
+         WHERE id = $4`,
+        [newEnd.toISOString(), maxDev, planId, subscriptionId]
+      );
+      const invIns = await query(
+        `INSERT INTO invoices (id, isp_id, subscription_id, customer_id, amount_usd, status, due_date)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, 'paid', $5)
+         RETURNING id`,
+        [ispId, subscriptionId, customerId, Number(p.price_usd), newEnd.toISOString()]
+      );
+      invoiceId = invIns.rows[0].id;
+    } else {
+      const endDate = new Date(now.getTime() + extendMs);
+      const subIns = await query(
+        `INSERT INTO subscriptions (id, isp_id, customer_id, plan_id, status, access_type, start_date, end_date, max_simultaneous_devices)
+         VALUES (gen_random_uuid(), $1, $2, $3, 'active', $4, $5, $6, $7)
+         RETURNING id`,
+        [ispId, customerId, planId, accessType, now.toISOString(), endDate.toISOString(), maxDev]
+      );
+      subscriptionId = subIns.rows[0].id;
+      const invIns = await query(
+        `INSERT INTO invoices (id, isp_id, subscription_id, customer_id, amount_usd, status, due_date)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, 'paid', $5)
+         RETURNING id`,
+        [ispId, subscriptionId, customerId, Number(p.price_usd), endDate.toISOString()]
+      );
+      invoiceId = invIns.rows[0].id;
+    }
 
     await query(
       `INSERT INTO payments (id, isp_id, invoice_id, provider_ref, amount_usd, status, method)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, 'confirmed', 'pawapay')`,
-      [ispId, invoiceId, `pawapay-deposit-${depositId}`, Number(p.price_usd)]
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, 'confirmed', $5)`,
+      [ispId, invoiceId, `${payMethod}-deposit-${depositId}`, Number(p.price_usd), payMethod]
     );
 
     const fin = await query(
       `UPDATE wifi_guest_purchases
        SET status = 'completed', subscription_id = $1, customer_id = $2, completed_at = NOW()
-       WHERE id = $3 AND status = 'pending'
+       WHERE id = $3 AND status IN ('pending', 'pending_manual')
        RETURNING id`,
       [subscriptionId, customerId, purchaseId]
     );

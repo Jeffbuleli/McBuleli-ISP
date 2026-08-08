@@ -1954,6 +1954,11 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
     if (!manualRef) {
       return res.status(400).json({ message: "externalRef is required for manual checkout methods." });
     }
+    if (!phone || !isLikelyDrCongoMsisdn(phone)) {
+      return res.status(400).json({
+        message: "Numéro invalide. Exemple: 0812345678 (converti en 243812345678)."
+      });
+    }
     const activeMethod = await query(
       `SELECT id
        FROM isp_payment_methods
@@ -1969,7 +1974,18 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
        (id, isp_id, plan_id, deposit_id, phone, pawapay_provider, currency, amount, status, redirect_url, method_type, external_ref, payer_contact)
        VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, 'USD', $6, 'pending_manual', $7, $8, $9, $10)
        RETURNING id`,
-      [ispId, planId, depositId, String(payerContact || phone || "manual").slice(0, 64), resolvedMethodType, amount, redirectUrl, resolvedMethodType, manualRef, String(payerContact || "").slice(0, 255)]
+      [
+        ispId,
+        planId,
+        depositId,
+        phone,
+        resolvedMethodType,
+        amount,
+        redirectUrl,
+        resolvedMethodType,
+        manualRef,
+        String(payerContact || phone).slice(0, 255)
+      ]
     );
     await logAudit({
       ispId,
@@ -1996,6 +2012,7 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
       currency: "USD",
       methodType: resolvedMethodType,
       status: "pending_manual",
+      redirectUrlAfterPayment: redirectUrl,
       message: "Reference sent. ISP team will validate and activate your access."
     });
   }
@@ -2033,26 +2050,32 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
         message: publicMobileMoneyError(failMsg)
       });
     }
-    if (pw.status === "ACCEPTED") {
-      const mobilePurchase = await query(
-        `INSERT INTO wifi_guest_purchases
-         (id, isp_id, plan_id, deposit_id, phone, pawapay_provider, currency, amount, status, redirect_url, method_type)
-         VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, 'USD', $6, 'pending', $7, 'mobile_money')
-         RETURNING id`,
-        [ispId, planId, depositId, phone, pawapayProvider, amount, redirectUrl]
+    if (pw.status === "ACCEPTED" || pw.status === "DUPLICATE_IGNORED") {
+      const existingPurchase = await query(
+        `SELECT id FROM wifi_guest_purchases WHERE deposit_id = $1::uuid LIMIT 1`,
+        [depositId]
       );
-      await createUnifiedPaymentRecord({
-        ispId,
-        scope: "B2C_GUEST_WIFI",
-        sourceTable: "wifi_guest_purchases",
-        sourceId: mobilePurchase.rows[0].id,
-        methodType: "mobile_money",
-        amountUsd: Number(amount || 0),
-        tid: depositId,
-        note: "Guest Wi-Fi mobile money checkout",
-        status: "PENDING",
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-      });
+      if (!existingPurchase.rows[0]) {
+        const mobilePurchase = await query(
+          `INSERT INTO wifi_guest_purchases
+           (id, isp_id, plan_id, deposit_id, phone, pawapay_provider, currency, amount, status, redirect_url, method_type)
+           VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, $5, 'USD', $6, 'pending', $7, 'mobile_money')
+           RETURNING id`,
+          [ispId, planId, depositId, phone, pawapayProvider, amount, redirectUrl]
+        );
+        await createUnifiedPaymentRecord({
+          ispId,
+          scope: "B2C_GUEST_WIFI",
+          sourceTable: "wifi_guest_purchases",
+          sourceId: mobilePurchase.rows[0].id,
+          methodType: "mobile_money",
+          amountUsd: Number(amount || 0),
+          tid: depositId,
+          note: "Guest Wi-Fi mobile money checkout",
+          status: "PENDING",
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        });
+      }
     }
     await logAudit({
       ispId,
@@ -6127,6 +6150,17 @@ app.post(
          WHERE id = $3::uuid`,
         [req.user.sub, note || null, paymentId]
       );
+      if (payment.scope === "B2C_GUEST_WIFI" && payment.source_table === "wifi_guest_purchases" && payment.source_id) {
+        const guestDep = await query(
+          `SELECT deposit_id AS "depositId"
+           FROM wifi_guest_purchases
+           WHERE id = $1::uuid AND isp_id = $2`,
+          [payment.source_id, ispId]
+        );
+        if (guestDep.rows[0]?.depositId) {
+          await markWifiGuestPurchaseFailed(guestDep.rows[0].depositId);
+        }
+      }
       await createUnifiedPaymentNotification({
         ispId,
         customerId: payment.customer_id,
@@ -6561,7 +6595,7 @@ app.post(
   async (req, res) => {
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
-    const { planId, quantity = 1, maxDevices: maxDevicesBody } = req.body;
+    const { planId, quantity = 1, maxDevices: maxDevicesBody, replaceUnused = false } = req.body;
     if (!planId) return res.status(400).json({ message: "planId is required" });
     const planResult = await query(
       "SELECT id, rate_limit, duration_days, max_devices FROM plans WHERE id = $1 AND isp_id = $2",
@@ -6573,16 +6607,39 @@ app.post(
     const requested = maxDevicesBody != null ? Number(maxDevicesBody) : planCap;
     const maxDevices = Math.min(planCap, Math.max(1, Number.isFinite(requested) ? requested : planCap));
     const qty = Math.min(Math.max(Number(quantity), 1), 100);
+    let replaced = 0;
+    if (replaceUnused) {
+      const expired = await query(
+        `UPDATE access_vouchers
+         SET status = 'expired'
+         WHERE isp_id = $1 AND plan_id = $2 AND status = 'unused'
+         RETURNING id`,
+        [ispId, plan.id]
+      );
+      replaced = expired.rowCount || 0;
+    }
     const created = [];
     for (let i = 0; i < qty; i += 1) {
-      const code = `VCH-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
-      const row = await query(
-        `INSERT INTO access_vouchers (id, isp_id, plan_id, code, rate_limit, duration_days, status, created_by, expires_at, max_devices)
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'unused', $6, NOW() + INTERVAL '90 days', $7)
-         RETURNING id, code, rate_limit AS "rateLimit", duration_days AS "durationDays", max_devices AS "maxDevices",
-                   status, expires_at AS "expiresAt"`,
-        [ispId, plan.id, code, plan.rate_limit, plan.duration_days, req.user.sub, maxDevices]
-      );
+      let code = "";
+      let row = null;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        code = `VCH-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+        try {
+          row = await query(
+            `INSERT INTO access_vouchers (id, isp_id, plan_id, code, rate_limit, duration_days, status, created_by, expires_at, max_devices)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'unused', $6, NOW() + INTERVAL '90 days', $7)
+             RETURNING id, code, rate_limit AS "rateLimit", duration_days AS "durationDays", max_devices AS "maxDevices",
+                       status, expires_at AS "expiresAt"`,
+            [ispId, plan.id, code, plan.rate_limit, plan.duration_days, req.user.sub, maxDevices]
+          );
+          break;
+        } catch (err) {
+          if (String(err?.code) !== "23505") throw err;
+        }
+      }
+      if (!row?.rows?.[0]) {
+        return res.status(500).json({ message: "Could not generate unique voucher codes" });
+      }
       created.push(row.rows[0]);
     }
     await logAudit({
@@ -6590,7 +6647,7 @@ app.post(
       actorUserId: req.user.sub,
       action: "voucher.generated",
       entityType: "voucher_batch",
-      details: { planId, quantity: qty, rateLimit: plan.rate_limit, maxDevices }
+      details: { planId, quantity: qty, rateLimit: plan.rate_limit, maxDevices, replaceUnused: Boolean(replaceUnused), replaced }
     });
     return res.status(201).json(created);
   }

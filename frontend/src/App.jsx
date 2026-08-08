@@ -1482,7 +1482,8 @@ function App() {
   const [voucherForm, setVoucherForm] = useState({
     planId: "",
     quantity: 1,
-    maxDevices: ""
+    maxDevices: "",
+    replaceUnused: false
   });
   const [voucherRedeemForm, setVoucherRedeemForm] = useState({
     code: "",
@@ -3615,15 +3616,28 @@ api.getPaymentNotifications(activeIspId)
 
   async function onGenerateVouchers(e) {
     e.preventDefault();
-    await api.generateVouchers(selectedIspId, {
+    if (!voucherForm.planId) {
+      setError(t("Choisissez une formule.", "Select a plan."));
+      return;
+    }
+    const created = await api.generateVouchers(selectedIspId, {
       planId: voucherForm.planId,
       quantity: Number(voucherForm.quantity || 1),
+      replaceUnused: Boolean(voucherForm.replaceUnused),
       ...(voucherForm.maxDevices !== "" && voucherForm.maxDevices != null
         ? { maxDevices: Number(voucherForm.maxDevices) }
         : {})
     });
-    setNotice("Bons générés avec succès.");
-    setVoucherForm({ planId: "", quantity: 1, maxDevices: "" });
+    const n = Array.isArray(created) ? created.length : 0;
+    setNotice(
+      voucherForm.replaceUnused
+        ? t(
+            `${n} bon(s) régénéré(s) - anciens inutilisés invalidés.`,
+            `${n} voucher(s) regenerated - previous unused codes invalidated.`
+          )
+        : t(`${n} bon(s) généré(s) avec succès.`, `${n} voucher(s) generated successfully.`)
+    );
+    setVoucherForm({ planId: voucherForm.planId, quantity: 1, maxDevices: "", replaceUnused: false });
     refresh();
   }
 
@@ -7745,8 +7759,23 @@ api.getPaymentNotifications(activeIspId)
               style={{ marginLeft: 8, width: 120 }}
             />
           </label>
-          <button type="submit" disabled={!selectedIspId}>
-            {t("Générer les bons", "Generate vouchers")}
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <input
+              type="checkbox"
+              checked={Boolean(voucherForm.replaceUnused)}
+              onChange={(e) => setVoucherForm({ ...voucherForm, replaceUnused: e.target.checked })}
+            />
+            <span>
+              {t(
+                "Régénérer: invalider les bons inutilisés de cette formule",
+                "Regenerate: invalidate unused vouchers for this plan"
+              )}
+            </span>
+          </label>
+          <button type="submit" disabled={!selectedIspId || !voucherForm.planId}>
+            {voucherForm.replaceUnused
+              ? t("Régénérer les bons", "Regenerate vouchers")
+              : t("Générer les bons", "Generate vouchers")}
           </button>
           <button type="button" onClick={onPrintVouchers} disabled={!selectedIspId}>
             {t("Imprimer les bons inutilisés", "Print unused vouchers")}

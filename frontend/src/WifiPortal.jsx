@@ -75,6 +75,7 @@ export default function WifiPortal() {
   const [checkoutAlt, setCheckoutAlt] = useState({
     methodType: "bank_transfer",
     externalRef: "",
+    phone: "",
     payerContact: ""
   });
   const [checkoutMode, setCheckoutMode] = useState("mm");
@@ -206,19 +207,21 @@ export default function WifiPortal() {
       setError(t("errRef"));
       return;
     }
+    const phone = normalizeDrCongoMsisdn(checkoutAlt.phone || checkoutMm.phone);
+    if (!isLikelyDrCongoMsisdn(phone)) {
+      setError(t("errPhone"));
+      return;
+    }
     try {
       const res = await initiateWifiPurchase(methodType, {
+        phoneNumber: phone,
         externalRef: checkoutAlt.externalRef,
-        payerContact: checkoutAlt.payerContact || undefined
+        payerContact: checkoutAlt.payerContact || phone
       });
       setDepositId(res.depositId);
       setRedirectUrl(res.redirectUrlAfterPayment || "https://www.google.com");
-      setNotice(res.message || t("noticePhone"));
-      if (res.status === "pending_manual") {
-        setPolling(false);
-      } else {
-        setPolling(false);
-      }
+      setNotice(res.message || t("noticeManualPending"));
+      setPolling(true);
     } catch (err) {
       setError(wifiErr(err.message || t("errPayStart")));
     }
@@ -250,6 +253,7 @@ export default function WifiPortal() {
         method: "POST",
         body: JSON.stringify({
           ispId: activeIspId,
+          planId: selectedPlan.id,
           code,
           phoneNumber: phone,
           newPassword: password
@@ -257,11 +261,11 @@ export default function WifiPortal() {
       });
       const nextUrl = res.redirectUrl || "https://www.google.com";
       setSelectedPlan(null);
+      setNotice(t("voucherOk"));
       if (res.setupToken) {
         setPostPaySetup({ setupToken: res.setupToken, redirectUrl: nextUrl });
         setNotice(t("noticePostPay"));
       } else {
-        setNotice(t("voucherOk"));
         window.setTimeout(() => {
           window.location.href = nextUrl;
         }, 700);
@@ -292,12 +296,16 @@ export default function WifiPortal() {
           clearInterval(pollTimer);
           if (!cancelled) {
             setPolling(false);
+            setSelectedPlan(null);
             const nextUrl = st.redirectUrl || redirectUrl || "https://www.google.com";
             if (st.setupToken) {
               setPostPaySetup({ setupToken: st.setupToken, redirectUrl: nextUrl });
               setNotice(wifiT(uiLang, "noticePostPay"));
             } else {
-              window.location.href = nextUrl;
+              setNotice(wifiT(uiLang, "noticeRedirecting"));
+              window.setTimeout(() => {
+                window.location.href = nextUrl;
+              }, 500);
             }
           }
         }
@@ -305,6 +313,7 @@ export default function WifiPortal() {
           clearInterval(pollTimer);
           if (!cancelled) {
             setPolling(false);
+            setSelectedPlan(null);
             setError(wifiT(uiLang, "errPayFailed"));
           }
         }
@@ -632,6 +641,19 @@ export default function WifiPortal() {
                           <IconSmartphone width={18} height={18} />
                         </span>
                         <input
+                          autoComplete="tel"
+                          inputMode="tel"
+                          aria-label={t("phoneLabel")}
+                          placeholder={t("phonePh")}
+                          value={checkoutAlt.phone}
+                          onChange={(e) => setCheckoutAlt({ ...checkoutAlt, phone: e.target.value })}
+                        />
+                      </div>
+                      <div className="wifi-input-row">
+                        <span className="wifi-input-row__lead" aria-hidden="true">
+                          <IconSmartphone width={18} height={18} />
+                        </span>
+                        <input
                           autoComplete="off"
                           aria-label={t("reference")}
                           placeholder={t("referencePh")}
@@ -642,7 +664,11 @@ export default function WifiPortal() {
                       <button
                         type="submit"
                         className="wifi-pay-submit wifi-pay-submit--secondary"
-                        disabled={polling || !String(checkoutAlt.externalRef || "").trim()}
+                        disabled={
+                          polling ||
+                          !String(checkoutAlt.externalRef || "").trim() ||
+                          !String(checkoutAlt.phone || "").trim()
+                        }
                       >
                         <span>{t("alternateSubmit")}</span>
                       </button>
