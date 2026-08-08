@@ -271,7 +271,7 @@ export default function WifiPortal() {
   );
 
   const brandName = wifiDisplayName(branding?.displayName, uiLang);
-  const accent = branding?.primaryColor || "#63b38f";
+  const accent = branding?.primaryColor || "#2f7439";
   const phoneNorm = normalizeDrCongoMsisdn(checkoutMm.phone);
   const phoneRawDigits = String(checkoutMm.phone).replace(/\D/g, "").replace(/^00/, "");
   const showPhoneNorm = Boolean(checkoutMm.phone.trim() && phoneNorm && phoneNorm !== phoneRawDigits);

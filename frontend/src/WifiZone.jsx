@@ -158,7 +158,7 @@ export default function WifiZone() {
               <HomeShortcut
                 title={t("Retour à l'accueil", "Back to homepage")}
                 idPrefix="wifi-zone"
-                className="btn-icon-toolbar--compact"
+                className="app-home-shortcut"
               />
             </div>
           </div>

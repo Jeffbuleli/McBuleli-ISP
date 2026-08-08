@@ -1985,12 +1985,39 @@ a:hover {
 
 .home-shortcut__icon {
   color: currentColor;
+  flex-shrink: 0;
+}
+
+.home-shortcut__label {
+  display: none;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 .app-home-shortcut {
-  width: 42px;
-  height: 42px;
+  width: auto;
+  min-width: 52px;
+  height: 48px;
+  padding: 0 14px;
+  gap: 8px;
   border-radius: 12px;
+  font-weight: 750;
+  background: #2f7439 !important;
+  border: 1px solid rgba(197, 228, 201, 0.55) !important;
+  color: #f4fff6 !important;
+  box-shadow: 0 8px 22px rgba(47, 116, 57, 0.32) !important;
+}
+
+.app-home-shortcut:hover {
+  background: #3a8a46 !important;
+  border-color: #c5e4c7 !important;
+  color: #fff !important;
+}
+
+.app-home-shortcut .home-shortcut__label {
+  display: inline;
 }
 
 .dashboard-ad-slot {
@@ -3142,8 +3169,8 @@ button.btn-secondary-outline:hover:not(:disabled) {
   justify-content: center;
 }
 
-.app-footer-powered .mcbuleli-powered-line__text {
-  font-size: 0.82rem;
+.app-footer-powered .mcbuleli-powered-line__prefix {
+  font-size: 0.78rem;
   letter-spacing: normal;
   text-transform: none;
   opacity: 0.92;
@@ -3151,7 +3178,7 @@ button.btn-secondary-outline:hover:not(:disabled) {
 }
 
 .app-footer-powered .mcbuleli-powered-line__brand {
-  color: var(--mb-text);
+  color: #305f33;
 }
 
 .app-footer-brand {
@@ -4209,20 +4236,18 @@ body:has(.auth-simple--dark) {
   margin: -2px auto 14px;
 }
 
-.auth-simple--dark .auth-simple-powered-by .mcbuleli-powered-line__text {
-  font-size: 0.8rem;
-  color: #aeb4bf;
+.auth-simple--dark .auth-simple-powered-by .mcbuleli-powered-line__prefix {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .auth-simple--dark .auth-simple-powered-by .mcbuleli-powered-line__brand {
-  color: #e8eaef;
+  color: #c5e4c7;
 }
 
-.auth-simple--dark .auth-simple-powered-by .mcbuleli-powered-line__logo {
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 2px;
-  box-sizing: border-box;
+.auth-simple--dark .auth-simple-powered-by .mcbuleli-powered-line__mark {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .auth-simple--dark .auth-simple-sub,
@@ -4268,8 +4293,8 @@ body:has(.auth-simple--dark) {
 }
 
 .auth-simple--dark .auth-simple-panel button[type="submit"] {
-  background: #63b38f;
-  color: #0a0a0a;
+  background: #2f7439;
+  color: #f4fff6;
   font-weight: 750;
   border: none;
   border-radius: 12px;
@@ -5795,7 +5820,7 @@ a.public-footer-card:hover {
   object-position: center;
 }
 
-/* Ligne compacte McBuleli — logo petit + texte harmonisé (portails, auth, pied de page) */
+/* Powered by (logo) McBuleli → X — same pattern as mcbuleli.org */
 .mcbuleli-powered-line {
   display: flex;
   align-items: center;
@@ -5804,10 +5829,22 @@ a.public-footer-card:hover {
   gap: 8px;
 }
 
-.mcbuleli-powered-line__logo {
+.mcbuleli-powered-line__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: transparent;
   flex-shrink: 0;
+}
+
+.mcbuleli-powered-line__logo {
   display: block;
-  border-radius: 8px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
 }
 
@@ -5819,11 +5856,22 @@ a.public-footer-card:hover {
 }
 
 .mcbuleli-powered-line__prefix {
-  font-weight: 400;
+  font-weight: 500;
+  font-size: 0.78rem;
+  color: var(--mb-muted);
 }
 
 .mcbuleli-powered-line__brand {
-  font-weight: 700;
+  font-weight: 800;
+  font-size: 0.88rem;
+  color: #305f33;
+  text-decoration: none;
+}
+
+.mcbuleli-powered-line__brand:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: #254a28;
 }
 
 .mcbuleli-site-footer {
@@ -5857,21 +5905,25 @@ a.public-footer-card:hover {
   color: #aeb4bf;
 }
 
-.portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__text,
-.wifi-portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__text {
-  color: #aeb4bf;
+.portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__prefix,
+.wifi-portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__prefix {
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__brand,
 .wifi-portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__brand {
-  color: #e4e8ee;
+  color: #c5e4c7;
 }
 
-.portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__logo,
-.wifi-portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__logo {
-  background: rgba(255, 255, 255, 0.06);
-  padding: 2px;
-  box-sizing: border-box;
+.portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__brand:hover,
+.wifi-portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__brand:hover {
+  color: #e2f5e4;
+}
+
+.portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__mark,
+.wifi-portal-page--dark .mcbuleli-site-footer .mcbuleli-powered-line__mark {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .portal-login-grid {
@@ -7095,8 +7147,8 @@ body:has(.app-shell--dashboard-dark) {
   --mb-border: rgba(255, 255, 255, 0.09);
   --mb-bg: #121212;
   --mb-surface: #1a1a1a;
-  --mb-primary: #63b38f;
-  --mb-primary-hover: #52a680;
+  --mb-primary: #2f7439;
+  --mb-primary-hover: #3a8a46;
   --mb-secondary: #b98b66;
   --mb-secondary-hover: #a67c52;
 }
@@ -7496,8 +7548,8 @@ body:has(.wifi-portal-page--dark) {
 
 .portal-page--dark button[type="submit"],
 .wifi-portal-page--dark button[type="submit"] {
-  background: #63b38f;
-  color: #0a0a0a;
+  background: #2f7439;
+  color: #f4fff6;
   font-weight: 750;
   border: none;
   border-radius: 12px;
@@ -7572,9 +7624,10 @@ body:has(.wifi-portal-page--dark) {
 
 /* ---- Wi-Fi catalog v2: simple professional checkout ---- */
 .wifi-portal-page--v2 {
-  --wifi-accent: #63b38f;
+  /* Restore classic McBuleli green (pre-v2 mint) */
+  --wifi-accent: #2f7439;
   --wifi-ink: #f4f6f8;
-  --wifi-muted: #9aa3b2;
+  --wifi-muted: #aeb4bf;
   --wifi-line: rgba(255, 255, 255, 0.1);
   --wifi-surface: rgba(22, 24, 27, 0.92);
   font-family: "Outfit", var(--font-sans);
@@ -7593,9 +7646,9 @@ body:has(.wifi-portal-page--dark) {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(900px 420px at 12% -10%, rgba(99, 179, 143, 0.18), transparent 60%),
-    radial-gradient(700px 360px at 90% 8%, rgba(90, 140, 180, 0.12), transparent 55%),
-    linear-gradient(180deg, #0c0d0f 0%, #121418 48%, #0e1013 100%);
+    radial-gradient(900px 420px at 12% -10%, rgba(47, 116, 57, 0.22), transparent 60%),
+    radial-gradient(700px 360px at 90% 8%, rgba(47, 116, 57, 0.1), transparent 55%),
+    linear-gradient(180deg, #0f0f0f 0%, #141414 48%, #0f0f0f 100%);
 }
 
 @keyframes wifi-page-in {
@@ -7615,6 +7668,27 @@ body:has(.wifi-portal-page--dark) {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 28px;
+}
+
+.wifi-portal-page--v2 .wifi-topbar__home,
+.wifi-portal-page--dark .wifi-topbar__home {
+  background: #2f7439 !important;
+  border: 1px solid rgba(197, 228, 201, 0.55) !important;
+  color: #f4fff6 !important;
+  box-shadow: 0 8px 22px rgba(47, 116, 57, 0.35) !important;
+  min-width: 52px;
+  height: 48px;
+}
+
+.wifi-portal-page--v2 .wifi-topbar__home:hover,
+.wifi-portal-page--dark .wifi-topbar__home:hover {
+  background: #3a8a46 !important;
+  color: #fff !important;
+  border-color: #c5e4c7 !important;
+}
+
+.wifi-portal-page--v2 .wifi-topbar__home .home-shortcut__label {
+  display: inline;
 }
 
 .wifi-topbar__brand {

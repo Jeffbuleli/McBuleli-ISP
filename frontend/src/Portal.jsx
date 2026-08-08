@@ -404,7 +404,11 @@ export default function Portal() {
             </div>
           </div>
           <div className="portal-hero-toolbar portal-hero-toolbar--end">
-            <HomeShortcut title={t("homeShortcut")} idPrefix="portal" />
+            <HomeShortcut
+              title={t("homeShortcut")}
+              idPrefix="portal"
+              className="app-home-shortcut portal-topbar__home"
+            />
           </div>
         </div>
         <p>{t("heroLead")}</p>
