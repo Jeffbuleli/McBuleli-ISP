@@ -1,9 +1,13 @@
 import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "change_me";
+/** Operator dashboard session lifetime (default 7 days). */
+const SESSION_TTL = process.env.JWT_SESSION_TTL || "7d";
+const MFA_PENDING_TTL = process.env.JWT_MFA_PENDING_TTL || "15m";
 
 export function signToken(user, opts = {}) {
-  const mfaOk = Boolean(opts.mfaOk);
+  /** Completed operator sessions are MFA-ok unless explicitly marked otherwise. */
+  const mfaOk = opts.mfaOk === undefined ? true : Boolean(opts.mfaOk);
   return jwt.sign(
     {
       sub: user.id,
@@ -14,7 +18,7 @@ export function signToken(user, opts = {}) {
       mfaOk
     },
     JWT_SECRET,
-    { expiresIn: "8h" }
+    { expiresIn: SESSION_TTL }
   );
 }
 
@@ -29,32 +33,75 @@ export function signMfaPendingToken(user) {
       mfaOk: false
     },
     JWT_SECRET,
-    { expiresIn: "15m" }
+    { expiresIn: MFA_PENDING_TTL }
   );
 }
 
-export function authenticate(req, res, next) {
+export function readBearerToken(req) {
   const header = req.headers.authorization || "";
   const [, token] = header.split(" ");
+  return token || "";
+}
+
+export function authenticate(req, res, next) {
+  const token = readBearerToken(req);
   if (!token) {
-    return res.status(401).json({ message: "Missing bearer token" });
+    return res.status(401).json({ message: "Missing bearer token", code: "SESSION_MISSING" });
   }
 
   try {
     req.user = jwt.verify(token, JWT_SECRET);
     return next();
-  } catch (_err) {
-    return res.status(401).json({ message: "Invalid token" });
+  } catch (err) {
+    if (err?.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Session expired", code: "SESSION_EXPIRED" });
+    }
+    return res.status(401).json({ message: "Invalid token", code: "SESSION_INVALID" });
+  }
+}
+
+/**
+ * Re-issue a session JWT when the current one is still valid.
+ * Used for sliding sessions from the dashboard.
+ */
+export function refreshSessionToken(req, res) {
+  const token = readBearerToken(req);
+  if (!token) {
+    return res.status(401).json({ message: "Missing bearer token", code: "SESSION_MISSING" });
+  }
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (payload.typ === "mfa_pending") {
+      return res.status(403).json({ code: "MFA_REQUIRED", message: "MFA verification required" });
+    }
+    if (payload.typ && payload.typ !== "session") {
+      return res.status(403).json({ message: "Invalid session token", code: "SESSION_INVALID" });
+    }
+    const next = signToken(
+      {
+        id: payload.sub,
+        role: payload.role,
+        isp_id: payload.ispId || null,
+        email: payload.email
+      },
+      { mfaOk: payload.mfaOk !== false }
+    );
+    return res.json({ token: next });
+  } catch (err) {
+    if (err?.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Session expired", code: "SESSION_EXPIRED" });
+    }
+    return res.status(401).json({ message: "Invalid token", code: "SESSION_INVALID" });
   }
 }
 
 export function requireMfaCompleted(req, res, next) {
-  if (!req.user) return res.status(401).json({ message: "Missing bearer token" });
+  if (!req.user) return res.status(401).json({ message: "Missing bearer token", code: "SESSION_MISSING" });
   if (req.user.typ === "mfa_pending") {
     return res.status(403).json({ code: "MFA_REQUIRED", message: "MFA verification required" });
   }
   if (req.user.typ && req.user.typ !== "session") {
-    return res.status(403).json({ message: "Invalid session token" });
+    return res.status(403).json({ message: "Invalid session token", code: "SESSION_INVALID" });
   }
   if (!req.user.mfaOk) {
     return res.status(403).json({ code: "MFA_REQUIRED", message: "MFA verification required" });

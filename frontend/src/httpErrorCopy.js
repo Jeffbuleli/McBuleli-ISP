@@ -13,6 +13,18 @@ export function friendlyTransientError(raw, isEn) {
   if (!r0) return isEn ? "Something went wrong." : "Une erreur s’est produite.";
   const r = r0.toLowerCase();
 
+  if (
+    r === "invalid token" ||
+    r.includes("invalid token") ||
+    r.includes("session expired") ||
+    r.includes("missing bearer token") ||
+    r.includes("session expir")
+  ) {
+    return isEn
+      ? "Your session expired. Please sign in again."
+      : "Votre session a expiré. Veuillez vous reconnecter.";
+  }
+
   if (!looksInfrastructureNoise(r0)) {
     return r0.length > 280 ? `${r0.slice(0, 277).trim()}…` : r0;
   }
@@ -57,6 +69,16 @@ export const TECH_ERROR_VISIBILITY_ROLES = new Set(["system_owner", "super_admin
  */
 export function sanitizeApiErrorForAudience(rawMessage, user, isEn) {
   const raw = String(rawMessage ?? "").trim();
+  const low = raw.toLowerCase();
+  /** Session errors stay friendly for every role (never show raw "Invalid token"). */
+  if (
+    low.includes("invalid token") ||
+    low.includes("session expired") ||
+    low.includes("missing bearer token") ||
+    low.includes("session expir")
+  ) {
+    return friendlyTransientError(raw, isEn);
+  }
   const role = user?.role;
   if (role && TECH_ERROR_VISIBILITY_ROLES.has(role) && raw) {
     return raw.length > 2000 ? `${raw.slice(0, 1997)}…` : raw;

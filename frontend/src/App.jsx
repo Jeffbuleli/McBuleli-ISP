@@ -1,5 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { api, publicAssetUrl, setAuthToken, syncAuthTokenFromStorage } from "./api";
+import {
+  api,
+  AUTH_SESSION_EXPIRED_EVENT,
+  clearAuthSession,
+  publicAssetUrl,
+  setAuthToken,
+  syncAuthTokenFromStorage
+} from "./api";
 import TeamChatPanel from "./TeamChatPanel.jsx";
 import { formatUsd, formatCount } from "./dashboardFormat.js";
 import DashboardSideNav from "./DashboardSideNav.jsx";
@@ -1582,11 +1589,19 @@ function App() {
 
   function isStaleSessionErrorMessage(msg) {
     const m = String(msg || "").trim().toLowerCase();
-    return m === "invalid token" || m.includes("invalid token") || m === "missing bearer token";
+    return (
+      m === "invalid token" ||
+      m.includes("invalid token") ||
+      m === "missing bearer token" ||
+      m.includes("session expired") ||
+      m.includes("session expir") ||
+      m.includes("reconnecter") ||
+      m.includes("sign in again")
+    );
   }
 
-  /** On /login bootstrap, avoid showing a red banner when the token is fine but the API is briefly down. */
-  function shouldSilentClearSessionOnLoginPath(msg) {
+  /** Avoid red banners for expired sessions or brief API outages during bootstrap. */
+  function shouldSilentClearSession(msg) {
     if (isStaleSessionErrorMessage(msg)) return true;
     const m = String(msg || "");
     if (/\(502\)|\(503\)|\(504\)/.test(m)) return true;
@@ -1599,7 +1614,7 @@ function App() {
   }
 
   async function refresh(selectedTenantId = selectedIspId, options = {}) {
-    const silentInvalidSession = Boolean(options.silentInvalidSession);
+    const silentInvalidSession = options.silentInvalidSession !== false;
     syncAuthTokenFromStorage();
     setLoading(true);
     setError("");
@@ -1942,12 +1957,20 @@ api.getPaymentNotifications(activeIspId)
         });
       }
     } catch (err) {
-      if (silentInvalidSession && shouldSilentClearSessionOnLoginPath(err.message)) {
-        setAuthToken("");
+      if (silentInvalidSession && (err?.sessionExpired || shouldSilentClearSession(err.message))) {
+        clearAuthSession(err?.code || "SESSION_INVALID");
         setUser(null);
-        if (typeof window !== "undefined") localStorage.removeItem("token");
+        setError("");
+        if (isStaleSessionErrorMessage(err.message) || err?.sessionExpired) {
+          setNotice(
+            t(
+              "Votre session a expiré. Veuillez vous reconnecter.",
+              "Your session expired. Please sign in again."
+            )
+          );
+        }
       } else {
-      setError(audienceErr(err.message));
+        setError(audienceErr(err.message));
       }
     } finally {
       setLoading(false);
@@ -2045,20 +2068,63 @@ api.getPaymentNotifications(activeIspId)
         // Ignore tenant-context bootstrap failures.
       }
       if (localStorage.getItem("token")) {
-        const path = typeof window !== "undefined" ? window.location.pathname || "" : "";
-        const isLoginPath = path === "/login" || path.startsWith("/login/");
         try {
-          await refresh(selectedIspId, { silentInvalidSession: isLoginPath });
+          await refresh(selectedIspId, { silentInvalidSession: true });
         } catch (_err) {
-          setAuthToken("");
+          clearAuthSession("SESSION_INVALID");
           setUser(null);
-          localStorage.removeItem("token");
         }
       }
       setAuthBootstrapPending(false);
     }
     bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    function onSessionExpired() {
+      setUser(null);
+      setLoginWorkspaces(null);
+      setMfaLogin(null);
+      setError("");
+      setNotice(
+        t(
+          "Votre session a expiré. Veuillez vous reconnecter.",
+          "Your session expired. Please sign in again."
+        )
+      );
+      setAuthBootstrapPending(false);
+    }
+    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onSessionExpired);
+    return () => window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onSessionExpired);
+  }, [t]);
+
+  /** Sliding session: renew JWT while the dashboard stays open. */
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+    async function tick() {
+      try {
+        syncAuthTokenFromStorage();
+        if (!localStorage.getItem("token")) return;
+        await api.refreshSession();
+      } catch (_err) {
+        if (!cancelled && !localStorage.getItem("token")) {
+          setUser(null);
+        }
+      }
+    }
+    const iv = window.setInterval(tick, 30 * 60 * 1000);
+    const onFocus = () => {
+      void tick();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(iv);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [user?.id]);
 
   useLayoutEffect(() => {
     if (!import.meta.env.PROD) return;
@@ -2151,6 +2217,7 @@ api.getPaymentNotifications(activeIspId)
 
   async function completeLoginWithWorkspace(ispId) {
     setError("");
+    setNotice("");
     try {
       const payload = await api.login({ ...loginForm, ispId });
       setLoginWorkspaces(null);
@@ -2219,7 +2286,10 @@ api.getPaymentNotifications(activeIspId)
   async function onLogin(e) {
     e.preventDefault();
     setError("");
+    setNotice("");
     setLoginWorkspaces(null);
+    /** Drop any stale JWT before sign-in so a fresh session always wins. */
+    clearAuthSession("LOGIN_RESET");
     try {
       const payload = await api.login(loginForm);
       if (payload.needWorkspaceChoice && Array.isArray(payload.workspaces)) {
@@ -2260,7 +2330,7 @@ api.getPaymentNotifications(activeIspId)
   }
 
   function onLogout() {
-    setAuthToken("");
+    clearAuthSession("LOGOUT");
     setLoginForm({ email: "", password: "" });
     setForgotEmail("");
     setForgotNotice("");

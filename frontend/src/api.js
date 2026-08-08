@@ -107,6 +107,7 @@ export function publicAssetUrl(pathOrUrl) {
   return s;
 }
 let authToken = localStorage.getItem("token") || "";
+const SESSION_EVENT = "mcbuleli:session-expired";
 
 export function setAuthToken(token) {
   authToken = token || "";
@@ -119,6 +120,31 @@ export function syncAuthTokenFromStorage() {
   if (typeof window === "undefined") return;
   authToken = localStorage.getItem("token") || "";
 }
+
+export function clearAuthSession(reason = "SESSION_INVALID") {
+  const had = Boolean(authToken || (typeof window !== "undefined" && localStorage.getItem("token")));
+  setAuthToken("");
+  /** Quiet clear on intentional logout / pre-login reset — no “session expired” banner. */
+  const quiet = reason === "LOGIN_RESET" || reason === "LOGOUT";
+  if (had && !quiet && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(SESSION_EVENT, { detail: { reason } }));
+  }
+}
+
+export function isSessionAuthFailure(status, errorPayload, message) {
+  if (Number(status) !== 401) return false;
+  const code = String(errorPayload?.code || "").toUpperCase();
+  if (code === "SESSION_EXPIRED" || code === "SESSION_INVALID" || code === "SESSION_MISSING") return true;
+  const m = String(message || errorPayload?.message || "").toLowerCase();
+  return (
+    m.includes("invalid token") ||
+    m.includes("session expired") ||
+    m.includes("missing bearer token") ||
+    m.includes("session expir")
+  );
+}
+
+export { SESSION_EVENT as AUTH_SESSION_EXPIRED_EVENT };
 
 function withIsp(path, ispId) {
   const delimiter = path.includes("?") ? "&" : "?";
@@ -160,6 +186,15 @@ async function request(path, options) {
     const err = new Error(buildApiErrorMessage(response.status, error));
     if (response.status === 402 || error.code === "PLATFORM_SUBSCRIPTION_REQUIRED") {
       err.code = "PLATFORM_SUBSCRIPTION_REQUIRED";
+    }
+    if (isSessionAuthFailure(response.status, error, error?.message)) {
+      err.code = error?.code || "SESSION_INVALID";
+      err.sessionExpired = true;
+      /** Do not clear during login/password flows that still attach a stale Bearer by accident. */
+      const p = String(path || "");
+      if (!p.startsWith("/auth/login") && !p.startsWith("/auth/mfa/") && !p.startsWith("/auth/forgot") && !p.startsWith("/auth/reset")) {
+        clearAuthSession(err.code);
+      }
     }
     throw err;
   }
@@ -310,9 +345,9 @@ export const api = {
     publicRequest("/subscriber/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   subscriberSetupPassword: (payload) =>
     publicRequest("/subscriber/auth/setup-password", { method: "POST", body: JSON.stringify(payload) }),
-  getTenantContext: () => request("/tenant/context"),
+  getTenantContext: () => publicRequest("/tenant/context"),
   login: (payload) =>
-    request("/auth/login", {
+    publicRequest("/auth/login", {
       method: "POST",
       body: JSON.stringify(payload)
     }),
@@ -321,7 +356,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
-  me: () => request("/auth/me"),
+  me: async () => {
+    const data = await request("/auth/me");
+    if (data && typeof data === "object" && data.token) {
+      setAuthToken(data.token);
+      const { token: _t, ...user } = data;
+      return user;
+    }
+    return data;
+  },
+  refreshSession: () =>
+    request("/auth/refresh", { method: "POST", body: "{}" }).then((data) => {
+      if (data?.token) setAuthToken(data.token);
+      return data;
+    }),
   setupTotpMfa: () =>
     request("/auth/mfa/totp/setup", {
       method: "POST",

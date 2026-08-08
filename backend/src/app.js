@@ -6,7 +6,13 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { query, pool } from "./db.js";
-import { authenticate as authenticateJwt, requireRoles, resolveIspId, signToken } from "./auth.js";
+import {
+  authenticate as authenticateJwt,
+  refreshSessionToken,
+  requireRoles,
+  resolveIspId,
+  signToken
+} from "./auth.js";
 import { enforcePlatformAccess } from "./platformAccess.js";
 import {
   applySuccessfulSaasDeposit,
@@ -2708,8 +2714,15 @@ app.get("/api/auth/me", authenticate, async (req, res) => {
   if (sessionUser.isp_id) {
     platformBilling = await getPlatformBillingSnapshot(sessionUser.isp_id);
   }
-  return res.json(await attachDashboardPayload(publicUserPayload(sessionUser, { platformBilling })));
+  /** Sliding session: mint a fresh JWT so long-lived dashboards stay signed in. */
+  const token = signToken(sessionUser, { mfaOk: req.user.mfaOk !== false });
+  return res.json({
+    ...(await attachDashboardPayload(publicUserPayload(sessionUser, { platformBilling }))),
+    token
+  });
 });
+
+app.post("/api/auth/refresh", (req, res) => refreshSessionToken(req, res));
 
 app.post("/api/auth/mfa/totp/setup", authenticate, async (req, res) => {
   const result = await query(
