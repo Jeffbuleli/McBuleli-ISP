@@ -4721,37 +4721,7 @@ api.getPaymentNotifications(activeIspId)
         </>
       ) : null}
 
-      {(isPlatformSuperRole(user.role) ||
-        user.role === "company_manager" ||
-        user.role === "isp_admin" ||
-        user.role === "noc_operator" ||
-        user.role === "billing_agent") &&
-        !isFieldAgent && (
-        <DashboardScreenGate
-          mobile={gateMobile}
-          active={mobileScreen}
-          id="billing"
-          hash="#billing-ops"
-          isFieldAgent={isFieldAgent}
-        >
-        <section className="panel">
-          <h2>{t("Facturation en retard", "Overdue billing")}</h2>
-          <p>
-            {t(
-              "Les impayés en retard suspendent l'accès. Traitement auto + manuel.",
-              "Overdue unpaid invoices suspend access. Auto + manual processing."
-            )}
-          </p>
-          <button type="button" disabled={!selectedIspId} onClick={onProcessBillingOverdue}>
-            {t("Lancer le traitement retard maintenant", "Run overdue job now")}
-          </button>
-          <button type="button" disabled={!selectedIspId} onClick={onGenerateRenewalInvoices}>
-            {t("Générer les factures de renouvellement maintenant", "Generate renewal invoices now")}
-          </button>
-        </section>
-        </DashboardScreenGate>
-      )}
-
+      
       <DashboardScreenGate mobile={gateMobile} active={mobileScreen} always>
       <section className="grid" id="tenant-workspace">
         {isPlatformSuperRole(user.role) && (
@@ -5043,197 +5013,108 @@ api.getPaymentNotifications(activeIspId)
           showAdvanced={showAdvancedPayments}
           onToggle={() => setShowAdvancedPayments((v) => !v)}
         />
-        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
-          <form className="panel" onSubmit={onCreatePaymentMethod}>
-            <h2>{t("Moyens de paiement", "Payment methods")}</h2>
-            <p className="app-meta">
-              {t(
-                "Cash, Mobile Money (TID), Pawapay. Autres methodes en avance.",
-                "Cash, Mobile Money (TID), Pawapay. Other methods under advanced."
-              )}
-            </p>
-            <select
-              value={paymentMethodForm.methodType}
-              onChange={(e) =>
-                setPaymentMethodForm({ ...paymentMethodForm, methodType: e.target.value })
-              }
-            >
-              {["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card"].map((key) => (
-                <option key={key} value={key}>
-                  {paymentMethodTypeText(key, t)}
-                </option>
-              ))}
-            </select>
-            <input
-              placeholder={t("Nom du fournisseur", "Provider name")}
-              value={paymentMethodForm.providerName}
-              onChange={(e) =>
-                setPaymentMethodForm({ ...paymentMethodForm, providerName: e.target.value })
-              }
-            />
-            <input
-              placeholder={t("Délai de validation (minutes)", "Validation ETA (minutes)")}
-              value={paymentMethodForm.validationEtaMinutes}
-              onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, validationEtaMinutes: e.target.value })}
-            />
-            <input
-              placeholder={t("Note visible côté client", "Customer-facing note")}
-              value={paymentMethodForm.note}
-              onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, note: e.target.value })}
-            />
-            {paymentMethodForm.methodType === "cash" ? (
-              <>
-                <input
-                  placeholder={t("Point de collecte", "Collection point")}
-                  value={paymentMethodForm.collectionPoint}
-                  onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, collectionPoint: e.target.value })}
-                />
-                <input
-                  placeholder={t("Contact collecte", "Collection contact")}
-                  value={paymentMethodForm.collectionContact}
-                  onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, collectionContact: e.target.value })}
-                />
-              </>
-            ) : null}
-            {paymentMethodForm.methodType === "mobile_money" ? (
-              <>
-                <input
-                  placeholder={t("Numéro Mobile Money", "Mobile Money number")}
-                  value={paymentMethodForm.mobileMoneyNumber}
-                  onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, mobileMoneyNumber: e.target.value })}
-                />
-                <input
-                  placeholder={t("Nom bénéficiaire", "Beneficiary name")}
-                  value={paymentMethodForm.accountName}
-                  onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, accountName: e.target.value })}
-                />
-              </>
-            ) : null}
-            {paymentMethodForm.methodType === "bank_transfer" ? (
-              <>
-                <input placeholder={t("Banque", "Bank")} value={paymentMethodForm.bankName} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, bankName: e.target.value })} />
-                <input placeholder={t("Titulaire", "Account owner")} value={paymentMethodForm.accountName} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, accountName: e.target.value })} />
-                <input placeholder={t("N° compte", "Account number")} value={paymentMethodForm.accountNumber} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, accountNumber: e.target.value })} />
-                <input placeholder="IBAN" value={paymentMethodForm.iban} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, iban: e.target.value })} />
-                <input placeholder="SWIFT/BIC" value={paymentMethodForm.swiftCode} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, swiftCode: e.target.value })} />
-              </>
-            ) : null}
-            {(paymentMethodForm.methodType === "crypto_wallet" || paymentMethodForm.methodType === "binance_pay") ? (
-              <>
-                <input placeholder={t("Adresse wallet", "Wallet address")} value={paymentMethodForm.walletAddress} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, walletAddress: e.target.value })} />
-                <input placeholder={t("Réseau wallet", "Wallet network")} value={paymentMethodForm.walletNetwork} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, walletNetwork: e.target.value })} />
-                <input placeholder={t("Memo/Tag (optionnel)", "Memo/Tag (optional)")} value={paymentMethodForm.memoTag} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, memoTag: e.target.value })} />
-              </>
-            ) : null}
-            {paymentMethodForm.methodType === "visa_card" ? (
-              <>
-                <input placeholder={t("Acquéreur / PSP", "Processor / PSP")} value={paymentMethodForm.processorName} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, processorName: e.target.value })} />
-                <input placeholder={t("Libellé commerçant", "Merchant label")} value={paymentMethodForm.merchantLabel} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, merchantLabel: e.target.value })} />
-                <input placeholder={t("Contact support", "Support contact")} value={paymentMethodForm.supportContact} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, supportContact: e.target.value })} />
-              </>
-            ) : null}
-            <button type="submit" disabled={!selectedIspId}>
-              {t("Ajouter un moyen de paiement", "Add payment method")}
-            </button>
-            {paymentMethods
-              .filter((pm) => ["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card"].includes(pm.methodType))
-              .map((pm) => (
-              <p key={pm.id}>
-                {paymentMethodTypeText(pm.methodType, t)} — {pm.providerName} [
-                {pm.isActive ? t("actif", "active") : t("inactif", "inactive")}]{" "}
-                <button type="button" onClick={() => onTogglePaymentMethod(pm.id, !pm.isActive)}>
-                  {pm.isActive ? t("Désactiver", "Disable") : t("Activer", "Enable")}
-                </button>
-                {" "}
-                <button type="button" onClick={() => onGenerateGatewayCallback(pm.id)} disabled={!pm.isActive}>
-                  {t("Générer callback gateway", "Generate gateway callback")}
-                </button>
-                {" "}
-                <button type="button" onClick={() => onTestGatewayCallback(pm.id)} disabled={!pm.isActive}>
-                  {t("Tester callback (activation)", "Test callback (activation)")}
-                </button>
-                {gatewayCallbackByMethod[pm.id] ? (
-                  <span>
-                    {" "}
-                    — {t("URL", "URL")}: <code>{gatewayCallbackByMethod[pm.id].callbackUrl}</code>{" "}
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(gatewayCallbackByMethod[pm.id].callbackUrl)}
-                    >
-                      {t("Copier URL", "Copy URL")}
-                    </button>{" "}
-                    — {t("Secret", "Secret")}: <code>{gatewayCallbackByMethod[pm.id].callbackSecret}</code>{" "}
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(gatewayCallbackByMethod[pm.id].callbackSecret)}
-                    >
-                      {t("Copier secret", "Copy secret")}
+<section className="panel billing-invoices-panel">
+        <h2>{t("Factures", "Invoices")}</h2>
+        <DataTable
+          t={t}
+          title={null}
+          rows={invoiceTableView.pageRows}
+          columns={[
+            {
+              key: "id",
+              header: "ID",
+              cell: (inv) => String(inv.id || "").slice(0, 8)
+            },
+            {
+              key: "amountUsd",
+              header: t("Montant", "Amount"),
+              sortKey: "amountUsd",
+              cell: (inv) => `$${inv.amountUsd ?? "—"}`
+            },
+            {
+              key: "status",
+              header: t("Statut", "Status"),
+              sortKey: "status",
+              cell: (inv) => invoiceStatusShort(inv.status, isEn)
+            },
+            {
+              key: "payment",
+              header: t("Paiement", "Payment"),
+              cell: (inv) =>
+                inv.status === "unpaid" || inv.status === "overdue" ? (
+                  canMarkInvoicePaid(user.role) ? (
+                    <button type="button" onClick={() => onMarkPaid(inv.id, inv.amountUsd)}>
+                      {t("Marquer payée", "Mark paid")}
                     </button>
-                  </span>
-                ) : null}
-              </p>
-            ))}
-          </form>
-        )}
+                  ) : (
+                    "—"
+                  )
+                ) : (
+                  t("Payée", "Paid")
+                )
+            },
+            {
+              key: "pdf",
+              header: "PDF",
+              cell: (inv) => (
+                <button type="button" className="btn-secondary-outline" onClick={() => onDownloadInvoiceProforma(inv.id)}>
+                  {t("Proforma", "Proforma")}
+                </button>
+              )
+            }
+          ]}
+          searchValue={invoiceTable.q}
+          onSearchValueChange={(q) => setInvoiceTable((s) => ({ ...s, q, page: 1 }))}
+          filters={
+            <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+              <span>{t("Statut", "Status")}</span>
+              <select
+                value={invoiceTable.status || "all"}
+                onChange={(e) => setInvoiceTable((s) => ({ ...s, status: e.target.value, page: 1 }))}
+              >
+                <option value="all">{t("Tous", "All")}</option>
+                <option value="unpaid">{t("Impayée", "Unpaid")}</option>
+                <option value="overdue">{t("En retard", "Overdue")}</option>
+                <option value="paid">{t("Payée", "Paid")}</option>
+              </select>
+            </label>
+          }
+          page={invoiceTable.page}
+          pageSize={invoiceTable.pageSize}
+          totalRows={invoiceTableView.total}
+          onPageChange={(page) => setInvoiceTable((s) => ({ ...s, page }))}
+          onPageSizeChange={(pageSize) => setInvoiceTable((s) => ({ ...s, pageSize, page: 1 }))}
+          sort={invoiceTable.sort}
+          onSortChange={(sort) => setInvoiceTable((s) => ({ ...s, sort }))}
+        />
+      </section>
 
-        {(isPlatformSuperRole(user.role) || user.role === "company_manager") && (
-          <form className="panel" onSubmit={onUpsertRoleProfile}>
-            <h2>{t("Profils d'habilitation", "Accreditation profiles")}</h2>
-            <select
-              value={roleProfileForm.roleKey}
-              onChange={(e) => setRoleProfileForm({ ...roleProfileForm, roleKey: e.target.value })}
-            >
-              {ROLE_PROFILE_OPTIONS.map((r) => (
-                <option key={r.key} value={r.key}>
-                  {t(r.fr, r.en)}
-                </option>
-              ))}
-            </select>
-            <select
-              value={roleProfileForm.accreditationLevel}
-              onChange={(e) =>
-                setRoleProfileForm({ ...roleProfileForm, accreditationLevel: e.target.value })
-              }
-            >
-              <option value="basic">{t("Basique", "Basic")}</option>
-              <option value="standard">{t("Standard", "Standard")}</option>
-              <option value="senior">{t("Senior", "Senior")}</option>
-              <option value="manager">{t("Manager", "Manager")}</option>
-            </select>
-            <fieldset style={{ border: "1px solid var(--mb-border, rgba(255,255,255,0.12))", borderRadius: 10, padding: 10 }}>
-              <legend className="app-meta">{t("Droits accordés", "Granted permissions")}</legend>
-              {ROLE_PERMISSION_OPTIONS.map((p) => {
-                const checked = Array.isArray(roleProfileForm.permissions) && roleProfileForm.permissions.includes(p.key);
-                return (
-                  <label key={p.key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) => {
-                        const next = new Set(Array.isArray(roleProfileForm.permissions) ? roleProfileForm.permissions : []);
-                        if (e.target.checked) next.add(p.key);
-                        else next.delete(p.key);
-                        setRoleProfileForm({ ...roleProfileForm, permissions: Array.from(next) });
-                      }}
-                    />
-                    <span>{t(p.fr, p.en)}</span>
-                  </label>
-                );
-              })}
-            </fieldset>
-            <button type="submit" disabled={!selectedIspId}>
-              {t("Enregistrer le profil de rôle", "Save role profile")}
+      <section className="panel">
+        <h2>{t("Abonnements", "Subscriptions")}</h2>
+        {subscriptions.map((subscription) => (
+          <p key={subscription.id}>
+            {subscription.id.slice(0, 8)} - {subscription.status} ({subscription.accessType || "pppoe"})
+            {subscription.maxSimultaneousDevices != null
+              ? ` — appareils ${subscription.maxSimultaneousDevices}`
+              : ""}{" "}
+            {!isFieldAgent ? (
+              <>
+            {subscription.status !== "suspended" ? (
+              <button onClick={() => onSuspendSubscription(subscription.id)}>Suspendre</button>
+            ) : (
+              <button onClick={() => onReactivateSubscription(subscription.id)}>Réactiver</button>
+            )}{" "}
+            <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "activate")}>
+              Sync activer
+            </button>{" "}
+            <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "suspend")}>
+              Sync suspendre
             </button>
-            {roleProfiles.map((profile) => (
-              <p key={profile.id}>
-                {roleProfileLabel(profile.roleKey, t)} — {accreditationLabel(profile.accreditationLevel, t)} —{" "}
-                {Array.isArray(profile.permissions)
-                  ? profile.permissions.map((perm) => rolePermissionLabel(perm, t)).join(", ")
-                  : ""}
-              </p>
-            ))}
-          </form>
-        )}
+              </>
+            ) : null}
+          </p>
+        ))}
+      </section>
       </section>
       </DashboardScreenGate>
 
@@ -6032,6 +5913,69 @@ api.getPaymentNotifications(activeIspId)
             </div>
           </details>
         )}
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager") && (
+          <details className="panel field-clients-more">
+            <summary>{t("Profils d'habilitation", "Accreditation profiles")}</summary>
+            <div className="field-clients-more__body">
+              <form className="panel" onSubmit={onUpsertRoleProfile}>
+                          <h3>{t("Configurer les profils", "Configure profiles")}</h3>
+                          <select
+                            value={roleProfileForm.roleKey}
+                            onChange={(e) => setRoleProfileForm({ ...roleProfileForm, roleKey: e.target.value })}
+                          >
+                            {ROLE_PROFILE_OPTIONS.map((r) => (
+                              <option key={r.key} value={r.key}>
+                                {t(r.fr, r.en)}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={roleProfileForm.accreditationLevel}
+                            onChange={(e) =>
+                              setRoleProfileForm({ ...roleProfileForm, accreditationLevel: e.target.value })
+                            }
+                          >
+                            <option value="basic">{t("Basique", "Basic")}</option>
+                            <option value="standard">{t("Standard", "Standard")}</option>
+                            <option value="senior">{t("Senior", "Senior")}</option>
+                            <option value="manager">{t("Manager", "Manager")}</option>
+                          </select>
+                          <fieldset style={{ border: "1px solid var(--mb-border, rgba(255,255,255,0.12))", borderRadius: 10, padding: 10 }}>
+                            <legend className="app-meta">{t("Droits accordés", "Granted permissions")}</legend>
+                            {ROLE_PERMISSION_OPTIONS.map((p) => {
+                              const checked = Array.isArray(roleProfileForm.permissions) && roleProfileForm.permissions.includes(p.key);
+                              return (
+                                <label key={p.key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      const next = new Set(Array.isArray(roleProfileForm.permissions) ? roleProfileForm.permissions : []);
+                                      if (e.target.checked) next.add(p.key);
+                                      else next.delete(p.key);
+                                      setRoleProfileForm({ ...roleProfileForm, permissions: Array.from(next) });
+                                    }}
+                                  />
+                                  <span>{t(p.fr, p.en)}</span>
+                                </label>
+                              );
+                            })}
+                          </fieldset>
+                          <button type="submit" disabled={!selectedIspId}>
+                            {t("Enregistrer le profil de rôle", "Save role profile")}
+                          </button>
+                          {roleProfiles.map((profile) => (
+                            <p key={profile.id}>
+                              {roleProfileLabel(profile.roleKey, t)} — {accreditationLabel(profile.accreditationLevel, t)} —{" "}
+                              {Array.isArray(profile.permissions)
+                                ? profile.permissions.map((perm) => rolePermissionLabel(perm, t)).join(", ")
+                                : ""}
+                            </p>
+                          ))}
+                        </form>
+            </div>
+          </details>
+        )}
       </section>
       </DashboardScreenGate>
 
@@ -6328,545 +6272,6 @@ api.getPaymentNotifications(activeIspId)
       )}
       </DashboardScreenGate>
 
-      <DashboardScreenGate
-        mobile={gateMobile}
-        active={mobileScreen}
-        id="billing"
-        hash="#billing-ops"
-        isFieldAgent={isFieldAgent}
-      >
-      {!isFieldAgent &&
-        (isPlatformSuperRole(user.role) ||
-        user.role === "company_manager" ||
-        user.role === "isp_admin" ||
-        user.role === "billing_agent" ||
-        user.role === "noc_operator") && (
-        <section className="expenses-section">
-          <h2>{t("Dépenses & suivi des fonds", "Expenses & fund reporting")}</h2>
-          <p className="expenses-lead">
-            {t(
-              "Dépenses types d'un FAI : liaisons et transit (fibre, radio, location de tours), énergie sur sites, équipement (CPE, baies, onduleurs), salaires NOC et terrain, véhicule et carburant, licences et outils, marketing, impôts et cotisations, cloud et prestataires. Chaque catégorie sert à documenter les sorties de caisse pour les agents et la direction.",
-              "Typical ISP costs: backhaul and transit (fiber, radio, tower rent), on-site power, equipment (CPE, racks, UPS), NOC and field payroll, vehicle and fuel, licenses and tools, marketing, taxes and social contributions, cloud and vendors. Each category documents cash outflows for staff and management."
-            )}
-          </p>
-          <p className="expenses-lead app-meta">
-            <strong>{t("Validation en deux étapes :", "Two-step validation:")}</strong>{" "}
-            {t(
-              "une fois la saisie enregistrée, la ligne est « En attente ». Un autre super administrateur, gestionnaire ou administrateur FAI doit l'approuver pour qu'elle entre dans les totaux « dépenses validées » utilisés pour le net (encaissements − dépenses). Si au moins deux validateurs sont inscrits sur l'espace, le demandeur ne peut pas approuver ni rejeter sa propre demande. Avec un seul validateur, l'auto-approbation reste possible (voir journal d'audit). Rejet : motif optionnel ; ligne retirée des totaux jusqu'à nouvelle soumission. Les rôles facturation et NOC consultent ; ils ne valident pas. Création, approbation, rejet et suppression tracent une opération d'audit. Les clôtures de période (bloc ci-dessous) figent les dépenses après inventaire ou révision.",
-              "once recorded, the line stays pending. Another super admin, company manager or ISP admin must approve it before it counts toward validated expenses used for net cash (collections − validated expenses). If at least two approvers are registered on the workspace, the requester cannot approve or reject their own request. With a single approver, self-approval may still apply (see audit log). Rejection: optional reason; the line is excluded from totals until resubmitted. Billing and NOC roles can view but cannot approve. Create, approve, reject and delete actions are audit-logged. Period closures (below) lock expenses after inventory or review."
-            )}
-            {user.role === "system_owner" ? (
-              <>
-                {" "}
-                {t("Détail :", "Detail:")}{" "}
-                <a href="#audit">{t("Journal d'audit récent", "Recent audit log")}</a>.
-              </>
-            ) : null}
-          </p>
-          <div className="panel accounting-closures-panel">
-            <h3>
-              {t("Clôtures comptables (révision / inventaire)", "Accounting closures (review / inventory)")}
-            </h3>
-            <p className="app-meta" style={{ maxWidth: "52rem" }}>
-              {t(
-                "Après inventaire ou contrôle, enregistrez une clôture sur une plage de dates. Toute dépense dont la période chevauche une clôture est figée : pas de nouvelle saisie, approbation, rejet ni suppression tant que la clôture existe. Aucune dépense « en attente » ne doit rester sur la plage au moment de la clôture. La levée d'une clôture est possible pour correction exceptionnelle et est inscrite au journal d'audit.",
-                "After inventory or controls, record a closure on a date range. Any expense whose period overlaps a closure is frozen: no new entry, approval, rejection or deletion while the closure exists. No pending expenses should remain on the range when you close. Reopening a closure is allowed for exceptional corrections and is audit-logged."
-              )}
-            </p>
-            {(isPlatformSuperRole(user.role) ||
-              user.role === "company_manager" ||
-              user.role === "isp_admin") && (
-              <form className="accounting-close-form" onSubmit={onCloseAccountingPeriod}>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
-                  <label style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                    {t("Début (clôture)", "Start date")}
-                    <input
-                      type="date"
-                      style={{ display: "block", marginTop: 4 }}
-                      value={periodCloseForm.periodStart}
-                      onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, periodStart: e.target.value })}
-                    />
-                  </label>
-                  <label style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                    {t("Fin (inclus)", "End date (inclusive)")}
-                    <input
-                      type="date"
-                      style={{ display: "block", marginTop: 4 }}
-                      value={periodCloseForm.periodEnd}
-                      onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, periodEnd: e.target.value })}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="btn-secondary-outline"
-                    onClick={() =>
-                      setPeriodCloseForm({
-                        ...periodCloseForm,
-                        periodStart: expenseFilter.from,
-                        periodEnd: expenseFilter.to
-                      })
-                    }
-                  >
-                    {t("Aligner sur le filtre du rapport", "Match report filter dates")}
-                  </button>
-                </div>
-                <input
-                  placeholder={t(
-                    "Référence inventaire ou commentaire (facultatif)",
-                    "Inventory reference or note (optional)"
-                  )}
-                  value={periodCloseForm.note}
-                  onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, note: e.target.value })}
-                  style={{ marginTop: 10, width: "100%", maxWidth: "36rem" }}
-                />
-                <button type="submit" disabled={!selectedIspId} style={{ marginTop: 12 }}>
-                  {t("Clôturer cette période", "Close this period")}
-                </button>
-              </form>
-            )}
-            <h4 style={{ marginTop: 18, marginBottom: 8, fontSize: "0.95rem" }}>
-              {t("Clôtures enregistrées", "Recorded closures")}
-            </h4>
-            {accountingPeriodClosures.length === 0 ? (
-              <p className="app-meta">
-                {t(
-                  "Aucune clôture pour cet espace — toutes les périodes sont ouvertes à la saisie.",
-                  "No closures for this workspace — all periods are open for entry."
-                )}
-              </p>
-            ) : (
-              <ul className="accounting-closures-list">
-                {accountingPeriodClosures.map((c) => (
-                  <li key={c.id}>
-                    <strong>
-                      {c.periodStart} → {c.periodEnd}
-                    </strong>
-                    {c.note ? ` — ${c.note}` : ""}
-                    <span className="app-meta">
-                      {" "}
-                      (
-                      {t("clôturée le", "closed on")}{" "}
-                      {c.closedAt ? new Date(c.closedAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "—"}
-                      {c.closedByName ? ` ${t("· par", "· by")} ${c.closedByName}` : ""})
-                    </span>
-                    {(isPlatformSuperRole(user.role) ||
-                      user.role === "company_manager" ||
-                      user.role === "isp_admin") && (
-                      <button
-                        type="button"
-                        className="btn-secondary-outline accounting-closure-reopen"
-                        onClick={() => onReopenAccountingPeriod(c.id)}
-                      >
-                        {t("Lever la clôture", "Reopen closure")}
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div className="expenses-filter">
-            <label>
-              {t("Du", "From")}
-              <input
-                type="date"
-                value={expenseFilter.from}
-                onChange={(e) => setExpenseFilter({ ...expenseFilter, from: e.target.value })}
-              />
-            </label>
-            <label>
-              {t("Au", "To")}
-              <input
-                type="date"
-                value={expenseFilter.to}
-                onChange={(e) => setExpenseFilter({ ...expenseFilter, to: e.target.value })}
-              />
-            </label>
-            <button type="button" disabled={!selectedIspId} onClick={() => refresh()}>
-              {t("Appliquer la période", "Apply range")}
-            </button>
-          </div>
-          {expenseSummary ? (
-            <div className="expenses-summary">
-              <div className="expenses-summary-card expenses-summary-card--green">
-                <span>{t("Encaissé (paiements confirmés)", "Collected (confirmed payments)")}</span>
-                <strong>
-                  {(expenseSummary.collectionsInPeriodUsd ?? 0).toLocaleString(undefined, {
-                    style: "currency",
-                    currency: "USD"
-                  })}
-                </strong>
-              </div>
-              <div className="expenses-summary-card">
-                <span>{t("Dépenses validées (approuvées)", "Validated expenses (approved)")}</span>
-                <strong>
-                  {(expenseSummary.totalExpensesUsd ?? 0).toLocaleString(undefined, {
-                    style: "currency",
-                    currency: "USD"
-                  })}
-                </strong>
-              </div>
-              <div className="expenses-summary-card">
-                <span>{t("En attente de validation", "Pending approval")}</span>
-                <strong>
-                  {(expenseSummary.pendingExpensesUsd ?? 0).toLocaleString(undefined, {
-                    style: "currency",
-                    currency: "USD"
-                  })}
-                </strong>
-              </div>
-              <div className="expenses-summary-card">
-                <span>
-                  {t("Net (encaissements − dépenses validées)", "Net (collections − validated expenses)")}
-                </span>
-                <strong>
-                  {(
-                    (expenseSummary.collectionsInPeriodUsd ?? 0) - (expenseSummary.totalExpensesUsd ?? 0)
-                  ).toLocaleString(undefined, {
-                    style: "currency",
-                    currency: "USD"
-                  })}
-                </strong>
-              </div>
-              <div className="expenses-summary-card">
-                <span>{t("Grand livre - Débit", "Ledger - Debit")}</span>
-                <strong>
-                  {(accountingLedgerTotals.totalDebitUsd ?? 0).toLocaleString(undefined, {
-                    style: "currency",
-                    currency: "USD"
-                  })}
-                </strong>
-              </div>
-              <div className="expenses-summary-card">
-                <span>{t("Grand livre - Crédit", "Ledger - Credit")}</span>
-                <strong>
-                  {(accountingLedgerTotals.totalCreditUsd ?? 0).toLocaleString(undefined, {
-                    style: "currency",
-                    currency: "USD"
-                  })}
-                </strong>
-              </div>
-            </div>
-          ) : null}
-          <div className="panel" style={{ marginBottom: 12 }}>
-            <DataTable
-              t={t}
-              title={t("Grand livre comptable", "Accounting ledger")}
-              description={t(
-                "Écritures automatiques des encaissements (caisse/banque) et compte client.",
-                "Automatic receipt entries (cash/bank) and customer account balancing."
-              )}
-              rows={ledgerTableView.pageRows}
-              actions={
-                <button type="button" className="btn-secondary-outline" onClick={onDownloadLedgerCsv} disabled={!selectedIspId}>
-                  {t("Exporter CSV", "Export CSV")}
-                </button>
-              }
-              columns={[
-                { key: "entryDate", header: t("Date", "Date"), sortKey: "entryDate", cell: (r) => r.entryDate || "—" },
-                { key: "journalType", header: t("Journal", "Journal"), sortKey: "journalType", cell: (r) => r.journalType || "—" },
-                { key: "accountCode", header: t("Compte", "Account"), sortKey: "accountCode", cell: (r) => `${r.accountCode || "—"} ${r.accountLabel || ""}`.trim() },
-                { key: "debitUsd", header: t("Débit USD", "Debit USD"), sortKey: "debitUsd", cell: (r) => Number(r.debitUsd || 0).toFixed(2) },
-                { key: "creditUsd", header: t("Crédit USD", "Credit USD"), sortKey: "creditUsd", cell: (r) => Number(r.creditUsd || 0).toFixed(2) },
-                { key: "memo", header: t("Mémo", "Memo"), sortKey: "memo", cell: (r) => r.memo || "—" }
-              ]}
-              searchValue={ledgerTable.q}
-              onSearchValueChange={(q) => setLedgerTable((s) => ({ ...s, q, page: 1 }))}
-              page={ledgerTable.page}
-              pageSize={ledgerTable.pageSize}
-              totalRows={ledgerTableView.total}
-              onPageChange={(page) => setLedgerTable((s) => ({ ...s, page }))}
-              onPageSizeChange={(pageSize) => setLedgerTable((s) => ({ ...s, pageSize, page: 1 }))}
-              sort={ledgerTable.sort}
-              onSortChange={(sort) => setLedgerTable((s) => ({ ...s, sort }))}
-            />
-          </div>
-          <div className="expenses-layout">
-            {(isPlatformSuperRole(user.role) ||
-              user.role === "company_manager" ||
-              user.role === "isp_admin") && (
-              <form className="panel expenses-form" onSubmit={onCreateExpense}>
-                <h3>{t("Nouvelle dépense", "New expense")}</h3>
-                <label style={{ display: "block", marginBottom: 8, fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                  {t("Catégorie", "Category")}
-                  <select
-                    style={{ display: "block", width: "100%", marginTop: 4 }}
-                    value={expenseForm.category}
-                    onChange={(e) =>
-                      setExpenseForm({
-                        ...expenseForm,
-                        category: e.target.value,
-                        fieldAgentId:
-                          e.target.value === "field_agent_fixed" || e.target.value === "field_agent_percentage"
-                            ? expenseForm.fieldAgentId
-                            : ""
-                      })
-                    }
-                  >
-                    {EXPENSE_CATEGORY_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {isEn ? o.labelEn : o.labelFr}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder={t("Montant (USD)", "Amount (USD)")}
-                  value={expenseForm.amountUsd}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, amountUsd: e.target.value })}
-                />
-                <input
-                  placeholder={t("Description (facultatif)", "Description (optional)")}
-                  value={expenseForm.description}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
-                />
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
-                  <label style={{ flex: "1 1 140px", fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                    {t("Début de période", "Period start")}
-                    <input
-                      type="date"
-                      style={{ display: "block", width: "100%", marginTop: 4 }}
-                      value={expenseForm.periodStart}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, periodStart: e.target.value })}
-                    />
-                  </label>
-                  <label style={{ flex: "1 1 140px", fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                    {t("Fin de période", "Period end")}
-                    <input
-                      type="date"
-                      style={{ display: "block", width: "100%", marginTop: 4 }}
-                      value={expenseForm.periodEnd}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, periodEnd: e.target.value })}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    style={{ margin: 0, width: "auto" }}
-                    onClick={() =>
-                      setExpenseForm({
-                        ...expenseForm,
-                        periodStart: expenseFilter.from,
-                        periodEnd: expenseFilter.to
-                      })
-                    }
-                  >
-                    {t("Aligner sur le rapport", "Match report")}
-                  </button>
-                </div>
-                {(expenseForm.category === "field_agent_fixed" ||
-                  expenseForm.category === "field_agent_percentage") && (
-                  <>
-                    <label style={{ display: "block", marginTop: 10, fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-                      {t("Agent terrain", "Field agent")}
-                      <select
-                        style={{ display: "block", width: "100%", marginTop: 4 }}
-                        value={expenseForm.fieldAgentId}
-                        onChange={(e) => setExpenseForm({ ...expenseForm, fieldAgentId: e.target.value })}
-                      >
-                        <option value="">{t("Choisir un agent", "Choose an agent")}</option>
-                        {users
-                          .filter((u) => u.role === "field_agent")
-                          .map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.fullName || u.email || u.id}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                    {expenseForm.category === "field_agent_percentage" ? (
-                      <input
-                        type="number"
-                        min="0.01"
-                        max="100"
-                        step="0.01"
-                        placeholder={t(
-                          "Commission % (base CA ou encaissements)",
-                          "Commission % (revenue or collections basis)"
-                        )}
-                        value={expenseForm.agentPayoutPercent}
-                        onChange={(e) => setExpenseForm({ ...expenseForm, agentPayoutPercent: e.target.value })}
-                      />
-                    ) : null}
-                  </>
-                )}
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder={t(
-                    "Base CA USD (facultatif, traçabilité)",
-                    "Revenue basis USD (optional, for audit trail)"
-                  )}
-                  value={expenseForm.revenueBasisUsd}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, revenueBasisUsd: e.target.value })}
-                />
-                <button type="submit" disabled={!selectedIspId}>
-                  {t("Enregistrer la dépense", "Save expense")}
-                </button>
-              </form>
-            )}
-            <div className="panel expenses-list">
-              <h3>{t("Lignes sur la période", "Lines in this period")}</h3>
-              {expenses.length === 0 ? (
-                <p style={{ color: "var(--mb-muted)", fontSize: "0.9rem" }}>
-                  {t(
-                    "Aucune dépense ne chevauche ces dates, ou les données se chargent encore.",
-                    "No expenses overlap these dates, or data is still loading."
-                  )}
-                </p>
-              ) : (
-                <DataTable
-                  t={t}
-                  title={null}
-                  rows={expenseTableView.pageRows}
-                  columns={[
-                    {
-                      key: "amountUsd",
-                      header: t("Montant", "Amount"),
-                      sortKey: "amountUsd",
-                      cell: (ex) =>
-                        (ex.amountUsd ?? 0).toLocaleString(undefined, { style: "currency", currency: "USD" })
-                    },
-                    {
-                      key: "status",
-                      header: t("Statut", "Status"),
-                      sortKey: "status",
-                      cell: (ex) => {
-                        const st = ex.status || "pending";
-                        return (
-                          <span className={`expense-status-badge expense-status-badge--${st}`}>
-                            {expenseApprovalStatusLabel(st, isEn)}
-                          </span>
-                        );
-                      }
-                    },
-                    {
-                      key: "category",
-                      header: t("Catégorie", "Category"),
-                      sortKey: "category",
-                      cell: (ex) => expenseCategoryLabel(ex.category, isEn)
-                    },
-                    {
-                      key: "period",
-                      header: t("Période", "Period"),
-                      cell: (ex) => `${ex.periodStart || "—"} → ${ex.periodEnd || "—"}`
-                    },
-                    {
-                      key: "meta",
-                      header: t("Traçabilité", "Trace"),
-                      cell: (ex) => {
-                        const st = ex.status || "pending";
-                        return (
-                          <div style={{ display: "grid", gap: 4, minWidth: 220 }}>
-                            {ex.description ? <div>{ex.description}</div> : <div className="app-meta">—</div>}
-                            <div className="app-meta" style={{ margin: 0 }}>
-                              {ex.createdByName ? `${t("Saisi par", "Entered by")} ${ex.createdByName}` : "—"}
-                              {ex.fieldAgentName ? ` · ${t("Agent", "Agent")}: ${ex.fieldAgentName}` : ""}
-                            </div>
-                            {st === "approved" && (ex.approvedByName || ex.approvedAt) ? (
-                              <div className="app-meta" style={{ margin: 0 }}>
-                                {t("Approuvé", "Approved")}
-                                {ex.approvedByName ? ` ${t("par", "by")} ${ex.approvedByName}` : ""}
-                                {ex.approvedAt
-                                  ? ` — ${new Date(ex.approvedAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}`
-                                  : ""}
-                              </div>
-                            ) : null}
-                            {st === "rejected" ? (
-                              <div className="app-meta expenses-row-meta--warn" style={{ margin: 0 }}>
-                                {t("Rejet", "Rejected")}
-                                {ex.rejectedByName ? ` ${t("par", "by")} ${ex.rejectedByName}` : ""}
-                                {ex.rejectionNote ? ` · ${ex.rejectionNote}` : ""}
-                              </div>
-                            ) : null}
-                            {ex.periodClosed ? (
-                              <div className="app-meta" style={{ margin: 0 }}>
-                                {t("Période clôturée", "Period closed")}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      }
-                    },
-                    {
-                      key: "actions",
-                      header: t("Actions", "Actions"),
-                      cell: (ex) => {
-                        const st = ex.status || "pending";
-                        return (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, minWidth: 220 }}>
-                            {ex.canApprove ? (
-                              <button
-                                type="button"
-                                className="btn-expense-approve"
-                                disabled={!selectedIspId}
-                                onClick={() => onApproveExpense(ex.id)}
-                              >
-                                {t("Approuver", "Approve")}
-                              </button>
-                            ) : null}
-                            {ex.canReject ? (
-                              <button
-                                type="button"
-                                className="btn-expense-reject"
-                                disabled={!selectedIspId}
-                                onClick={() => onRejectExpense(ex.id)}
-                              >
-                                {t("Rejeter", "Reject")}
-                              </button>
-                            ) : null}
-                            {(isPlatformSuperRole(user.role) ||
-                              user.role === "company_manager" ||
-                              user.role === "isp_admin") &&
-                            (st === "pending" || st === "rejected") &&
-                            !ex.periodClosed ? (
-                              <button
-                                type="button"
-                                className="btn-expense-delete"
-                                disabled={!selectedIspId}
-                                onClick={() => onDeleteExpense(ex.id)}
-                              >
-                                {t("Supprimer", "Delete")}
-                              </button>
-                            ) : null}
-                          </div>
-                        );
-                      }
-                    }
-                  ]}
-                  searchValue={expenseTable.q}
-                  onSearchValueChange={(q) => setExpenseTable((s) => ({ ...s, q, page: 1 }))}
-                  filters={
-                    <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-                      <span>{t("Statut", "Status")}</span>
-                      <select
-                        value={expenseTable.status}
-                        onChange={(e) => setExpenseTable((s) => ({ ...s, status: e.target.value, page: 1 }))}
-                      >
-                        <option value="all">{t("Tous", "All")}</option>
-                        <option value="pending">{t("En attente", "Pending")}</option>
-                        <option value="approved">{t("Approuvé", "Approved")}</option>
-                        <option value="rejected">{t("Rejeté", "Rejected")}</option>
-                      </select>
-                    </label>
-                  }
-                  page={expenseTable.page}
-                  pageSize={expenseTable.pageSize}
-                  totalRows={expenseTableView.total}
-                  onPageChange={(page) => setExpenseTable((s) => ({ ...s, page }))}
-                  onPageSizeChange={(pageSize) => setExpenseTable((s) => ({ ...s, pageSize, page: 1 }))}
-                  sort={expenseTable.sort}
-                  onSortChange={(sort) => setExpenseTable((s) => ({ ...s, sort }))}
-                />
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-      </DashboardScreenGate>
 
       <section className="grid field-clients-simple" id="field-clients">
       <DashboardScreenGate
@@ -7637,6 +7042,703 @@ api.getPaymentNotifications(activeIspId)
         ) : null}
       </section>
 
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
+          <details className="panel field-clients-more">
+            <summary>{t("Moyens de paiement", "Payment methods")}</summary>
+            <div className="field-clients-more__body">
+              <form className="panel" onSubmit={onCreatePaymentMethod}>
+                          <h3>{t("Configurer les moyens de paiement", "Configure payment methods")}</h3>
+                          <p className="app-meta">
+                            {t(
+                              "Cash, Mobile Money (TID), Pawapay. Autres methodes en avance.",
+                              "Cash, Mobile Money (TID), Pawapay. Other methods under advanced."
+                            )}
+                          </p>
+                          <select
+                            value={paymentMethodForm.methodType}
+                            onChange={(e) =>
+                              setPaymentMethodForm({ ...paymentMethodForm, methodType: e.target.value })
+                            }
+                          >
+                            {["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card"].map((key) => (
+                              <option key={key} value={key}>
+                                {paymentMethodTypeText(key, t)}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            placeholder={t("Nom du fournisseur", "Provider name")}
+                            value={paymentMethodForm.providerName}
+                            onChange={(e) =>
+                              setPaymentMethodForm({ ...paymentMethodForm, providerName: e.target.value })
+                            }
+                          />
+                          <input
+                            placeholder={t("Délai de validation (minutes)", "Validation ETA (minutes)")}
+                            value={paymentMethodForm.validationEtaMinutes}
+                            onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, validationEtaMinutes: e.target.value })}
+                          />
+                          <input
+                            placeholder={t("Note visible côté client", "Customer-facing note")}
+                            value={paymentMethodForm.note}
+                            onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, note: e.target.value })}
+                          />
+                          {paymentMethodForm.methodType === "cash" ? (
+                            <>
+                              <input
+                                placeholder={t("Point de collecte", "Collection point")}
+                                value={paymentMethodForm.collectionPoint}
+                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, collectionPoint: e.target.value })}
+                              />
+                              <input
+                                placeholder={t("Contact collecte", "Collection contact")}
+                                value={paymentMethodForm.collectionContact}
+                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, collectionContact: e.target.value })}
+                              />
+                            </>
+                          ) : null}
+                          {paymentMethodForm.methodType === "mobile_money" ? (
+                            <>
+                              <input
+                                placeholder={t("Numéro Mobile Money", "Mobile Money number")}
+                                value={paymentMethodForm.mobileMoneyNumber}
+                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, mobileMoneyNumber: e.target.value })}
+                              />
+                              <input
+                                placeholder={t("Nom bénéficiaire", "Beneficiary name")}
+                                value={paymentMethodForm.accountName}
+                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, accountName: e.target.value })}
+                              />
+                            </>
+                          ) : null}
+                          {paymentMethodForm.methodType === "bank_transfer" ? (
+                            <>
+                              <input placeholder={t("Banque", "Bank")} value={paymentMethodForm.bankName} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, bankName: e.target.value })} />
+                              <input placeholder={t("Titulaire", "Account owner")} value={paymentMethodForm.accountName} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, accountName: e.target.value })} />
+                              <input placeholder={t("N° compte", "Account number")} value={paymentMethodForm.accountNumber} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, accountNumber: e.target.value })} />
+                              <input placeholder="IBAN" value={paymentMethodForm.iban} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, iban: e.target.value })} />
+                              <input placeholder="SWIFT/BIC" value={paymentMethodForm.swiftCode} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, swiftCode: e.target.value })} />
+                            </>
+                          ) : null}
+                          {(paymentMethodForm.methodType === "crypto_wallet" || paymentMethodForm.methodType === "binance_pay") ? (
+                            <>
+                              <input placeholder={t("Adresse wallet", "Wallet address")} value={paymentMethodForm.walletAddress} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, walletAddress: e.target.value })} />
+                              <input placeholder={t("Réseau wallet", "Wallet network")} value={paymentMethodForm.walletNetwork} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, walletNetwork: e.target.value })} />
+                              <input placeholder={t("Memo/Tag (optionnel)", "Memo/Tag (optional)")} value={paymentMethodForm.memoTag} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, memoTag: e.target.value })} />
+                            </>
+                          ) : null}
+                          {paymentMethodForm.methodType === "visa_card" ? (
+                            <>
+                              <input placeholder={t("Acquéreur / PSP", "Processor / PSP")} value={paymentMethodForm.processorName} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, processorName: e.target.value })} />
+                              <input placeholder={t("Libellé commerçant", "Merchant label")} value={paymentMethodForm.merchantLabel} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, merchantLabel: e.target.value })} />
+                              <input placeholder={t("Contact support", "Support contact")} value={paymentMethodForm.supportContact} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, supportContact: e.target.value })} />
+                            </>
+                          ) : null}
+                          <button type="submit" disabled={!selectedIspId}>
+                            {t("Ajouter un moyen de paiement", "Add payment method")}
+                          </button>
+                          {paymentMethods
+                            .filter((pm) => ["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card"].includes(pm.methodType))
+                            .map((pm) => (
+                            <p key={pm.id}>
+                              {paymentMethodTypeText(pm.methodType, t)} — {pm.providerName} [
+                              {pm.isActive ? t("actif", "active") : t("inactif", "inactive")}]{" "}
+                              <button type="button" onClick={() => onTogglePaymentMethod(pm.id, !pm.isActive)}>
+                                {pm.isActive ? t("Désactiver", "Disable") : t("Activer", "Enable")}
+                              </button>
+                              {" "}
+                              <button type="button" onClick={() => onGenerateGatewayCallback(pm.id)} disabled={!pm.isActive}>
+                                {t("Générer callback gateway", "Generate gateway callback")}
+                              </button>
+                              {" "}
+                              <button type="button" onClick={() => onTestGatewayCallback(pm.id)} disabled={!pm.isActive}>
+                                {t("Tester callback (activation)", "Test callback (activation)")}
+                              </button>
+                              {gatewayCallbackByMethod[pm.id] ? (
+                                <span>
+                                  {" "}
+                                  — {t("URL", "URL")}: <code>{gatewayCallbackByMethod[pm.id].callbackUrl}</code>{" "}
+                                  <button
+                                    type="button"
+                                    onClick={() => copyToClipboard(gatewayCallbackByMethod[pm.id].callbackUrl)}
+                                  >
+                                    {t("Copier URL", "Copy URL")}
+                                  </button>{" "}
+                                  — {t("Secret", "Secret")}: <code>{gatewayCallbackByMethod[pm.id].callbackSecret}</code>{" "}
+                                  <button
+                                    type="button"
+                                    onClick={() => copyToClipboard(gatewayCallbackByMethod[pm.id].callbackSecret)}
+                                  >
+                                    {t("Copier secret", "Copy secret")}
+                                  </button>
+                                </span>
+                              ) : null}
+                            </p>
+                          ))}
+                        </form>
+            </div>
+          </details>
+        )}
+
+      {(isPlatformSuperRole(user.role) ||
+        user.role === "company_manager" ||
+        user.role === "isp_admin" ||
+        user.role === "noc_operator" ||
+        user.role === "billing_agent") &&
+        !isFieldAgent && (
+        <details className="panel field-clients-more">
+          <summary>{t("Facturation en retard", "Overdue billing")}</summary>
+          <div className="field-clients-more__body">
+          <p>
+            {t(
+              "Les impayés en retard suspendent l'accès. Traitement auto + manuel.",
+              "Overdue unpaid invoices suspend access. Auto + manual processing."
+            )}
+          </p>
+          <button type="button" disabled={!selectedIspId} onClick={onProcessBillingOverdue}>
+            {t("Lancer le traitement retard maintenant", "Run overdue job now")}
+          </button>
+          <button type="button" disabled={!selectedIspId} onClick={onGenerateRenewalInvoices}>
+            {t("Générer les factures de renouvellement maintenant", "Generate renewal invoices now")}
+          </button>
+                  </div>
+        </details>
+      )}
+
+{!isFieldAgent &&
+        (isPlatformSuperRole(user.role) ||
+        user.role === "company_manager" ||
+        user.role === "isp_admin" ||
+        user.role === "billing_agent" ||
+        user.role === "noc_operator") && (
+        <details className="panel field-clients-more expenses-section">
+          <summary>{t("Dépenses & suivi des fonds", "Expenses & fund reporting")}</summary>
+          <div className="field-clients-more__body field-clients-more__body--stack">
+          <p className="expenses-lead">
+            {t(
+              "Dépenses types d'un FAI : liaisons et transit (fibre, radio, location de tours), énergie sur sites, équipement (CPE, baies, onduleurs), salaires NOC et terrain, véhicule et carburant, licences et outils, marketing, impôts et cotisations, cloud et prestataires. Chaque catégorie sert à documenter les sorties de caisse pour les agents et la direction.",
+              "Typical ISP costs: backhaul and transit (fiber, radio, tower rent), on-site power, equipment (CPE, racks, UPS), NOC and field payroll, vehicle and fuel, licenses and tools, marketing, taxes and social contributions, cloud and vendors. Each category documents cash outflows for staff and management."
+            )}
+          </p>
+          <p className="expenses-lead app-meta">
+            <strong>{t("Validation en deux étapes :", "Two-step validation:")}</strong>{" "}
+            {t(
+              "une fois la saisie enregistrée, la ligne est « En attente ». Un autre super administrateur, gestionnaire ou administrateur FAI doit l'approuver pour qu'elle entre dans les totaux « dépenses validées » utilisés pour le net (encaissements − dépenses). Si au moins deux validateurs sont inscrits sur l'espace, le demandeur ne peut pas approuver ni rejeter sa propre demande. Avec un seul validateur, l'auto-approbation reste possible (voir journal d'audit). Rejet : motif optionnel ; ligne retirée des totaux jusqu'à nouvelle soumission. Les rôles facturation et NOC consultent ; ils ne valident pas. Création, approbation, rejet et suppression tracent une opération d'audit. Les clôtures de période (bloc ci-dessous) figent les dépenses après inventaire ou révision.",
+              "once recorded, the line stays pending. Another super admin, company manager or ISP admin must approve it before it counts toward validated expenses used for net cash (collections − validated expenses). If at least two approvers are registered on the workspace, the requester cannot approve or reject their own request. With a single approver, self-approval may still apply (see audit log). Rejection: optional reason; the line is excluded from totals until resubmitted. Billing and NOC roles can view but cannot approve. Create, approve, reject and delete actions are audit-logged. Period closures (below) lock expenses after inventory or review."
+            )}
+            {user.role === "system_owner" ? (
+              <>
+                {" "}
+                {t("Détail :", "Detail:")}{" "}
+                <a href="#audit">{t("Journal d'audit récent", "Recent audit log")}</a>.
+              </>
+            ) : null}
+          </p>
+          <div className="panel accounting-closures-panel">
+            <h3>
+              {t("Clôtures comptables (révision / inventaire)", "Accounting closures (review / inventory)")}
+            </h3>
+            <p className="app-meta" style={{ maxWidth: "52rem" }}>
+              {t(
+                "Après inventaire ou contrôle, enregistrez une clôture sur une plage de dates. Toute dépense dont la période chevauche une clôture est figée : pas de nouvelle saisie, approbation, rejet ni suppression tant que la clôture existe. Aucune dépense « en attente » ne doit rester sur la plage au moment de la clôture. La levée d'une clôture est possible pour correction exceptionnelle et est inscrite au journal d'audit.",
+                "After inventory or controls, record a closure on a date range. Any expense whose period overlaps a closure is frozen: no new entry, approval, rejection or deletion while the closure exists. No pending expenses should remain on the range when you close. Reopening a closure is allowed for exceptional corrections and is audit-logged."
+              )}
+            </p>
+            {(isPlatformSuperRole(user.role) ||
+              user.role === "company_manager" ||
+              user.role === "isp_admin") && (
+              <form className="accounting-close-form" onSubmit={onCloseAccountingPeriod}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
+                  <label style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+                    {t("Début (clôture)", "Start date")}
+                    <input
+                      type="date"
+                      style={{ display: "block", marginTop: 4 }}
+                      value={periodCloseForm.periodStart}
+                      onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, periodStart: e.target.value })}
+                    />
+                  </label>
+                  <label style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+                    {t("Fin (inclus)", "End date (inclusive)")}
+                    <input
+                      type="date"
+                      style={{ display: "block", marginTop: 4 }}
+                      value={periodCloseForm.periodEnd}
+                      onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, periodEnd: e.target.value })}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-secondary-outline"
+                    onClick={() =>
+                      setPeriodCloseForm({
+                        ...periodCloseForm,
+                        periodStart: expenseFilter.from,
+                        periodEnd: expenseFilter.to
+                      })
+                    }
+                  >
+                    {t("Aligner sur le filtre du rapport", "Match report filter dates")}
+                  </button>
+                </div>
+                <input
+                  placeholder={t(
+                    "Référence inventaire ou commentaire (facultatif)",
+                    "Inventory reference or note (optional)"
+                  )}
+                  value={periodCloseForm.note}
+                  onChange={(e) => setPeriodCloseForm({ ...periodCloseForm, note: e.target.value })}
+                  style={{ marginTop: 10, width: "100%", maxWidth: "36rem" }}
+                />
+                <button type="submit" disabled={!selectedIspId} style={{ marginTop: 12 }}>
+                  {t("Clôturer cette période", "Close this period")}
+                </button>
+              </form>
+            )}
+            <h4 style={{ marginTop: 18, marginBottom: 8, fontSize: "0.95rem" }}>
+              {t("Clôtures enregistrées", "Recorded closures")}
+            </h4>
+            {accountingPeriodClosures.length === 0 ? (
+              <p className="app-meta">
+                {t(
+                  "Aucune clôture pour cet espace — toutes les périodes sont ouvertes à la saisie.",
+                  "No closures for this workspace — all periods are open for entry."
+                )}
+              </p>
+            ) : (
+              <ul className="accounting-closures-list">
+                {accountingPeriodClosures.map((c) => (
+                  <li key={c.id}>
+                    <strong>
+                      {c.periodStart} → {c.periodEnd}
+                    </strong>
+                    {c.note ? ` — ${c.note}` : ""}
+                    <span className="app-meta">
+                      {" "}
+                      (
+                      {t("clôturée le", "closed on")}{" "}
+                      {c.closedAt ? new Date(c.closedAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "—"}
+                      {c.closedByName ? ` ${t("· par", "· by")} ${c.closedByName}` : ""})
+                    </span>
+                    {(isPlatformSuperRole(user.role) ||
+                      user.role === "company_manager" ||
+                      user.role === "isp_admin") && (
+                      <button
+                        type="button"
+                        className="btn-secondary-outline accounting-closure-reopen"
+                        onClick={() => onReopenAccountingPeriod(c.id)}
+                      >
+                        {t("Lever la clôture", "Reopen closure")}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="expenses-filter">
+            <label>
+              {t("Du", "From")}
+              <input
+                type="date"
+                value={expenseFilter.from}
+                onChange={(e) => setExpenseFilter({ ...expenseFilter, from: e.target.value })}
+              />
+            </label>
+            <label>
+              {t("Au", "To")}
+              <input
+                type="date"
+                value={expenseFilter.to}
+                onChange={(e) => setExpenseFilter({ ...expenseFilter, to: e.target.value })}
+              />
+            </label>
+            <button type="button" disabled={!selectedIspId} onClick={() => refresh()}>
+              {t("Appliquer la période", "Apply range")}
+            </button>
+          </div>
+          {expenseSummary ? (
+            <div className="expenses-summary">
+              <div className="expenses-summary-card expenses-summary-card--green">
+                <span>{t("Encaissé (paiements confirmés)", "Collected (confirmed payments)")}</span>
+                <strong>
+                  {(expenseSummary.collectionsInPeriodUsd ?? 0).toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD"
+                  })}
+                </strong>
+              </div>
+              <div className="expenses-summary-card">
+                <span>{t("Dépenses validées (approuvées)", "Validated expenses (approved)")}</span>
+                <strong>
+                  {(expenseSummary.totalExpensesUsd ?? 0).toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD"
+                  })}
+                </strong>
+              </div>
+              <div className="expenses-summary-card">
+                <span>{t("En attente de validation", "Pending approval")}</span>
+                <strong>
+                  {(expenseSummary.pendingExpensesUsd ?? 0).toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD"
+                  })}
+                </strong>
+              </div>
+              <div className="expenses-summary-card">
+                <span>
+                  {t("Net (encaissements − dépenses validées)", "Net (collections − validated expenses)")}
+                </span>
+                <strong>
+                  {(
+                    (expenseSummary.collectionsInPeriodUsd ?? 0) - (expenseSummary.totalExpensesUsd ?? 0)
+                  ).toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD"
+                  })}
+                </strong>
+              </div>
+              <div className="expenses-summary-card">
+                <span>{t("Grand livre - Débit", "Ledger - Debit")}</span>
+                <strong>
+                  {(accountingLedgerTotals.totalDebitUsd ?? 0).toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD"
+                  })}
+                </strong>
+              </div>
+              <div className="expenses-summary-card">
+                <span>{t("Grand livre - Crédit", "Ledger - Credit")}</span>
+                <strong>
+                  {(accountingLedgerTotals.totalCreditUsd ?? 0).toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD"
+                  })}
+                </strong>
+              </div>
+            </div>
+          ) : null}
+          <div className="panel" style={{ marginBottom: 12 }}>
+            <DataTable
+              t={t}
+              title={t("Grand livre comptable", "Accounting ledger")}
+              description={t(
+                "Écritures automatiques des encaissements (caisse/banque) et compte client.",
+                "Automatic receipt entries (cash/bank) and customer account balancing."
+              )}
+              rows={ledgerTableView.pageRows}
+              actions={
+                <button type="button" className="btn-secondary-outline" onClick={onDownloadLedgerCsv} disabled={!selectedIspId}>
+                  {t("Exporter CSV", "Export CSV")}
+                </button>
+              }
+              columns={[
+                { key: "entryDate", header: t("Date", "Date"), sortKey: "entryDate", cell: (r) => r.entryDate || "—" },
+                { key: "journalType", header: t("Journal", "Journal"), sortKey: "journalType", cell: (r) => r.journalType || "—" },
+                { key: "accountCode", header: t("Compte", "Account"), sortKey: "accountCode", cell: (r) => `${r.accountCode || "—"} ${r.accountLabel || ""}`.trim() },
+                { key: "debitUsd", header: t("Débit USD", "Debit USD"), sortKey: "debitUsd", cell: (r) => Number(r.debitUsd || 0).toFixed(2) },
+                { key: "creditUsd", header: t("Crédit USD", "Credit USD"), sortKey: "creditUsd", cell: (r) => Number(r.creditUsd || 0).toFixed(2) },
+                { key: "memo", header: t("Mémo", "Memo"), sortKey: "memo", cell: (r) => r.memo || "—" }
+              ]}
+              searchValue={ledgerTable.q}
+              onSearchValueChange={(q) => setLedgerTable((s) => ({ ...s, q, page: 1 }))}
+              page={ledgerTable.page}
+              pageSize={ledgerTable.pageSize}
+              totalRows={ledgerTableView.total}
+              onPageChange={(page) => setLedgerTable((s) => ({ ...s, page }))}
+              onPageSizeChange={(pageSize) => setLedgerTable((s) => ({ ...s, pageSize, page: 1 }))}
+              sort={ledgerTable.sort}
+              onSortChange={(sort) => setLedgerTable((s) => ({ ...s, sort }))}
+            />
+          </div>
+          <div className="expenses-layout">
+            {(isPlatformSuperRole(user.role) ||
+              user.role === "company_manager" ||
+              user.role === "isp_admin") && (
+              <form className="panel expenses-form" onSubmit={onCreateExpense}>
+                <h3>{t("Nouvelle dépense", "New expense")}</h3>
+                <label style={{ display: "block", marginBottom: 8, fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+                  {t("Catégorie", "Category")}
+                  <select
+                    style={{ display: "block", width: "100%", marginTop: 4 }}
+                    value={expenseForm.category}
+                    onChange={(e) =>
+                      setExpenseForm({
+                        ...expenseForm,
+                        category: e.target.value,
+                        fieldAgentId:
+                          e.target.value === "field_agent_fixed" || e.target.value === "field_agent_percentage"
+                            ? expenseForm.fieldAgentId
+                            : ""
+                      })
+                    }
+                  >
+                    {EXPENSE_CATEGORY_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {isEn ? o.labelEn : o.labelFr}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder={t("Montant (USD)", "Amount (USD)")}
+                  value={expenseForm.amountUsd}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, amountUsd: e.target.value })}
+                />
+                <input
+                  placeholder={t("Description (facultatif)", "Description (optional)")}
+                  value={expenseForm.description}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
+                />
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
+                  <label style={{ flex: "1 1 140px", fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+                    {t("Début de période", "Period start")}
+                    <input
+                      type="date"
+                      style={{ display: "block", width: "100%", marginTop: 4 }}
+                      value={expenseForm.periodStart}
+                      onChange={(e) => setExpenseForm({ ...expenseForm, periodStart: e.target.value })}
+                    />
+                  </label>
+                  <label style={{ flex: "1 1 140px", fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+                    {t("Fin de période", "Period end")}
+                    <input
+                      type="date"
+                      style={{ display: "block", width: "100%", marginTop: 4 }}
+                      value={expenseForm.periodEnd}
+                      onChange={(e) => setExpenseForm({ ...expenseForm, periodEnd: e.target.value })}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    style={{ margin: 0, width: "auto" }}
+                    onClick={() =>
+                      setExpenseForm({
+                        ...expenseForm,
+                        periodStart: expenseFilter.from,
+                        periodEnd: expenseFilter.to
+                      })
+                    }
+                  >
+                    {t("Aligner sur le rapport", "Match report")}
+                  </button>
+                </div>
+                {(expenseForm.category === "field_agent_fixed" ||
+                  expenseForm.category === "field_agent_percentage") && (
+                  <>
+                    <label style={{ display: "block", marginTop: 10, fontSize: "0.85rem", color: "var(--mb-muted)" }}>
+                      {t("Agent terrain", "Field agent")}
+                      <select
+                        style={{ display: "block", width: "100%", marginTop: 4 }}
+                        value={expenseForm.fieldAgentId}
+                        onChange={(e) => setExpenseForm({ ...expenseForm, fieldAgentId: e.target.value })}
+                      >
+                        <option value="">{t("Choisir un agent", "Choose an agent")}</option>
+                        {users
+                          .filter((u) => u.role === "field_agent")
+                          .map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.fullName || u.email || u.id}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    {expenseForm.category === "field_agent_percentage" ? (
+                      <input
+                        type="number"
+                        min="0.01"
+                        max="100"
+                        step="0.01"
+                        placeholder={t(
+                          "Commission % (base CA ou encaissements)",
+                          "Commission % (revenue or collections basis)"
+                        )}
+                        value={expenseForm.agentPayoutPercent}
+                        onChange={(e) => setExpenseForm({ ...expenseForm, agentPayoutPercent: e.target.value })}
+                      />
+                    ) : null}
+                  </>
+                )}
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder={t(
+                    "Base CA USD (facultatif, traçabilité)",
+                    "Revenue basis USD (optional, for audit trail)"
+                  )}
+                  value={expenseForm.revenueBasisUsd}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, revenueBasisUsd: e.target.value })}
+                />
+                <button type="submit" disabled={!selectedIspId}>
+                  {t("Enregistrer la dépense", "Save expense")}
+                </button>
+              </form>
+            )}
+            <div className="panel expenses-list">
+              <h3>{t("Lignes sur la période", "Lines in this period")}</h3>
+              {expenses.length === 0 ? (
+                <p style={{ color: "var(--mb-muted)", fontSize: "0.9rem" }}>
+                  {t(
+                    "Aucune dépense ne chevauche ces dates, ou les données se chargent encore.",
+                    "No expenses overlap these dates, or data is still loading."
+                  )}
+                </p>
+              ) : (
+                <DataTable
+                  t={t}
+                  title={null}
+                  rows={expenseTableView.pageRows}
+                  columns={[
+                    {
+                      key: "amountUsd",
+                      header: t("Montant", "Amount"),
+                      sortKey: "amountUsd",
+                      cell: (ex) =>
+                        (ex.amountUsd ?? 0).toLocaleString(undefined, { style: "currency", currency: "USD" })
+                    },
+                    {
+                      key: "status",
+                      header: t("Statut", "Status"),
+                      sortKey: "status",
+                      cell: (ex) => {
+                        const st = ex.status || "pending";
+                        return (
+                          <span className={`expense-status-badge expense-status-badge--${st}`}>
+                            {expenseApprovalStatusLabel(st, isEn)}
+                          </span>
+                        );
+                      }
+                    },
+                    {
+                      key: "category",
+                      header: t("Catégorie", "Category"),
+                      sortKey: "category",
+                      cell: (ex) => expenseCategoryLabel(ex.category, isEn)
+                    },
+                    {
+                      key: "period",
+                      header: t("Période", "Period"),
+                      cell: (ex) => `${ex.periodStart || "—"} → ${ex.periodEnd || "—"}`
+                    },
+                    {
+                      key: "meta",
+                      header: t("Traçabilité", "Trace"),
+                      cell: (ex) => {
+                        const st = ex.status || "pending";
+                        return (
+                          <div style={{ display: "grid", gap: 4, minWidth: 220 }}>
+                            {ex.description ? <div>{ex.description}</div> : <div className="app-meta">—</div>}
+                            <div className="app-meta" style={{ margin: 0 }}>
+                              {ex.createdByName ? `${t("Saisi par", "Entered by")} ${ex.createdByName}` : "—"}
+                              {ex.fieldAgentName ? ` · ${t("Agent", "Agent")}: ${ex.fieldAgentName}` : ""}
+                            </div>
+                            {st === "approved" && (ex.approvedByName || ex.approvedAt) ? (
+                              <div className="app-meta" style={{ margin: 0 }}>
+                                {t("Approuvé", "Approved")}
+                                {ex.approvedByName ? ` ${t("par", "by")} ${ex.approvedByName}` : ""}
+                                {ex.approvedAt
+                                  ? ` — ${new Date(ex.approvedAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}`
+                                  : ""}
+                              </div>
+                            ) : null}
+                            {st === "rejected" ? (
+                              <div className="app-meta expenses-row-meta--warn" style={{ margin: 0 }}>
+                                {t("Rejet", "Rejected")}
+                                {ex.rejectedByName ? ` ${t("par", "by")} ${ex.rejectedByName}` : ""}
+                                {ex.rejectionNote ? ` · ${ex.rejectionNote}` : ""}
+                              </div>
+                            ) : null}
+                            {ex.periodClosed ? (
+                              <div className="app-meta" style={{ margin: 0 }}>
+                                {t("Période clôturée", "Period closed")}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      }
+                    },
+                    {
+                      key: "actions",
+                      header: t("Actions", "Actions"),
+                      cell: (ex) => {
+                        const st = ex.status || "pending";
+                        return (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, minWidth: 220 }}>
+                            {ex.canApprove ? (
+                              <button
+                                type="button"
+                                className="btn-expense-approve"
+                                disabled={!selectedIspId}
+                                onClick={() => onApproveExpense(ex.id)}
+                              >
+                                {t("Approuver", "Approve")}
+                              </button>
+                            ) : null}
+                            {ex.canReject ? (
+                              <button
+                                type="button"
+                                className="btn-expense-reject"
+                                disabled={!selectedIspId}
+                                onClick={() => onRejectExpense(ex.id)}
+                              >
+                                {t("Rejeter", "Reject")}
+                              </button>
+                            ) : null}
+                            {(isPlatformSuperRole(user.role) ||
+                              user.role === "company_manager" ||
+                              user.role === "isp_admin") &&
+                            (st === "pending" || st === "rejected") &&
+                            !ex.periodClosed ? (
+                              <button
+                                type="button"
+                                className="btn-expense-delete"
+                                disabled={!selectedIspId}
+                                onClick={() => onDeleteExpense(ex.id)}
+                              >
+                                {t("Supprimer", "Delete")}
+                              </button>
+                            ) : null}
+                          </div>
+                        );
+                      }
+                    }
+                  ]}
+                  searchValue={expenseTable.q}
+                  onSearchValueChange={(q) => setExpenseTable((s) => ({ ...s, q, page: 1 }))}
+                  filters={
+                    <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                      <span>{t("Statut", "Status")}</span>
+                      <select
+                        value={expenseTable.status}
+                        onChange={(e) => setExpenseTable((s) => ({ ...s, status: e.target.value, page: 1 }))}
+                      >
+                        <option value="all">{t("Tous", "All")}</option>
+                        <option value="pending">{t("En attente", "Pending")}</option>
+                        <option value="approved">{t("Approuvé", "Approved")}</option>
+                        <option value="rejected">{t("Rejeté", "Rejected")}</option>
+                      </select>
+                    </label>
+                  }
+                  page={expenseTable.page}
+                  pageSize={expenseTable.pageSize}
+                  totalRows={expenseTableView.total}
+                  onPageChange={(page) => setExpenseTable((s) => ({ ...s, page }))}
+                  onPageSizeChange={(pageSize) => setExpenseTable((s) => ({ ...s, pageSize, page: 1 }))}
+                  sort={expenseTable.sort}
+                  onSortChange={(sort) => setExpenseTable((s) => ({ ...s, sort }))}
+                />
+              )}
+            </div>
+          </div>
+          </div>
+        </details>
+      )}
+
       <details className="panel field-clients-more">
         <summary>{t("Bons d'accès", "Access vouchers")}</summary>
         <div className="field-clients-more__body field-clients-more__body--stack">
@@ -7778,116 +7880,6 @@ api.getPaymentNotifications(activeIspId)
 
       </DashboardScreenGate>
 
-      <DashboardScreenGate
-        mobile={gateMobile}
-        active={mobileScreen}
-        id="billing"
-        hash="#billing-ops"
-        isFieldAgent={isFieldAgent}
-      >
-      <section className="panel billing-invoices-panel">
-        <h2>{t("Factures", "Invoices")}</h2>
-        <DataTable
-          t={t}
-          title={null}
-          rows={invoiceTableView.pageRows}
-          columns={[
-            {
-              key: "id",
-              header: "ID",
-              cell: (inv) => String(inv.id || "").slice(0, 8)
-            },
-            {
-              key: "amountUsd",
-              header: t("Montant", "Amount"),
-              sortKey: "amountUsd",
-              cell: (inv) => `$${inv.amountUsd ?? "—"}`
-            },
-            {
-              key: "status",
-              header: t("Statut", "Status"),
-              sortKey: "status",
-              cell: (inv) => invoiceStatusShort(inv.status, isEn)
-            },
-            {
-              key: "payment",
-              header: t("Paiement", "Payment"),
-              cell: (inv) =>
-                inv.status === "unpaid" || inv.status === "overdue" ? (
-                  canMarkInvoicePaid(user.role) ? (
-                    <button type="button" onClick={() => onMarkPaid(inv.id, inv.amountUsd)}>
-                      {t("Marquer payée", "Mark paid")}
-                    </button>
-                  ) : (
-                    "—"
-                  )
-                ) : (
-                  t("Payée", "Paid")
-                )
-            },
-            {
-              key: "pdf",
-              header: "PDF",
-              cell: (inv) => (
-                <button type="button" className="btn-secondary-outline" onClick={() => onDownloadInvoiceProforma(inv.id)}>
-                  {t("Proforma", "Proforma")}
-                </button>
-              )
-            }
-          ]}
-          searchValue={invoiceTable.q}
-          onSearchValueChange={(q) => setInvoiceTable((s) => ({ ...s, q, page: 1 }))}
-          filters={
-            <label className="app-meta" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-              <span>{t("Statut", "Status")}</span>
-              <select
-                value={invoiceTable.status || "all"}
-                onChange={(e) => setInvoiceTable((s) => ({ ...s, status: e.target.value, page: 1 }))}
-              >
-                <option value="all">{t("Tous", "All")}</option>
-                <option value="unpaid">{t("Impayée", "Unpaid")}</option>
-                <option value="overdue">{t("En retard", "Overdue")}</option>
-                <option value="paid">{t("Payée", "Paid")}</option>
-              </select>
-            </label>
-          }
-          page={invoiceTable.page}
-          pageSize={invoiceTable.pageSize}
-          totalRows={invoiceTableView.total}
-          onPageChange={(page) => setInvoiceTable((s) => ({ ...s, page }))}
-          onPageSizeChange={(pageSize) => setInvoiceTable((s) => ({ ...s, pageSize, page: 1 }))}
-          sort={invoiceTable.sort}
-          onSortChange={(sort) => setInvoiceTable((s) => ({ ...s, sort }))}
-        />
-      </section>
-
-      <section className="panel">
-        <h2>{t("Abonnements", "Subscriptions")}</h2>
-        {subscriptions.map((subscription) => (
-          <p key={subscription.id}>
-            {subscription.id.slice(0, 8)} - {subscription.status} ({subscription.accessType || "pppoe"})
-            {subscription.maxSimultaneousDevices != null
-              ? ` — appareils ${subscription.maxSimultaneousDevices}`
-              : ""}{" "}
-            {!isFieldAgent ? (
-              <>
-            {subscription.status !== "suspended" ? (
-              <button onClick={() => onSuspendSubscription(subscription.id)}>Suspendre</button>
-            ) : (
-              <button onClick={() => onReactivateSubscription(subscription.id)}>Réactiver</button>
-            )}{" "}
-            <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "activate")}>
-              Sync activer
-            </button>{" "}
-            <button onClick={() => onSyncSubscriptionNetwork(subscription.id, "suspend")}>
-              Sync suspendre
-            </button>
-              </>
-            ) : null}
-          </p>
-        ))}
-      </section>
-      </DashboardScreenGate>
 
       {renewalBillingPanel}
 
