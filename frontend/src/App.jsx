@@ -136,7 +136,7 @@ function tidSubmissionStatusLabel(status, isEn) {
     expired: { fr: "expiré", en: "expired" }
   };
   const row = m[s];
-  return row ? (isEn ? row.en : row.fr) : status || "—";
+  return row ? (isEn ? row.en : row.fr) : status || "-";
 }
 
 function paymentIntentStatusLabel(status, isEn) {
@@ -151,7 +151,7 @@ function invoiceStatusShort(status, isEn) {
     paid: { fr: "payée", en: "paid" }
   };
   const row = m[s];
-  return row ? (isEn ? row.en : row.fr) : status || "—";
+  return row ? (isEn ? row.en : row.fr) : status || "-";
 }
 
 /** Lien tel: à partir du numéro saisi dans l’image de marque (conserve + et chiffres). */
@@ -425,7 +425,7 @@ const PAYMENT_METHOD_TYPE_I18N = {
 
 function paymentMethodTypeText(mt, t) {
   const p = PAYMENT_METHOD_TYPE_I18N[mt];
-  return p ? t(p[0], p[1]) : mt || "—";
+  return p ? t(p[0], p[1]) : mt || "-";
 }
 
 function paymentMethodConfigFromForm(form) {
@@ -531,13 +531,13 @@ const PLATFORM_SAAS_ALT_METHODS = STANDARD_PLATFORM_PAYMENT_METHODS.filter((m) =
 
 function roleProfileLabel(roleKey, t) {
   const row = ROLE_PROFILE_OPTIONS.find((x) => x.key === roleKey);
-  if (!row) return roleKey || "—";
+  if (!row) return roleKey || "-";
   return t(row.fr, row.en);
 }
 
 function rolePermissionLabel(permissionKey, t) {
   const row = ROLE_PERMISSION_OPTIONS.find((x) => x.key === permissionKey);
-  if (!row) return permissionKey || "—";
+  if (!row) return permissionKey || "-";
   return t(row.fr, row.en);
 }
 
@@ -547,7 +547,7 @@ function accreditationLabel(level, t) {
   if (k === "standard") return t("Standard", "Standard");
   if (k === "senior") return t("Senior", "Senior");
   if (k === "manager") return t("Manager", "Manager");
-  return level || "—";
+  return level || "-";
 }
 
 function CsvImportResultBlock({ createdCount, skipped, errors, maxRows = 40, onDismiss, t }) {
@@ -593,8 +593,8 @@ function CsvImportResultBlock({ createdCount, skipped, errors, maxRows = 40, onD
               <li key={i}>
                 {tr("Ligne ", "Row ")}
                 {s.line} : {s.reason || tr("ignorée", "skipped")}
-                {s.phone != null ? ` — ${tr("tél.", "phone")} ${s.phone}` : ""}
-                {s.email != null ? ` — ${s.email}` : ""}
+                {s.phone != null ? ` - ${tr("tél.", "phone")} ${s.phone}` : ""}
+                {s.email != null ? ` - ${s.email}` : ""}
               </li>
             ))}
           </ul>
@@ -633,11 +633,11 @@ function CsvImportResultBlock({ createdCount, skipped, errors, maxRows = 40, onD
 }
 
 const EXPENSE_CATEGORY_OPTIONS = [
-  { value: "field_agent_fixed", labelFr: "Agent terrain — paiement fixe", labelEn: "Field agent — fixed payment" },
+  { value: "field_agent_fixed", labelFr: "Agent terrain - paiement fixe", labelEn: "Field agent - fixed payment" },
   {
     value: "field_agent_percentage",
-    labelFr: "Agent terrain — pourcentage / commission",
-    labelEn: "Field agent — percentage / commission"
+    labelFr: "Agent terrain - pourcentage / commission",
+    labelEn: "Field agent - percentage / commission"
   },
   { value: "equipment", labelFr: "Équipement", labelEn: "Equipment" },
   { value: "operations", labelFr: "Exploitation", labelEn: "Operations" },
@@ -667,7 +667,7 @@ function withdrawalStatusLabel(status, isEn) {
   if (s === "completed" || s === "success" || s === "paid") return isEn ? "Completed" : "Terminé";
   if (s === "pending" || s === "processing") return isEn ? "Pending" : "En attente";
   if (s === "failed" || s === "cancelled" || s === "canceled") return isEn ? "Failed" : "Échoué";
-  return status || "—";
+  return status || "-";
 }
 
 // Legacy tenants pagination replaced by DataTable pagination.
@@ -2544,7 +2544,7 @@ api.getPaymentNotifications(activeIspId)
         agentPayoutPercent: "",
         revenueBasisUsd: ""
       }));
-      setNotice("Dépense soumise — elle apparaît en « En attente » jusqu'à approbation par un autre administrateur (ou par vous-même si vous êtes seul validateur sur cet espace).");
+      setNotice("Dépense soumise - elle apparaît en « En attente » jusqu'à approbation par un autre administrateur (ou par vous-même si vous êtes seul validateur sur cet espace).");
       await refresh();
     } catch (err) {
       setError(audienceErr(err.message || "Impossible d'enregistrer la dépense."));
@@ -2571,7 +2571,7 @@ api.getPaymentNotifications(activeIspId)
     setNotice("");
     try {
       await api.approveExpense(selectedIspId, expenseId);
-      setNotice("Dépense approuvée — elle est prise en compte dans les totaux validés.");
+      setNotice("Dépense approuvée - elle est prise en compte dans les totaux validés.");
       await refresh();
     } catch (err) {
       setError(audienceErr(err.message || "Impossible d'approuver cette dépense."));
@@ -2586,7 +2586,7 @@ api.getPaymentNotifications(activeIspId)
     setNotice("");
     try {
       await api.rejectExpense(selectedIspId, expenseId, { rejectionNote: note });
-      setNotice("Dépense rejetée — vous pouvez la supprimer ou la soumettre à nouveau après correction.");
+      setNotice("Dépense rejetée - vous pouvez la supprimer ou la soumettre à nouveau après correction.");
       await refresh();
     } catch (err) {
       setError(audienceErr(err.message || "Impossible de rejeter cette dépense."));
@@ -2605,7 +2605,7 @@ api.getPaymentNotifications(activeIspId)
         note: periodCloseForm.note
       });
       setNotice(
-        "Période clôturée — les dépenses qui chevauchent ces dates ne pourront plus être créées, modifiées ou supprimées jusqu'à réouverture."
+        "Période clôturée - les dépenses qui chevauchent ces dates ne pourront plus être créées, modifiées ou supprimées jusqu'à réouverture."
       );
       await refresh();
     } catch (err) {
@@ -2647,7 +2647,7 @@ api.getPaymentNotifications(activeIspId)
         expiresDays: Number(portalTokenForm.expiresDays) || 30
       });
       setLastPortalIssue(data);
-      setNotice("Lien portail généré — copiez-le et envoyez-le au client.");
+      setNotice("Lien portail généré - copiez-le et envoyez-le au client.");
     } catch (err) {
       setError(audienceErr(err.message || "Impossible de créer le lien portail."));
     }
@@ -3565,7 +3565,7 @@ api.getPaymentNotifications(activeIspId)
     try {
       const stats = await api.processNotificationOutbox();
       setNotice(
-        `File notifications : ${stats.processed} élément(s) traités — envoyés ${stats.sent}, nouvel essai ${stats.retried}, échecs ${stats.failed}.`
+        `File notifications : ${stats.processed} élément(s) traités - envoyés ${stats.sent}, nouvel essai ${stats.retried}, échecs ${stats.failed}.`
       );
       refresh();
     } catch (err) {
@@ -3629,13 +3629,13 @@ api.getPaymentNotifications(activeIspId)
 
   async function onSuspendSubscription(subscriptionId) {
     await api.suspendSubscription(selectedIspId, subscriptionId);
-    setNotice("Abonnement suspendu — mise à jour d'accès réseau demandée.");
+    setNotice("Abonnement suspendu - mise à jour d'accès réseau demandée.");
     refresh();
   }
 
   async function onReactivateSubscription(subscriptionId) {
     await api.reactivateSubscription(selectedIspId, subscriptionId);
-    setNotice("Abonnement réactivé — mise à jour d'accès réseau demandée.");
+    setNotice("Abonnement réactivé - mise à jour d'accès réseau demandée.");
     refresh();
   }
 
@@ -3660,7 +3660,7 @@ api.getPaymentNotifications(activeIspId)
     const res = await api.redeemVoucher(body);
     setNotice(
       res.subscriberToken
-        ? "Bon utilisé. Jeton de session abonné retourné — le client peut utiliser le portail client."
+        ? "Bon utilisé. Jeton de session abonné retourné - le client peut utiliser le portail client."
         : "Bon utilisé et accès prolongé."
     );
     setVoucherRedeemForm({
@@ -3699,7 +3699,7 @@ api.getPaymentNotifications(activeIspId)
       <html lang="fr">
       <head>
         <meta charset="utf-8"/>
-        <title>Bons d'accès — McBuleli</title>
+        <title>Bons d'accès - McBuleli</title>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet"/>
@@ -3707,7 +3707,7 @@ api.getPaymentNotifications(activeIspId)
       <body style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;padding:16px;color:${branding?.secondaryColor || "#2d2420"};">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
           <img src="${mcLogoPrint}" alt="McBuleli" style="height:40px;width:auto;object-fit:contain;" />
-          <h2 style="margin:0;color:${branding?.primaryColor || "#5d4037"};">${brandTitle} — bons d'accès Wi‑Fi</h2>
+          <h2 style="margin:0;color:${branding?.primaryColor || "#5d4037"};">${brandTitle} - bons d'accès Wi‑Fi</h2>
         </div>
         ${printable
           .map(
@@ -3717,7 +3717,7 @@ api.getPaymentNotifications(activeIspId)
             Débit : ${v.rateLimit}<br/>
             Durée : ${v.durationDays} jour(s)<br/>
             Appareils : ${v.maxDevices ?? 1}<br/>
-            Expire le : ${v.expiresAt ? new Date(v.expiresAt).toLocaleDateString("fr-FR") : "—"}
+            Expire le : ${v.expiresAt ? new Date(v.expiresAt).toLocaleDateString("fr-FR") : "-"}
           </div>
         `
           )
@@ -4081,7 +4081,7 @@ api.getPaymentNotifications(activeIspId)
           {locked ? <p>{t("⚠ Espace verrouillé jusqu'au paiement.", "⚠ Workspace locked until payment.")}</p> : null}
           {billing.package ? (
             <p className="app-meta">
-              {t("Formule :", "Plan:")} <strong>{billing.package.name}</strong> ({billing.package.code}) —{" "}
+              {t("Formule :", "Plan:")} <strong>{billing.package.name}</strong> ({billing.package.code}) -{" "}
               {isEn
                 ? `$${billing.monthlyPriceUsd}/month · ~${billing.cdfEstimateForMonth} CDF · ${billing.billingPeriodDays}d cycle`
                 : `${billing.monthlyPriceUsd} $/mois · ~${billing.cdfEstimateForMonth} CDF · cycle ${billing.billingPeriodDays}j`}
@@ -4185,7 +4185,7 @@ api.getPaymentNotifications(activeIspId)
                     const suffix = configured ? `✓ ${providers[0]}` : t("⚠ configurer", "⚠ configure");
                     return (
                       <option key={mt} value={mt}>
-                        {paymentMethodTypeText(mt, t)} — {suffix}
+                        {paymentMethodTypeText(mt, t)} - {suffix}
                       </option>
                     );
                   })}
@@ -4662,19 +4662,19 @@ api.getPaymentNotifications(activeIspId)
                       key: "name",
                       header: t("Nom", "Name"),
                       sortKey: "name",
-                      cell: (ten) => `${ten.name || "—"}${ten.isDemo ? " (démo)" : ""}`
+                      cell: (ten) => `${ten.name || "-"}${ten.isDemo ? " (démo)" : ""}`
                     },
                     {
                       key: "location",
                       header: t("Localisation", "Location"),
                       sortKey: "location",
-                      cell: (ten) => ten.location || "—"
+                      cell: (ten) => ten.location || "-"
                     },
                     {
                       key: "contactPhone",
                       header: t("Téléphone", "Phone"),
                       sortKey: "contactPhone",
-                      cell: (ten) => ten.contactPhone || "—"
+                      cell: (ten) => ten.contactPhone || "-"
                     },
                     {
                       key: "subscriptionStatus",
@@ -4686,14 +4686,14 @@ api.getPaymentNotifications(activeIspId)
                       key: "packageName",
                       header: t("Forfait", "Package"),
                       sortKey: "packageName",
-                      cell: (ten) => ten.packageName || "—"
+                      cell: (ten) => ten.packageName || "-"
                     },
                     {
                       key: "createdAt",
                       header: t("Créé", "Created"),
                       sortKey: "createdAt",
                       cell: (ten) =>
-                        ten.createdAt ? new Date(ten.createdAt).toLocaleDateString("fr-FR") : "—"
+                        ten.createdAt ? new Date(ten.createdAt).toLocaleDateString("fr-FR") : "-"
                     },
                     {
                       key: "actions",
@@ -4779,19 +4779,13 @@ api.getPaymentNotifications(activeIspId)
           user.role === "isp_admin") && (
           <form className="panel field-clients-create" onSubmit={onSaveBranding}>
             <h2>{t("Image de marque", "Branding")}</h2>
-            <p className="app-meta" style={{ maxWidth: "56ch" }}>
-              {t(
-                "Nom, logo, couleurs et contacts utilisés sur le portail client, le Wi‑Fi invité, les factures et les exports. L’en-tête du tableau de bord reste McBuleli.",
-                "Name, logo, colors and contacts used on the customer portal, guest Wi‑Fi, invoices and exports. The dashboard header stays McBuleli."
-              )}
-            </p>
             <input
               placeholder={t("Nom affiché", "Display name")}
               value={brandingForm.displayName}
               onChange={(e) => setBrandingForm({ ...brandingForm, displayName: e.target.value })}
             />
             <label style={{ display: "block", marginTop: 8 }}>
-              {t("Logo entreprise (depuis votre appareil)", "Company logo (from your device)")}
+              {t("Logo entreprise", "Company logo")}
               <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={onBrandingLogoFile} />
             </label>
             {brandingLogoPickPreview || brandingForm.logoUrl ? (
@@ -4860,12 +4854,6 @@ api.getPaymentNotifications(activeIspId)
             <details className="field-clients-more" style={{ marginTop: 16 }}>
               <summary>{t("Domaine & marque blanche", "Domain & white-label")}</summary>
               <div className="field-clients-more__body">
-                <p className="app-meta" style={{ margin: "0 0 10px", maxWidth: "52ch" }}>
-                  {t(
-                    "Identifiant technique de votre espace (souvent *.tenant.local à la création). Sert au routage « marque blanche » si vous accédez au tableau de bord via ce nom d’hôte ; ce n’est pas un domaine public DNS tant que vous n’avez pas souscrit au Premium sur mesure.",
-                    "Technical hostname for your workspace (often *.tenant.local at signup). Used for white-label routing when you open the dashboard via that host; it is not public DNS until you use Premium custom domain."
-                  )}
-                </p>
                 <input
                   placeholder={t(
                     "Sous-domaine technique (ex. mon-isp.tenant.local)",
@@ -4875,57 +4863,31 @@ api.getPaymentNotifications(activeIspId)
                   onChange={(e) => setBrandingForm({ ...brandingForm, subdomain: e.target.value })}
                 />
                 <input
-                  placeholder={t("Domaine DNS privé (Premium sur mesure)", "Private DNS domain (Premium custom)")}
+                  placeholder={t("Domaine DNS privé (Premium)", "Private DNS domain (Premium)")}
                   value={brandingForm.customDomain}
                   onChange={(e) => setBrandingForm({ ...brandingForm, customDomain: e.target.value })}
                   disabled={!canPrivateCustomDomain}
                   title={
                     canPrivateCustomDomain
                       ? undefined
-                      : t(
-                          "Réservé au forfait Premium sur mesure (domaine sur votre marque).",
-                          "Reserved for Premium custom (on-demand) — your own brand domain."
-                        )
+                      : t("Réservé au Premium sur mesure.", "Premium custom only.")
                   }
                 />
-                {!canPrivateCustomDomain ? (
-                  <p className="app-meta" style={{ margin: "4px 0 0", fontSize: "0.88rem" }}>
-                    {t(
-                      "Le domaine DNS personnalisé (ex. admin.votredomaine.com) est activé uniquement sur le forfait Premium sur mesure. Les formules Essential et Pro conservent le sous-domaine technique ou l’accès via l’app McBuleli.",
-                      "A custom DNS domain (e.g. admin.yourbrand.com) is only available on the Premium custom (on-demand) plan. Essential and Pro keep the technical subdomain or access via the hosted McBuleli app."
-                    )}
-                  </p>
-                ) : null}
               </div>
             </details>
 
             <details className="field-clients-more" style={{ marginTop: 12 }}>
               <summary>{t("Wi‑Fi invité & Zone publique", "Guest Wi‑Fi & public Zone")}</summary>
               <div className="field-clients-more__body">
-                <label style={{ display: "block", maxWidth: "62ch" }}>
+                <label style={{ display: "block" }}>
                   <input
                     type="checkbox"
                     checked={Boolean(brandingForm.wifiZonePublic)}
                     disabled={!selectedIspId || wifiZonePublicSaving}
                     onChange={onWifiZonePublicToggle}
                   />{" "}
-                  {t(
-                    "Afficher mon entreprise sur la Zone WiFi publique McBuleli (/wifi-zone : logo, région, téléphone, lien Wi‑Fi invité). Décochez pour masquer l’annuaire public.",
-                    "List my company on McBuleli’s public WiFi Zone (/wifi-zone: logo, region, phone, guest Wi-Fi link). Uncheck to hide from the public directory."
-                  )}
+                  {t("Zone WiFi publique (/wifi-zone)", "Public WiFi Zone (/wifi-zone)")}
                 </label>
-                <p className="app-meta" style={{ margin: "6px 0 0", maxWidth: "62ch" }}>
-                  {t(
-                    "La case Zone publique s’enregistre immédiatement. Redirection et bannière utilisent « Enregistrer l’image de marque ».",
-                    "The public Zone checkbox saves immediately. Redirect and banner use “Save branding”."
-                  )}
-                </p>
-                <p className="app-meta" style={{ margin: "8px 0 0", maxWidth: "62ch" }}>
-                  {t(
-                    "La visibilité publique dépend de l’abonnement plateforme et peut être retirée par un administrateur ; sans renouvellement, l’annuaire et les ventes Wi‑Fi invité côté public sont suspendus jusqu’au rétablissement du paiement.",
-                    "Public listing depends on your platform subscription and can be hidden by an admin; if billing lapses, directory presence and public guest Wi‑Fi purchases pause until the subscription is active again."
-                  )}
-                </p>
                 <input
                   placeholder={t("Redirection après paiement Wi‑Fi (https://…)", "Post-payment Wi‑Fi redirect (https://…)")}
                   value={brandingForm.wifiPortalRedirectUrl}
@@ -4933,14 +4895,8 @@ api.getPaymentNotifications(activeIspId)
                     setBrandingForm({ ...brandingForm, wifiPortalRedirectUrl: e.target.value })
                   }
                 />
-                <p className="app-meta" style={{ margin: "12px 0 6px", maxWidth: "56ch" }}>
-                  {t(
-                    "Image large affichée en bas de la page Wi‑Fi invité (/buy/packages ou /wifi), sous les offres — visuel promo, partenaires, etc. (PNG, JPEG, WebP, GIF ; max. 5 Mo).",
-                    "Wide image at the bottom of the guest Wi‑Fi page (/buy/packages or /wifi), below the plans — promos, partners, etc. (PNG, JPEG, WebP, GIF; max 5 MB)."
-                  )}
-                </p>
-                <label style={{ display: "block", marginTop: 4 }}>
-                  {t("Bannière bas de page Wi‑Fi invité", "Guest Wi‑Fi bottom banner")}
+                <label style={{ display: "block", marginTop: 8 }}>
+                  {t("Bannière Wi‑Fi invité", "Guest Wi‑Fi banner")}
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/webp,image/gif"
@@ -5010,12 +4966,6 @@ api.getPaymentNotifications(activeIspId)
         <details className="panel field-clients-more">
           <summary>{t("Compte", "Account")}</summary>
           <div className="field-clients-more__body">
-            <p className="app-meta">
-              {t(
-                "Déconnexion de cet appareil et fermeture de l’espace opérateur.",
-                "Sign out from this device and close the operator workspace."
-              )}
-            </p>
             <button type="button" className="btn-expense-delete" onClick={onLogout}>
               {t("Déconnexion", "Logout")}
             </button>
@@ -5053,7 +5003,7 @@ api.getPaymentNotifications(activeIspId)
               key: "amountUsd",
               header: t("Montant", "Amount"),
               sortKey: "amountUsd",
-              cell: (inv) => `$${inv.amountUsd ?? "—"}`
+              cell: (inv) => `$${inv.amountUsd ?? "-"}`
             },
             {
               key: "status",
@@ -5071,7 +5021,7 @@ api.getPaymentNotifications(activeIspId)
                       {t("Marquer payée", "Mark paid")}
                     </button>
                   ) : (
-                    "—"
+                    "-"
                   )
                 ) : (
                   t("Payée", "Paid")
@@ -5119,7 +5069,7 @@ api.getPaymentNotifications(activeIspId)
           <p key={subscription.id}>
             {subscription.id.slice(0, 8)} - {subscription.status} ({subscription.accessType || "pppoe"})
             {subscription.maxSimultaneousDevices != null
-              ? ` — appareils ${subscription.maxSimultaneousDevices}`
+              ? ` - appareils ${subscription.maxSimultaneousDevices}`
               : ""}{" "}
             {!isFieldAgent ? (
               <>
@@ -5251,12 +5201,12 @@ api.getPaymentNotifications(activeIspId)
             emptyLabel={t("Aucun noeud.", "No nodes.")}
             rows={networkNodeTableView.pageRows}
             columns={[
-              { key: "name", header: t("Nom", "Name"), sortKey: "name", cell: (n) => n.name || "—" },
+              { key: "name", header: t("Nom", "Name"), sortKey: "name", cell: (n) => n.name || "-" },
               {
                 key: "host",
                 header: t("Hote", "Host"),
                 sortKey: "host",
-                cell: (n) => `${n.host || "—"}:${n.apiPort || "—"}`
+                cell: (n) => `${n.host || "-"}:${n.apiPort || "-"}`
               },
               {
                 key: "status",
@@ -5268,7 +5218,7 @@ api.getPaymentNotifications(activeIspId)
                 key: "default",
                 header: t("Defaut", "Default"),
                 sortKey: "isDefault",
-                cell: (n) => (n.isDefault ? t("Oui", "Yes") : "—")
+                cell: (n) => (n.isDefault ? t("Oui", "Yes") : "-")
               },
               {
                 key: "actions",
@@ -5332,7 +5282,7 @@ api.getPaymentNotifications(activeIspId)
                 return (
                   <p key={event.id} className="network-event-line">
                     <span className="network-event-line__meta">
-                      {new Date(event.createdAt).toLocaleString()} — {event.action} (
+                      {new Date(event.createdAt).toLocaleString()} - {event.action} (
                       {event.accessType || "n/a"}) [{event.status}]
                     </span>
                     {hint ? <span className="network-event-line__hint">{hint}</span> : null}
@@ -5356,7 +5306,7 @@ api.getPaymentNotifications(activeIspId)
                 return (
                   <p key={event.id} className="network-event-line">
                     <span className="network-event-line__meta">
-                      {new Date(event.createdAt).toLocaleString()} — {event.action} {event.username} [
+                      {new Date(event.createdAt).toLocaleString()} - {event.action} {event.username} [
                       {event.status}]
                     </span>
                     {hint ? <span className="network-event-line__hint">{hint}</span> : null}
@@ -5378,7 +5328,7 @@ api.getPaymentNotifications(activeIspId)
               telemetrySnapshots.slice(0, 20).map((row) => (
                 <p key={row.id} className="network-event-line">
                   <span className="network-event-line__meta">
-                    {new Date(row.createdAt).toLocaleString()} — {row.nodeName || row.nodeId?.slice(0, 8)}:
+                    {new Date(row.createdAt).toLocaleString()} - {row.nodeName || row.nodeId?.slice(0, 8)}:
                     PPPoE {row.pppoeActive}, Hotspot {row.hotspotActive},{" "}
                     {t("appareils", "devices")} {row.connectedDevices}
                   </span>
@@ -5399,7 +5349,7 @@ api.getPaymentNotifications(activeIspId)
               radiusAccountingIngest.slice(0, 25).map((row) => (
                 <p key={row.id} className="network-event-line">
                   <span className="network-event-line__meta">
-                    {new Date(row.createdAt).toLocaleString()} — {row.username || "?"} /{" "}
+                    {new Date(row.createdAt).toLocaleString()} - {row.username || "?"} /{" "}
                     {row.acctStatusType || "?"}
                     {row.framedIpAddress ? ` · ${row.framedIpAddress}` : ""}
                   </span>
@@ -5529,7 +5479,7 @@ api.getPaymentNotifications(activeIspId)
             return (
               <div key={item.id} className="panel" style={{ marginBottom: 12 }}>
                 <p style={{ marginTop: 0 }}>
-                  <strong>{item.fullName}</strong> — {item.email}{" "}
+                  <strong>{item.fullName}</strong> - {item.email}{" "}
                   <span className="app-meta">
                     [
                     {item.isActive
@@ -5659,7 +5609,7 @@ api.getPaymentNotifications(activeIspId)
                 </button>
               </div>
               <p className="app-meta" style={{ marginTop: 8, fontSize: "0.9em" }}>
-                {t("Modèle : ligne d'en-tête uniquement —", "Template: header row only —")}{" "}
+                {t("Modèle : ligne d'en-tête uniquement -", "Template: header row only -")}{" "}
                 <code>fullName,email,role,password,accreditationLevel</code>.{" "}
                 {t(
                   "Mot de passe vide = défaut ci-dessous ; rôle vide = rôle par défaut.",
@@ -5877,7 +5827,7 @@ api.getPaymentNotifications(activeIspId)
             </button>
             {notificationProviders.map((provider) => (
               <p key={provider.id}>
-                {provider.channel} — {provider.providerKey} [{provider.isActive ? "actif" : "inactif"}]
+                {provider.channel} - {provider.providerKey} [{provider.isActive ? "actif" : "inactif"}]
               </p>
             ))}
           </form>
@@ -5990,7 +5940,7 @@ api.getPaymentNotifications(activeIspId)
                           </button>
                           {roleProfiles.map((profile) => (
                             <p key={profile.id}>
-                              {roleProfileLabel(profile.roleKey, t)} — {accreditationLabel(profile.accreditationLevel, t)} —{" "}
+                              {roleProfileLabel(profile.roleKey, t)} - {accreditationLabel(profile.accreditationLevel, t)} -{" "}
                               {Array.isArray(profile.permissions)
                                 ? profile.permissions.map((perm) => rolePermissionLabel(perm, t)).join(", ")
                                 : ""}
@@ -6022,7 +5972,7 @@ api.getPaymentNotifications(activeIspId)
           </p>
         {auditLogs.slice(0, 12).map((log) => (
           <p key={log.id}>
-              {new Date(log.createdAt).toLocaleString()} — {log.action} ({log.entityType})
+              {new Date(log.createdAt).toLocaleString()} - {log.action} ({log.entityType})
           </p>
         ))}
       </section>
@@ -6137,21 +6087,12 @@ api.getPaymentNotifications(activeIspId)
             <section className="panel">
               <h2>{t("Réglages", "Settings")}</h2>
               <p className="app-meta">
-                {t(
-                  "L’image de marque, les intégrations et la sécurité des retraits sont gérées par les administrateurs. Les contacts d’aide figurent en bas de l’application.",
-                  "Branding, integrations, and withdrawal security are managed by administrators. Support contacts are listed at the bottom of the app."
-                )}
+                {t("Géré par les administrateurs.", "Managed by administrators.")}
               </p>
             </section>
             <details className="panel field-clients-more">
               <summary>{t("Compte", "Account")}</summary>
               <div className="field-clients-more__body">
-                <p className="app-meta">
-                  {t(
-                    "Déconnexion de cet appareil et fermeture de l’espace opérateur.",
-                    "Sign out from this device and close the operator workspace."
-                  )}
-                </p>
                 <button type="button" className="btn-expense-delete" onClick={onLogout}>
                   {t("Déconnexion", "Logout")}
                 </button>
@@ -6267,21 +6208,21 @@ api.getPaymentNotifications(activeIspId)
                 key: "createdAt",
                 header: t("Date", "Date"),
                 sortKey: "createdAt",
-                cell: (w) => (w.createdAt ? new Date(w.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "—")
+                cell: (w) => (w.createdAt ? new Date(w.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "-")
               },
               {
                 key: "amount",
                 header: t("Montant", "Amount"),
                 sortKey: "amountUsd",
-                cell: (w) => `${w.amountUsd ?? "—"} ${w.currency || ""}`.trim()
+                cell: (w) => `${w.amountUsd ?? "-"} ${w.currency || ""}`.trim()
               },
-              { key: "phoneNumber", header: t("Destination", "Destination"), sortKey: "phoneNumber", cell: (w) => w.phoneNumber || "—" },
-              { key: "provider", header: t("Réseau", "Network"), sortKey: "provider", cell: (w) => w.provider || "—" },
+              { key: "phoneNumber", header: t("Destination", "Destination"), sortKey: "phoneNumber", cell: (w) => w.phoneNumber || "-" },
+              { key: "provider", header: t("Réseau", "Network"), sortKey: "provider", cell: (w) => w.provider || "-" },
               {
                 key: "status",
                 header: t("Statut", "Status"),
                 sortKey: "status",
-                cell: (w) => `${withdrawalStatusLabel(w.status, isEn)}${w.failureMessage ? ` — ${w.failureMessage}` : ""}`
+                cell: (w) => `${withdrawalStatusLabel(w.status, isEn)}${w.failureMessage ? ` - ${w.failureMessage}` : ""}`
               }
             ]}
             searchValue={withdrawalTable.q}
@@ -6336,7 +6277,7 @@ api.getPaymentNotifications(activeIspId)
                   onChange={(e) => setCustomerForm({ ...customerForm, fieldAgentId: e.target.value })}
                   aria-label={t("Agent terrain", "Field agent")}
                 >
-                  <option value="">{t("Agent — aucun", "Agent — none")}</option>
+                  <option value="">{t("Agent - aucun", "Agent - none")}</option>
                   {fieldTeamUsers.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.fullName}
@@ -6355,7 +6296,7 @@ api.getPaymentNotifications(activeIspId)
           <form className="panel field-clients-edit" onSubmit={onPatchCustomerEmail}>
             <h2>{t("Modifier", "Edit")}</h2>
             <p className="app-meta field-clients-edit__who">
-              {customers.find((c) => c.id === customerEmailForm.customerId)?.fullName || "—"}
+              {customers.find((c) => c.id === customerEmailForm.customerId)?.fullName || "-"}
             </p>
             <input
               placeholder={t("E-mail", "Email")}
@@ -6374,7 +6315,7 @@ api.getPaymentNotifications(activeIspId)
                 }
                 aria-label={t("Agent terrain", "Field agent")}
               >
-                <option value="">{t("Agent — aucun", "Agent — none")}</option>
+                <option value="">{t("Agent - aucun", "Agent - none")}</option>
                 {fieldTeamUsers.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.fullName}
@@ -6405,13 +6346,13 @@ api.getPaymentNotifications(activeIspId)
             emptyLabel={t("Aucun client.", "No customers.")}
             rows={customerTableView.pageRows}
             columns={[
-              { key: "fullName", header: t("Nom", "Name"), sortKey: "fullName", cell: (c) => c.fullName || "—" },
-              { key: "phone", header: t("Tél.", "Phone"), sortKey: "phone", cell: (c) => c.phone || "—" },
+              { key: "fullName", header: t("Nom", "Name"), sortKey: "fullName", cell: (c) => c.fullName || "-" },
+              { key: "phone", header: t("Tél.", "Phone"), sortKey: "phone", cell: (c) => c.phone || "-" },
               {
                 key: "email",
                 header: "Email",
                 sortKey: "email",
-                cell: (c) => c.email || "—"
+                cell: (c) => c.email || "-"
               },
               ...(!isFieldAgent
                 ? [
@@ -6419,7 +6360,7 @@ api.getPaymentNotifications(activeIspId)
                       key: "fieldAgentName",
                       header: t("Agent", "Agent"),
                       sortKey: "fieldAgentName",
-                      cell: (c) => c.fieldAgentName || "—"
+                      cell: (c) => c.fieldAgentName || "-"
                     }
                   ]
                 : []),
@@ -6800,7 +6741,7 @@ api.getPaymentNotifications(activeIspId)
               .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
               .map((inv) => (
                 <option key={inv.id} value={inv.id}>
-                  {inv.id.slice(0, 8)} — ${inv.amountUsd} ({invoiceStatusShort(inv.status, isEn)})
+                  {inv.id.slice(0, 8)} - ${inv.amountUsd} ({invoiceStatusShort(inv.status, isEn)})
                 </option>
               ))}
           </select>
@@ -6875,7 +6816,7 @@ api.getPaymentNotifications(activeIspId)
               .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
               .map((inv) => (
                 <option key={inv.id} value={inv.id}>
-                  {inv.id.slice(0, 8)} — ${inv.amountUsd} ({invoiceStatusShort(inv.status, isEn)})
+                  {inv.id.slice(0, 8)} - ${inv.amountUsd} ({invoiceStatusShort(inv.status, isEn)})
                 </option>
               ))}
           </select>
@@ -6906,7 +6847,7 @@ api.getPaymentNotifications(activeIspId)
           </button>
           {tidSubmissions.map((row) => (
             <p key={row.id}>
-              {row.tid} — {tidSubmissionStatusLabel(row.status, isEn)} — {t("facture", "invoice")}{" "}
+              {row.tid} - {tidSubmissionStatusLabel(row.status, isEn)} - {t("facture", "invoice")}{" "}
               {row.invoiceId?.slice(0, 8)}{" "}
               {(isPlatformSuperRole(user.role) ||
                 user.role === "company_manager" ||
@@ -6929,7 +6870,7 @@ api.getPaymentNotifications(activeIspId)
               <h3>{t("Conflits TID en double", "Duplicate TID conflicts")}</h3>
               {tidConflicts.map((c) => (
                 <p key={c.tid}>
-                  {c.tid} — {c.duplicates} {t("envoi(s)", "submission(s)")} — {c.statuses?.join(", ")}
+                  {c.tid} - {c.duplicates} {t("envoi(s)", "submission(s)")} - {c.statuses?.join(", ")}
                 </p>
               ))}
             </>
@@ -7167,7 +7108,7 @@ api.getPaymentNotifications(activeIspId)
                             .filter((pm) => ["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card"].includes(pm.methodType))
                             .map((pm) => (
                             <p key={pm.id}>
-                              {paymentMethodTypeText(pm.methodType, t)} — {pm.providerName} [
+                              {paymentMethodTypeText(pm.methodType, t)} - {pm.providerName} [
                               {pm.isActive ? t("actif", "active") : t("inactif", "inactive")}]{" "}
                               <button type="button" onClick={() => onTogglePaymentMethod(pm.id, !pm.isActive)}>
                                 {pm.isActive ? t("Désactiver", "Disable") : t("Activer", "Enable")}
@@ -7183,14 +7124,14 @@ api.getPaymentNotifications(activeIspId)
                               {gatewayCallbackByMethod[pm.id] ? (
                                 <span>
                                   {" "}
-                                  — {t("URL", "URL")}: <code>{gatewayCallbackByMethod[pm.id].callbackUrl}</code>{" "}
+                                  - {t("URL", "URL")}: <code>{gatewayCallbackByMethod[pm.id].callbackUrl}</code>{" "}
                                   <button
                                     type="button"
                                     onClick={() => copyToClipboard(gatewayCallbackByMethod[pm.id].callbackUrl)}
                                   >
                                     {t("Copier URL", "Copy URL")}
                                   </button>{" "}
-                                  — {t("Secret", "Secret")}: <code>{gatewayCallbackByMethod[pm.id].callbackSecret}</code>{" "}
+                                  - {t("Secret", "Secret")}: <code>{gatewayCallbackByMethod[pm.id].callbackSecret}</code>{" "}
                                   <button
                                     type="button"
                                     onClick={() => copyToClipboard(gatewayCallbackByMethod[pm.id].callbackSecret)}
@@ -7327,8 +7268,8 @@ api.getPaymentNotifications(activeIspId)
             {accountingPeriodClosures.length === 0 ? (
               <p className="app-meta">
                 {t(
-                  "Aucune clôture pour cet espace — toutes les périodes sont ouvertes à la saisie.",
-                  "No closures for this workspace — all periods are open for entry."
+                  "Aucune clôture pour cet espace - toutes les périodes sont ouvertes à la saisie.",
+                  "No closures for this workspace - all periods are open for entry."
                 )}
               </p>
             ) : (
@@ -7338,12 +7279,12 @@ api.getPaymentNotifications(activeIspId)
                     <strong>
                       {c.periodStart} → {c.periodEnd}
                     </strong>
-                    {c.note ? ` — ${c.note}` : ""}
+                    {c.note ? ` - ${c.note}` : ""}
                     <span className="app-meta">
                       {" "}
                       (
                       {t("clôturée le", "closed on")}{" "}
-                      {c.closedAt ? new Date(c.closedAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "—"}
+                      {c.closedAt ? new Date(c.closedAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "-"}
                       {c.closedByName ? ` ${t("· par", "· by")} ${c.closedByName}` : ""})
                     </span>
                     {(isPlatformSuperRole(user.role) ||
@@ -7460,12 +7401,12 @@ api.getPaymentNotifications(activeIspId)
                 </button>
               }
               columns={[
-                { key: "entryDate", header: t("Date", "Date"), sortKey: "entryDate", cell: (r) => r.entryDate || "—" },
-                { key: "journalType", header: t("Journal", "Journal"), sortKey: "journalType", cell: (r) => r.journalType || "—" },
-                { key: "accountCode", header: t("Compte", "Account"), sortKey: "accountCode", cell: (r) => `${r.accountCode || "—"} ${r.accountLabel || ""}`.trim() },
+                { key: "entryDate", header: t("Date", "Date"), sortKey: "entryDate", cell: (r) => r.entryDate || "-" },
+                { key: "journalType", header: t("Journal", "Journal"), sortKey: "journalType", cell: (r) => r.journalType || "-" },
+                { key: "accountCode", header: t("Compte", "Account"), sortKey: "accountCode", cell: (r) => `${r.accountCode || "-"} ${r.accountLabel || ""}`.trim() },
                 { key: "debitUsd", header: t("Débit USD", "Debit USD"), sortKey: "debitUsd", cell: (r) => Number(r.debitUsd || 0).toFixed(2) },
                 { key: "creditUsd", header: t("Crédit USD", "Credit USD"), sortKey: "creditUsd", cell: (r) => Number(r.creditUsd || 0).toFixed(2) },
-                { key: "memo", header: t("Mémo", "Memo"), sortKey: "memo", cell: (r) => r.memo || "—" }
+                { key: "memo", header: t("Mémo", "Memo"), sortKey: "memo", cell: (r) => r.memo || "-" }
               ]}
               searchValue={ledgerTable.q}
               onSearchValueChange={(q) => setLedgerTable((s) => ({ ...s, q, page: 1 }))}
@@ -7649,7 +7590,7 @@ api.getPaymentNotifications(activeIspId)
                     {
                       key: "period",
                       header: t("Période", "Period"),
-                      cell: (ex) => `${ex.periodStart || "—"} → ${ex.periodEnd || "—"}`
+                      cell: (ex) => `${ex.periodStart || "-"} → ${ex.periodEnd || "-"}`
                     },
                     {
                       key: "meta",
@@ -7658,9 +7599,9 @@ api.getPaymentNotifications(activeIspId)
                         const st = ex.status || "pending";
                         return (
                           <div style={{ display: "grid", gap: 4, minWidth: 220 }}>
-                            {ex.description ? <div>{ex.description}</div> : <div className="app-meta">—</div>}
+                            {ex.description ? <div>{ex.description}</div> : <div className="app-meta">-</div>}
                             <div className="app-meta" style={{ margin: 0 }}>
-                              {ex.createdByName ? `${t("Saisi par", "Entered by")} ${ex.createdByName}` : "—"}
+                              {ex.createdByName ? `${t("Saisi par", "Entered by")} ${ex.createdByName}` : "-"}
                               {ex.fieldAgentName ? ` · ${t("Agent", "Agent")}: ${ex.fieldAgentName}` : ""}
                             </div>
                             {st === "approved" && (ex.approvedByName || ex.approvedAt) ? (
@@ -7668,7 +7609,7 @@ api.getPaymentNotifications(activeIspId)
                                 {t("Approuvé", "Approved")}
                                 {ex.approvedByName ? ` ${t("par", "by")} ${ex.approvedByName}` : ""}
                                 {ex.approvedAt
-                                  ? ` — ${new Date(ex.approvedAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}`
+                                  ? ` - ${new Date(ex.approvedAt).toLocaleString(isEn ? "en-GB" : "fr-FR")}`
                                   : ""}
                               </div>
                             ) : null}
@@ -7873,21 +7814,21 @@ api.getPaymentNotifications(activeIspId)
             title={t("Derniers bons", "Latest vouchers")}
             rows={voucherTableView.pageRows}
             columns={[
-              { key: "code", header: t("Code", "Code"), sortKey: "code", cell: (v) => v.code || "—" },
-              { key: "rateLimit", header: t("Débit", "Speed"), sortKey: "rateLimit", cell: (v) => v.rateLimit || "—" },
+              { key: "code", header: t("Code", "Code"), sortKey: "code", cell: (v) => v.code || "-" },
+              { key: "rateLimit", header: t("Débit", "Speed"), sortKey: "rateLimit", cell: (v) => v.rateLimit || "-" },
               {
                 key: "durationDays",
                 header: t("Durée", "Duration"),
                 sortKey: "durationDays",
-                cell: (v) => (v.durationDays != null ? `${v.durationDays}d` : "—")
+                cell: (v) => (v.durationDays != null ? `${v.durationDays}d` : "-")
               },
               {
                 key: "maxDevices",
                 header: t("Appareils", "Devices"),
                 sortKey: "maxDevices",
-                cell: (v) => (v.maxDevices != null ? String(v.maxDevices) : "—")
+                cell: (v) => (v.maxDevices != null ? String(v.maxDevices) : "-")
               },
-              { key: "status", header: t("Statut", "Status"), sortKey: "status", cell: (v) => v.status || "—" }
+              { key: "status", header: t("Statut", "Status"), sortKey: "status", cell: (v) => v.status || "-" }
             ]}
             searchValue={voucherTable.q}
             onSearchValueChange={(q) => setVoucherTable((s) => ({ ...s, q, page: 1 }))}
