@@ -7570,6 +7570,486 @@ body:has(.wifi-portal-page--dark) {
   color: #e8e8e8;
 }
 
+/* ---- Wi-Fi catalog v2: simple professional checkout ---- */
+.wifi-portal-page--v2 {
+  --wifi-accent: #63b38f;
+  --wifi-ink: #f4f6f8;
+  --wifi-muted: #9aa3b2;
+  --wifi-line: rgba(255, 255, 255, 0.1);
+  --wifi-surface: rgba(22, 24, 27, 0.92);
+  font-family: "Outfit", var(--font-sans);
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px 16px 40px;
+  min-height: 100dvh;
+  position: relative;
+  animation: wifi-page-in 0.35s ease-out;
+}
+
+.wifi-portal-page--v2::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 420px at 12% -10%, rgba(99, 179, 143, 0.18), transparent 60%),
+    radial-gradient(700px 360px at 90% 8%, rgba(90, 140, 180, 0.12), transparent 55%),
+    linear-gradient(180deg, #0c0d0f 0%, #121418 48%, #0e1013 100%);
+}
+
+@keyframes wifi-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.wifi-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.wifi-topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wifi-topbar__logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid color-mix(in srgb, var(--wifi-accent) 45%, transparent);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.wifi-topbar__logo img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.wifi-topbar__eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wifi-accent);
+  font-weight: 600;
+}
+
+.wifi-topbar__name {
+  margin: 2px 0 0 !important;
+  font-size: clamp(1.2rem, 3vw, 1.45rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em;
+  color: var(--wifi-ink) !important;
+  line-height: 1.15;
+}
+
+.wifi-intro {
+  margin: 0 0 22px;
+}
+
+.wifi-intro__title {
+  margin: 0 0 6px;
+  font-size: clamp(1.55rem, 4vw, 2rem);
+  font-weight: 750;
+  letter-spacing: -0.04em;
+  color: var(--wifi-ink);
+}
+
+.wifi-intro__lead {
+  margin: 0;
+  color: var(--wifi-muted) !important;
+  font-size: 0.98rem;
+}
+
+.wifi-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 560px) {
+  .wifi-plan-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+button.wifi-plan-card--v2 {
+  appearance: none;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "icon name"
+    "icon price"
+    "icon duration"
+    "icon meta"
+    "cta cta";
+  gap: 2px 12px;
+  align-items: start;
+  text-align: left;
+  padding: 18px 16px 14px;
+  min-height: 0;
+  border-radius: 18px;
+  border: 1px solid var(--wifi-line);
+  background:
+    linear-gradient(165deg, rgba(34, 38, 42, 0.95) 0%, rgba(18, 20, 23, 0.98) 100%);
+  color: var(--wifi-ink);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  animation: wifi-card-in 0.4s ease both;
+}
+
+@keyframes wifi-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+button.wifi-plan-card--v2:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--wifi-accent) 55%, transparent);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.38),
+    0 0 0 1px color-mix(in srgb, var(--wifi-accent) 25%, transparent);
+}
+
+button.wifi-plan-card--v2:focus-visible {
+  outline: 2px solid var(--wifi-accent);
+  outline-offset: 2px;
+}
+
+.wifi-plan-card__icon {
+  grid-area: icon;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--wifi-accent);
+  background: color-mix(in srgb, var(--wifi-accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wifi-accent) 30%, transparent);
+}
+
+.wifi-plan-card__name {
+  grid-area: name;
+  font-size: 1.02rem;
+  font-weight: 650;
+  color: var(--wifi-ink);
+  margin: 0;
+  padding-top: 2px;
+}
+
+.wifi-plan-card__price {
+  grid-area: price;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 4px 0 0;
+  color: var(--wifi-accent);
+}
+
+.wifi-plan-card__price strong {
+  font-size: 1.55rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: inherit;
+}
+
+.wifi-plan-card__currency {
+  font-size: 0.95rem;
+  font-weight: 650;
+  opacity: 0.9;
+}
+
+.wifi-plan-card__duration {
+  grid-area: duration;
+  font-size: 0.86rem;
+  color: #d5dbe6;
+  font-weight: 500;
+}
+
+.wifi-plan-card__meta {
+  grid-area: meta;
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: var(--wifi-muted);
+}
+
+.wifi-plan-card__cta {
+  grid-area: cta;
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 38px;
+  border-radius: 11px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #0c0f0d;
+  background: var(--wifi-accent);
+}
+
+.wifi-contact-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 22px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--wifi-line);
+}
+
+.wifi-contact-strip a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.86rem;
+  color: #b8c0cc !important;
+  text-decoration: none;
+}
+
+.wifi-contact-strip a:hover {
+  color: var(--wifi-accent) !important;
+}
+
+.wifi-flash {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+}
+
+.wifi-flash--ok {
+  background: color-mix(in srgb, var(--wifi-accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wifi-accent) 35%, transparent);
+  color: #d8f3e4 !important;
+}
+
+.wifi-empty {
+  color: var(--wifi-muted) !important;
+}
+
+.wifi-footer {
+  margin-top: 28px;
+  opacity: 0.75;
+}
+
+.wifi-checkout-backdrop {
+  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.62);
+  animation: wifi-fade-in 0.2s ease;
+}
+
+@keyframes wifi-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.wifi-checkout-modal--v2 {
+  max-width: 400px;
+  padding: 22px 20px 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(170deg, #1c1f24 0%, #14171b 100%);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+  animation: wifi-modal-in 0.28s ease;
+}
+
+@keyframes wifi-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.wifi-checkout-modal--v2 .wifi-checkout-modal__close {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #e8eaed;
+}
+
+.wifi-checkout-modal--v2 .wifi-checkout-modal__head {
+  text-align: left;
+  padding: 0 36px 0 0;
+  margin-bottom: 18px;
+}
+
+.wifi-checkout-modal__plan {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--wifi-muted);
+  font-weight: 600;
+}
+
+.wifi-checkout-modal--v2 .wifi-checkout-modal__summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: #dce2ea;
+  font-size: 0.95rem;
+}
+
+.wifi-checkout-modal--v2 .wifi-checkout-modal__amount {
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--wifi-accent);
+}
+
+.wifi-checkout-modal__sep {
+  color: var(--wifi-muted);
+}
+
+.wifi-checkout-modal--v2 .wifi-checkout-section-title {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c5ccd6;
+  font-weight: 650;
+}
+
+.wifi-field {
+  display: block;
+  margin: 0 0 12px;
+}
+
+.wifi-field__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+  color: var(--wifi-muted);
+  font-weight: 550;
+}
+
+.wifi-checkout-modal--v2 .wifi-input-row {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(8, 10, 12, 0.55);
+  overflow: hidden;
+}
+
+.wifi-checkout-modal--v2 .wifi-input-row__lead {
+  background: rgba(255, 255, 255, 0.04);
+  border-right-color: rgba(255, 255, 255, 0.08);
+  color: var(--wifi-accent);
+}
+
+.wifi-checkout-modal--v2 .wifi-input-row input,
+.wifi-checkout-modal--v2 .wifi-input-row select {
+  background: transparent;
+  border: none;
+  color: #f2f4f7;
+  min-height: 46px;
+}
+
+.wifi-checkout-modal--v2 .wifi-checkout-phone-norm {
+  display: block;
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: color-mix(in srgb, var(--wifi-accent) 80%, #fff);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.wifi-checkout-modal--v2 .wifi-pay-submit {
+  width: 100%;
+  margin-top: 8px;
+  min-height: 48px;
+  border-radius: 12px;
+  background: var(--wifi-accent);
+  color: #0b0d0c;
+  font-weight: 750;
+  font-size: 1rem;
+  border: none;
+}
+
+.wifi-checkout-modal--v2 .wifi-pay-submit:disabled {
+  opacity: 0.55;
+}
+
+.wifi-checkout-modal--v2 .wifi-pay-submit--secondary {
+  background: transparent;
+  color: #e8eaed;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.wifi-checkout-modal--v2 .wifi-checkout-split {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 18px 0 14px;
+}
+
+.wifi-checkout-modal--v2 .wifi-checkout-foot {
+  color: var(--wifi-muted);
+}
+
+.wifi-postpay__token {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  margin: 10px 0;
+}
+
+.wifi-postpay__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wifi-btn-ghost {
+  background: transparent !important;
+  color: #e8eaed !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wifi-portal-page--v2,
+  button.wifi-plan-card--v2,
+  .wifi-checkout-modal--v2,
+  .wifi-checkout-backdrop {
+    animation: none !important;
+  }
+
+  button.wifi-plan-card--v2:hover {
+    transform: none;
+  }
+}
+
 /* =============================================================================
    Mobile PWA shell (dashboard): safe areas, touch targets, header, cards
    max-width 899px — primary nav via hamburger sheet (no bottom tab bar).
