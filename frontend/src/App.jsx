@@ -4773,61 +4773,25 @@ api.getPaymentNotifications(activeIspId)
         hash="#workspace-settings"
         isFieldAgent={isFieldAgent}
       >
-      <section className="grid" id="workspace-settings">
+      <section className="grid field-clients-simple" id="workspace-settings">
         {(isPlatformSuperRole(user.role) ||
           user.role === "company_manager" ||
           user.role === "isp_admin") && (
-          <form className="panel" onSubmit={onSaveBranding}>
-            <h2>Image de marque / marque blanche</h2>
+          <form className="panel field-clients-create" onSubmit={onSaveBranding}>
+            <h2>{t("Image de marque", "Branding")}</h2>
+            <p className="app-meta" style={{ maxWidth: "56ch" }}>
+              {t(
+                "Nom, logo, couleurs et contacts utilisés sur le portail client, le Wi‑Fi invité, les factures et les exports. L’en-tête du tableau de bord reste McBuleli.",
+                "Name, logo, colors and contacts used on the customer portal, guest Wi‑Fi, invoices and exports. The dashboard header stays McBuleli."
+              )}
+            </p>
             <input
-              placeholder="Nom affiché"
+              placeholder={t("Nom affiché", "Display name")}
               value={brandingForm.displayName}
               onChange={(e) => setBrandingForm({ ...brandingForm, displayName: e.target.value })}
             />
-            <p className="app-meta" style={{ margin: "4px 0 10px", maxWidth: "52ch" }}>
-              {t(
-                "Identifiant technique de votre espace (souvent *.tenant.local à la création). Sert au routage « marque blanche » si vous accédez au tableau de bord via ce nom d’hôte ; ce n’est pas un domaine public DNS tant que vous n’avez pas souscrit au Premium sur mesure.",
-                "Technical hostname for your workspace (often *.tenant.local at signup). Used for white-label routing when you open the dashboard via that host; it is not public DNS until you use Premium custom domain."
-              )}
-            </p>
-            <input
-              placeholder={t(
-                "Sous-domaine technique (ex. mon-isp.tenant.local)",
-                "Technical subdomain (e.g. my-isp.tenant.local)"
-              )}
-              value={brandingForm.subdomain}
-              onChange={(e) => setBrandingForm({ ...brandingForm, subdomain: e.target.value })}
-            />
-            <input
-              placeholder={t("Domaine DNS privé (Premium sur mesure)", "Private DNS domain (Premium custom)")}
-              value={brandingForm.customDomain}
-              onChange={(e) => setBrandingForm({ ...brandingForm, customDomain: e.target.value })}
-              disabled={!canPrivateCustomDomain}
-              title={
-                canPrivateCustomDomain
-                  ? undefined
-                  : t(
-                      "Réservé au forfait Premium sur mesure (domaine sur votre marque).",
-                      "Reserved for Premium custom (on-demand) — your own brand domain."
-                    )
-              }
-            />
-            {!canPrivateCustomDomain ? (
-              <p className="app-meta" style={{ margin: "4px 0 0", fontSize: "0.88rem" }}>
-                {t(
-                  "Le domaine DNS personnalisé (ex. admin.votredomaine.com) est activé uniquement sur le forfait Premium sur mesure. Les formules Essential et Pro conservent le sous-domaine technique ou l’accès via l’app McBuleli.",
-                  "A custom DNS domain (e.g. admin.yourbrand.com) is only available on the Premium custom (on-demand) plan. Essential and Pro keep the technical subdomain or access via the hosted McBuleli app."
-                )}
-              </p>
-            ) : null}
-            <p className="app-meta" style={{ marginTop: 8, maxWidth: "56ch" }}>
-              {t(
-                "L’en-tête du tableau de bord affiche le logo McBuleli. Le logo et les couleurs ci‑dessous servent surtout au portail client, au Wi‑Fi invité, aux factures et aux exports.",
-                "The dashboard header shows the McBuleli logo. The logo and colors below mainly apply to the customer portal, guest Wi‑Fi, invoices and exports."
-              )}
-            </p>
             <label style={{ display: "block", marginTop: 8 }}>
-              Logo entreprise (depuis votre appareil)
+              {t("Logo entreprise (depuis votre appareil)", "Company logo (from your device)")}
               <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={onBrandingLogoFile} />
             </label>
             {brandingLogoPickPreview || brandingForm.logoUrl ? (
@@ -4840,7 +4804,7 @@ api.getPaymentNotifications(activeIspId)
               </p>
             ) : null}
             <input
-              placeholder="URL logo externe (facultatif, https://…)"
+              placeholder={t("URL logo externe (facultatif, https://…)", "External logo URL (optional, https://…)")}
               value={brandingForm.logoUrl?.startsWith("http") ? brandingForm.logoUrl : ""}
               onChange={(e) => {
                 const v = e.target.value.trim();
@@ -4853,150 +4817,210 @@ api.getPaymentNotifications(activeIspId)
                 });
               }}
             />
+            <div className="field-clients-create__row">
+              <input
+                placeholder={t("Couleur principale (#hex)", "Primary color (#hex)")}
+                value={brandingForm.primaryColor}
+                onChange={(e) => setBrandingForm({ ...brandingForm, primaryColor: e.target.value })}
+              />
+              <input
+                placeholder={t("Couleur secondaire (#hex)", "Secondary color (#hex)")}
+                value={brandingForm.secondaryColor}
+                onChange={(e) =>
+                  setBrandingForm({ ...brandingForm, secondaryColor: e.target.value })
+                }
+              />
+            </div>
             <input
-              placeholder="Couleur principale (#hex)"
-              value={brandingForm.primaryColor}
-              onChange={(e) => setBrandingForm({ ...brandingForm, primaryColor: e.target.value })}
-            />
-            <input
-              placeholder="Couleur secondaire (#hex)"
-              value={brandingForm.secondaryColor}
-              onChange={(e) =>
-                setBrandingForm({ ...brandingForm, secondaryColor: e.target.value })
-              }
-            />
-            <input
-              placeholder="Pied de facture"
+              placeholder={t("Pied de facture", "Invoice footer")}
               value={brandingForm.invoiceFooter}
               onChange={(e) => setBrandingForm({ ...brandingForm, invoiceFooter: e.target.value })}
             />
             <input
-              placeholder="Adresse"
+              placeholder={t("Adresse", "Address")}
               value={brandingForm.address}
               onChange={(e) => setBrandingForm({ ...brandingForm, address: e.target.value })}
             />
-            <input
-              placeholder="E-mail de contact"
-              value={brandingForm.contactEmail}
-              onChange={(e) => setBrandingForm({ ...brandingForm, contactEmail: e.target.value })}
-            />
-            <input
-              placeholder="Téléphone de contact"
-              value={brandingForm.contactPhone}
-              onChange={(e) => setBrandingForm({ ...brandingForm, contactPhone: e.target.value })}
-            />
-            <label style={{ display: "block", marginTop: 12, maxWidth: "62ch" }}>
+            <div className="field-clients-create__row">
               <input
-                type="checkbox"
-                checked={Boolean(brandingForm.wifiZonePublic)}
-                disabled={!selectedIspId || wifiZonePublicSaving}
-                onChange={onWifiZonePublicToggle}
-              />{" "}
-              {t(
-                "Afficher mon entreprise sur la Zone WiFi publique McBuleli (/wifi-zone : logo, région, téléphone, lien Wi‑Fi invité). Décochez pour masquer l’annuaire public.",
-                "List my company on McBuleli’s public WiFi Zone (/wifi-zone: logo, region, phone, guest Wi-Fi link). Uncheck to hide from the public directory."
-              )}
-            </label>
-            <p className="app-meta" style={{ margin: "6px 0 0", maxWidth: "62ch" }}>
-              {t(
-                "Ce réglage est enregistré immédiatement (vous n’avez pas besoin de cliquer sur « Enregistrer l’image de marque »). Les autres champs de cette section utilisent encore ce bouton.",
-                "This setting saves immediately (you don’t need to click “Save branding”). Other fields in this section still use that button."
-              )}
-            </p>
-            <p className="app-meta" style={{ margin: "8px 0 0", maxWidth: "62ch" }}>
-              {t(
-                "La visibilité publique dépend de l’abonnement plateforme et peut être retirée par un administrateur ; sans renouvellement, l’annuaire et les ventes Wi‑Fi invité côté public sont suspendus jusqu’au rétablissement du paiement.",
-                "Public listing depends on your platform subscription and can be hidden by an admin; if billing lapses, directory presence and public guest Wi‑Fi purchases pause until the subscription is active again."
-              )}
-            </p>
-            <input
-              placeholder="Redirection après paiement Wi‑Fi (https://…)"
-              value={brandingForm.wifiPortalRedirectUrl}
-              onChange={(e) =>
-                setBrandingForm({ ...brandingForm, wifiPortalRedirectUrl: e.target.value })
-              }
-            />
-            <p className="app-meta" style={{ margin: "12px 0 6px", maxWidth: "56ch" }}>
-              {t(
-                "Image large affichée en bas de la page Wi‑Fi invité (/buy/packages ou /wifi), sous les offres — visuel promo, partenaires, etc. (PNG, JPEG, WebP, GIF ; max. 5 Mo).",
-                "Wide image at the bottom of the guest Wi‑Fi page (/buy/packages or /wifi), below the plans — promos, partners, etc. (PNG, JPEG, WebP, GIF; max 5 MB)."
-              )}
-            </p>
-            <label style={{ display: "block", marginTop: 4 }}>
-              {t("Bannière bas de page Wi‑Fi invité", "Guest Wi‑Fi bottom banner")}
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                disabled={!selectedIspId}
-                onChange={onBrandingWifiBannerFile}
-                style={{ display: "block", marginTop: 6 }}
+                placeholder={t("E-mail de contact", "Contact email")}
+                value={brandingForm.contactEmail}
+                onChange={(e) => setBrandingForm({ ...brandingForm, contactEmail: e.target.value })}
               />
-            </label>
-            {branding?.wifiPortalBannerUrl ? (
-              <div style={{ margin: "10px 0 0" }}>
-                <img
-                  src={publicAssetUrl(branding.wifiPortalBannerUrl)}
-                  alt=""
-                  style={{
-                    width: "100%",
-                    maxWidth: 520,
-                    maxHeight: 160,
-                    objectFit: "cover",
-                    borderRadius: 14,
-                    display: "block",
-                    border: "1px solid rgba(93, 64, 55, 0.12)"
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn-secondary-outline"
-                  style={{ marginTop: 8 }}
-                  disabled={!selectedIspId}
-                  onClick={onClearBrandingWifiBanner}
-                >
-                  {t("Retirer la bannière Wi‑Fi", "Remove Wi‑Fi banner")}
-                </button>
-              </div>
-            ) : null}
-            <textarea
-              placeholder={t(
-                "Texte de pied de page portail client (RCCM, mentions légales…)",
-                "Customer portal footer text (company reg., legal line…)"
-              )}
-              rows={3}
-              value={brandingForm.portalFooterText}
-              onChange={(e) =>
-                setBrandingForm({ ...brandingForm, portalFooterText: e.target.value })
-              }
-            />
-            <input
-              placeholder={t(
-                "Préfixe n° client portail (ex. CLI-)",
-                "Portal client ID prefix (e.g. CLI-)"
-              )}
-              value={brandingForm.portalClientRefPrefix}
-              onChange={(e) =>
-                setBrandingForm({ ...brandingForm, portalClientRefPrefix: e.target.value })
-              }
-            />
+              <input
+                placeholder={t("Téléphone de contact", "Contact phone")}
+                value={brandingForm.contactPhone}
+                onChange={(e) => setBrandingForm({ ...brandingForm, contactPhone: e.target.value })}
+              />
+            </div>
             <button type="submit" disabled={!selectedIspId}>
-              Enregistrer l'image de marque
+              {t("Enregistrer l'image de marque", "Save branding")}
             </button>
+
+            <details className="field-clients-more" style={{ marginTop: 16 }}>
+              <summary>{t("Domaine & marque blanche", "Domain & white-label")}</summary>
+              <div className="field-clients-more__body">
+                <p className="app-meta" style={{ margin: "0 0 10px", maxWidth: "52ch" }}>
+                  {t(
+                    "Identifiant technique de votre espace (souvent *.tenant.local à la création). Sert au routage « marque blanche » si vous accédez au tableau de bord via ce nom d’hôte ; ce n’est pas un domaine public DNS tant que vous n’avez pas souscrit au Premium sur mesure.",
+                    "Technical hostname for your workspace (often *.tenant.local at signup). Used for white-label routing when you open the dashboard via that host; it is not public DNS until you use Premium custom domain."
+                  )}
+                </p>
+                <input
+                  placeholder={t(
+                    "Sous-domaine technique (ex. mon-isp.tenant.local)",
+                    "Technical subdomain (e.g. my-isp.tenant.local)"
+                  )}
+                  value={brandingForm.subdomain}
+                  onChange={(e) => setBrandingForm({ ...brandingForm, subdomain: e.target.value })}
+                />
+                <input
+                  placeholder={t("Domaine DNS privé (Premium sur mesure)", "Private DNS domain (Premium custom)")}
+                  value={brandingForm.customDomain}
+                  onChange={(e) => setBrandingForm({ ...brandingForm, customDomain: e.target.value })}
+                  disabled={!canPrivateCustomDomain}
+                  title={
+                    canPrivateCustomDomain
+                      ? undefined
+                      : t(
+                          "Réservé au forfait Premium sur mesure (domaine sur votre marque).",
+                          "Reserved for Premium custom (on-demand) — your own brand domain."
+                        )
+                  }
+                />
+                {!canPrivateCustomDomain ? (
+                  <p className="app-meta" style={{ margin: "4px 0 0", fontSize: "0.88rem" }}>
+                    {t(
+                      "Le domaine DNS personnalisé (ex. admin.votredomaine.com) est activé uniquement sur le forfait Premium sur mesure. Les formules Essential et Pro conservent le sous-domaine technique ou l’accès via l’app McBuleli.",
+                      "A custom DNS domain (e.g. admin.yourbrand.com) is only available on the Premium custom (on-demand) plan. Essential and Pro keep the technical subdomain or access via the hosted McBuleli app."
+                    )}
+                  </p>
+                ) : null}
+              </div>
+            </details>
+
+            <details className="field-clients-more" style={{ marginTop: 12 }}>
+              <summary>{t("Wi‑Fi invité & Zone publique", "Guest Wi‑Fi & public Zone")}</summary>
+              <div className="field-clients-more__body">
+                <label style={{ display: "block", maxWidth: "62ch" }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(brandingForm.wifiZonePublic)}
+                    disabled={!selectedIspId || wifiZonePublicSaving}
+                    onChange={onWifiZonePublicToggle}
+                  />{" "}
+                  {t(
+                    "Afficher mon entreprise sur la Zone WiFi publique McBuleli (/wifi-zone : logo, région, téléphone, lien Wi‑Fi invité). Décochez pour masquer l’annuaire public.",
+                    "List my company on McBuleli’s public WiFi Zone (/wifi-zone: logo, region, phone, guest Wi-Fi link). Uncheck to hide from the public directory."
+                  )}
+                </label>
+                <p className="app-meta" style={{ margin: "6px 0 0", maxWidth: "62ch" }}>
+                  {t(
+                    "La case Zone publique s’enregistre immédiatement. Redirection et bannière utilisent « Enregistrer l’image de marque ».",
+                    "The public Zone checkbox saves immediately. Redirect and banner use “Save branding”."
+                  )}
+                </p>
+                <p className="app-meta" style={{ margin: "8px 0 0", maxWidth: "62ch" }}>
+                  {t(
+                    "La visibilité publique dépend de l’abonnement plateforme et peut être retirée par un administrateur ; sans renouvellement, l’annuaire et les ventes Wi‑Fi invité côté public sont suspendus jusqu’au rétablissement du paiement.",
+                    "Public listing depends on your platform subscription and can be hidden by an admin; if billing lapses, directory presence and public guest Wi‑Fi purchases pause until the subscription is active again."
+                  )}
+                </p>
+                <input
+                  placeholder={t("Redirection après paiement Wi‑Fi (https://…)", "Post-payment Wi‑Fi redirect (https://…)")}
+                  value={brandingForm.wifiPortalRedirectUrl}
+                  onChange={(e) =>
+                    setBrandingForm({ ...brandingForm, wifiPortalRedirectUrl: e.target.value })
+                  }
+                />
+                <p className="app-meta" style={{ margin: "12px 0 6px", maxWidth: "56ch" }}>
+                  {t(
+                    "Image large affichée en bas de la page Wi‑Fi invité (/buy/packages ou /wifi), sous les offres — visuel promo, partenaires, etc. (PNG, JPEG, WebP, GIF ; max. 5 Mo).",
+                    "Wide image at the bottom of the guest Wi‑Fi page (/buy/packages or /wifi), below the plans — promos, partners, etc. (PNG, JPEG, WebP, GIF; max 5 MB)."
+                  )}
+                </p>
+                <label style={{ display: "block", marginTop: 4 }}>
+                  {t("Bannière bas de page Wi‑Fi invité", "Guest Wi‑Fi bottom banner")}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    disabled={!selectedIspId}
+                    onChange={onBrandingWifiBannerFile}
+                    style={{ display: "block", marginTop: 6 }}
+                  />
+                </label>
+                {branding?.wifiPortalBannerUrl ? (
+                  <div style={{ margin: "10px 0 0" }}>
+                    <img
+                      src={publicAssetUrl(branding.wifiPortalBannerUrl)}
+                      alt=""
+                      style={{
+                        width: "100%",
+                        maxWidth: 520,
+                        maxHeight: 160,
+                        objectFit: "cover",
+                        borderRadius: 14,
+                        display: "block",
+                        border: "1px solid rgba(93, 64, 55, 0.12)"
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn-secondary-outline"
+                      style={{ marginTop: 8 }}
+                      disabled={!selectedIspId}
+                      onClick={onClearBrandingWifiBanner}
+                    >
+                      {t("Retirer la bannière Wi‑Fi", "Remove Wi‑Fi banner")}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </details>
+
+            <details className="field-clients-more" style={{ marginTop: 12 }}>
+              <summary>{t("Portail client", "Customer portal")}</summary>
+              <div className="field-clients-more__body">
+                <textarea
+                  placeholder={t(
+                    "Texte de pied de page portail client (RCCM, mentions légales…)",
+                    "Customer portal footer text (company reg., legal line…)"
+                  )}
+                  rows={3}
+                  value={brandingForm.portalFooterText}
+                  onChange={(e) =>
+                    setBrandingForm({ ...brandingForm, portalFooterText: e.target.value })
+                  }
+                />
+                <input
+                  placeholder={t(
+                    "Préfixe n° client portail (ex. CLI-)",
+                    "Portal client ID prefix (e.g. CLI-)"
+                  )}
+                  value={brandingForm.portalClientRefPrefix}
+                  onChange={(e) =>
+                    setBrandingForm({ ...brandingForm, portalClientRefPrefix: e.target.value })
+                  }
+                />
+              </div>
+            </details>
           </form>
         )}
 
-        <section className="panel" aria-label={t("Compte", "Account")}>
-          <h2>{t("Compte", "Account")}</h2>
-          <p className="app-meta">
-            {t(
-              "Déconnexion de cet appareil et fermeture de l’espace opérateur.",
-              "Sign out from this device and close the operator workspace."
-            )}
-          </p>
-          <button type="button" className="btn-expense-delete" onClick={onLogout}>
-            {t("Déconnexion", "Logout")}
-          </button>
-        </section>
+        <details className="panel field-clients-more">
+          <summary>{t("Compte", "Account")}</summary>
+          <div className="field-clients-more__body">
+            <p className="app-meta">
+              {t(
+                "Déconnexion de cet appareil et fermeture de l’espace opérateur.",
+                "Sign out from this device and close the operator workspace."
+              )}
+            </p>
+            <button type="button" className="btn-expense-delete" onClick={onLogout}>
+              {t("Déconnexion", "Logout")}
+            </button>
+          </div>
+        </details>
       </section>
       </DashboardScreenGate>
 
@@ -6109,7 +6133,7 @@ api.getPaymentNotifications(activeIspId)
           hash="#workspace-settings"
           isFieldAgent={isFieldAgent}
         >
-          <section className="grid" id="workspace-settings">
+          <section className="grid field-clients-simple" id="workspace-settings">
             <section className="panel">
               <h2>{t("Réglages", "Settings")}</h2>
               <p className="app-meta">
@@ -6119,18 +6143,20 @@ api.getPaymentNotifications(activeIspId)
                 )}
               </p>
             </section>
-            <section className="panel" aria-label={t("Compte", "Account")}>
-              <h2>{t("Compte", "Account")}</h2>
-              <p className="app-meta">
-                {t(
-                  "Déconnexion de cet appareil et fermeture de l’espace opérateur.",
-                  "Sign out from this device and close the operator workspace."
-                )}
-              </p>
-              <button type="button" className="btn-expense-delete" onClick={onLogout}>
-                {t("Déconnexion", "Logout")}
-              </button>
-            </section>
+            <details className="panel field-clients-more">
+              <summary>{t("Compte", "Account")}</summary>
+              <div className="field-clients-more__body">
+                <p className="app-meta">
+                  {t(
+                    "Déconnexion de cet appareil et fermeture de l’espace opérateur.",
+                    "Sign out from this device and close the operator workspace."
+                  )}
+                </p>
+                <button type="button" className="btn-expense-delete" onClick={onLogout}>
+                  {t("Déconnexion", "Logout")}
+                </button>
+              </div>
+            </details>
           </section>
         </DashboardScreenGate>
       ) : null}
