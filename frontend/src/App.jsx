@@ -26,6 +26,7 @@ import { PaymentPrimaryToggle } from "./components/PaymentPrimaryToggle.jsx";
 import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
+import { openVoucherTicketsPrint } from "./voucherTicketPrint.js";
 import { formatStaffRole } from "./staffRoleLabels.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 import { clearPwaTeamChatBadge, onTeamChatUnreadTick } from "./teamChatAlerts.js";
@@ -3716,10 +3717,14 @@ api.getPaymentNotifications(activeIspId)
     URL.revokeObjectURL(url);
   }
 
-  function onPrintVouchers() {
-    const printable = vouchers.filter((v) => v.status === "unused").slice(0, 48);
+  async function onPrintVouchers() {
+    const printable = vouchers.filter((v) => v.status === "unused").slice(0, 96);
     if (printable.length === 0) {
       setError(t("Aucun bon inutilisé à imprimer.", "No unused vouchers to print."));
+      return;
+    }
+    if (!selectedIspId) {
+      setError(t("Sélectionnez un opérateur.", "Select an operator."));
       return;
     }
     const brandTitle = resolvePublicBrandName(branding?.displayName);
@@ -3733,188 +3738,38 @@ api.getPaymentNotifications(activeIspId)
       typeof window !== "undefined"
         ? new URL(mcbuleliLogoUrl, window.location.origin).href
         : mcbuleliLogoUrl;
-    const esc = (s) =>
-      String(s ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;");
-    const sheetTitle = t(
-      `${printable.length} vouchers Wi‑Fi`,
-      `${printable.length} Wi‑Fi vouchers`
-    );
-    const printHint = t(
-      "Utilisez Imprimer → Enregistrer au format PDF pour exporter.",
-      "Use Print → Save as PDF to export."
-    );
-    const poweredByHtml = `
-      <div class="powered">
-        <span>Powered by</span>
-        <span class="powered__mark"><img src="${esc(mcbuleliMarkSrc)}" alt="" width="18" height="18"/></span>
-        <a href="https://x.com/McBuleli" target="_blank" rel="noopener noreferrer">McBuleli</a>
-      </div>`;
-    const cards = printable
-      .map((v) => {
-        const days = Number(v.durationDays) || 1;
-        const price = v.priceUsd != null ? Number(v.priceUsd).toFixed(0) : "-";
-        const plan = v.planName || brandTitle;
-        const dayLabel = days === 1 ? "1 day" : `${days} days`;
-        return `
-          <article class="ticket">
-            <header class="ticket__top">
-              <div>
-                <p class="ticket__bundle"><span>${esc(dayLabel)}</span> bundle</p>
-                <p class="ticket__plan">${esc(plan)}</p>
-              </div>
-              <p class="ticket__price">Price ${esc(price)}$</p>
-            </header>
-            <div class="ticket__brand">
-              <img src="${esc(logoSrc)}" alt="" />
-              <strong>${esc(brandTitle)}</strong>
-            </div>
-            <div class="ticket__code-box">
-              <span class="ticket__code-label">Voucher code</span>
-              <code class="ticket__code">${esc(v.code)}</code>
-            </div>
-            <div class="ticket__meta">
-              <p><strong>Traffic / speed</strong><br/>${esc(v.speedLabel || v.rateLimit || "-")}</p>
-              <p><strong>Devices</strong><br/>${esc(v.maxDevices ?? 1)}</p>
-            </div>
-            <footer class="ticket__foot">
-              Valid ${esc(days)} day(s) after activation
-              ${poweredByHtml}
-            </footer>
-          </article>`;
-      })
-      .join("");
-    const html = `<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8"/>
-  <title>${esc(brandTitle)} - Wi‑Fi vouchers</title>
-  <style>
-    @page { size: A4; margin: 10mm; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "Segoe UI", system-ui, sans-serif;
-      color: #1a1a1a;
-      background: #fff;
+    try {
+      setNotice(
+        t(
+          `Préparation de ${printable.length} ticket(s) PDF…`,
+          `Preparing ${printable.length} PDF ticket(s)…`
+        )
+      );
+      await openVoucherTicketsPrint({
+        vouchers: printable,
+        ispId: selectedIspId,
+        brandTitle,
+        brandLogoUrl: logoSrc,
+        mcbuleliLogoAbsolute: mcbuleliMarkSrc,
+        isEn
+      });
+      setNotice(
+        t(
+          `${printable.length} ticket(s) prêts à imprimer / PDF (grille 3×).`,
+          `${printable.length} ticket(s) ready to print / PDF (3-col grid).`
+        )
+      );
+    } catch (err) {
+      setError(
+        audienceErr(
+          err?.message ||
+            t(
+              "Impossible d'ouvrir l'impression (autorisez les pop-ups).",
+              "Could not open print (allow pop-ups)."
+            )
+        )
+      );
     }
-    h1 { font-size: 14px; margin: 0 0 12px; font-weight: 700; }
-    .sheet {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-    }
-    .ticket {
-      border: 1px solid #222;
-      border-radius: 10px;
-      padding: 12px 14px;
-      min-height: 190px;
-      break-inside: avoid;
-      page-break-inside: avoid;
-      background: #fff;
-    }
-    .ticket__top {
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      align-items: flex-start;
-    }
-    .ticket__bundle { margin: 0; font-size: 15px; font-weight: 700; }
-    .ticket__bundle span { color: #1565c0; }
-    .ticket__plan { margin: 2px 0 0; font-size: 11px; color: #555; }
-    .ticket__price { margin: 0; font-size: 13px; font-weight: 700; }
-    .ticket__brand {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 10px 0;
-    }
-    .ticket__brand img { width: 42px; height: 42px; object-fit: contain; border-radius: 50%; }
-    .ticket__brand strong { font-size: 13px; }
-    .ticket__code-box {
-      border: 1px solid #bbb;
-      border-radius: 6px;
-      padding: 8px 10px;
-      text-align: center;
-      background: #fafafa;
-    }
-    .ticket__code-label {
-      display: block;
-      font-size: 11px;
-      color: #666;
-      margin-bottom: 4px;
-    }
-    .ticket__code {
-      font-size: 16px;
-      font-weight: 800;
-      letter-spacing: 0.04em;
-      font-family: ui-monospace, Menlo, Consolas, monospace;
-    }
-    .ticket__meta {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-top: 10px;
-      font-size: 11px;
-      color: #333;
-    }
-    .ticket__meta p { margin: 0; }
-    .ticket__foot {
-      margin-top: 10px;
-      font-size: 10px;
-      color: #777;
-      line-height: 1.35;
-    }
-    .powered {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      margin-top: 8px;
-      font-size: 10px;
-      color: #555;
-    }
-    .powered__mark {
-      display: inline-flex;
-      width: 18px;
-      height: 18px;
-      border-radius: 999px;
-      overflow: hidden;
-    }
-    .powered__mark img { width: 18px; height: 18px; object-fit: contain; display: block; }
-    .powered a {
-      font-weight: 800;
-      color: #305f33;
-      text-decoration: none;
-    }
-    .sheet-powered {
-      margin-top: 14px;
-      padding-top: 10px;
-      border-top: 1px solid #ddd;
-    }
-    @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .no-print { display: none !important; }
-    }
-  </style>
-</head>
-<body>
-  <p class="no-print" style="padding:12px;background:#f3f4f6;margin:0 0 12px;font-size:13px;">
-    ${esc(printHint)}
-  </p>
-  <h1>${esc(brandTitle)} - ${esc(sheetTitle)}</h1>
-  <div class="sheet">${cards}</div>
-  <div class="sheet-powered">${poweredByHtml}</div>
-  <script>window.onload = function () { window.focus(); window.print(); };</script>
-</body>
-</html>`;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
   }
 
   async function onChangePassword(e) {
@@ -7966,7 +7821,7 @@ api.getPaymentNotifications(activeIspId)
               : t("Générer les vouchers Wi‑Fi", "Generate Wi‑Fi vouchers")}
           </button>
           <button type="button" onClick={onPrintVouchers} disabled={!selectedIspId}>
-            {t("Imprimer / PDF (tickets)", "Print / PDF (tickets)")}
+            {t("Imprimer / PDF (badges QR)", "Print / PDF (QR badges)")}
           </button>
           <button type="button" onClick={onExportVouchers} disabled={!selectedIspId}>
             {t("Exporter CSV", "Export CSV")}

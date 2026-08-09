@@ -135,6 +135,15 @@ export default function WifiPortal() {
     loadCatalog(ispIdFromQuery).catch((e) => setError(wifiErr(e.message)));
   }, [ispIdFromQuery, loadCatalog]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const v = new URLSearchParams(window.location.search).get("v")?.trim();
+    if (!v || !plans.length) return;
+    setPaperVoucherCode(v);
+    setCheckoutMode("paper");
+    setSelectedPlan((prev) => prev || plans[0]);
+  }, [plans]);
+
   async function onOpenCatalog(e) {
     e.preventDefault();
     try {

@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Aperçu badges vouchers QR - McBuleli</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #e8eaed;
+      color: #102018;
+    }
+    .hint {
+      max-width: 960px;
+      margin: 0 auto 14px;
+      padding: 12px 14px;
+      background: #fff;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #405348;
+    }
+    h1 {
+      max-width: 960px;
+      margin: 0 auto 10px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sheet {
+      max-width: 960px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      background: #fff;
+      border: 1px solid #cfd8d3;
+    }
+    .badge {
+      position: relative;
+      border: 1px dashed #9bb5a3;
+      padding: 12px 12px 10px 16px;
+      min-height: 280px;
+      background: linear-gradient(180deg, #f4fbf6 0%, #ffffff 42%, #ffffff 100%);
+      overflow: hidden;
+    }
+    .badge__rail {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 5px;
+      background: linear-gradient(180deg, #2f7439 0%, #63b38f 55%, #b98b66 100%);
+    }
+    .badge__head { display: flex; justify-content: space-between; align-items: center; }
+    .badge__chip {
+      padding: 3px 8px; border-radius: 999px; background: #0f2a18; color: #d8f3e4;
+      font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
+    }
+    .badge__price { font-size: 14px; font-weight: 800; color: #2f7439; }
+    .badge__brand { display: flex; align-items: center; gap: 8px; margin: 10px 0 8px; }
+    .logo {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(145deg, #2f7439, #63b38f); color: #fff;
+      display: grid; place-items: center; font-size: 10px; font-weight: 800;
+    }
+    .badge__isp { margin: 0; font-size: 12px; font-weight: 800; }
+    .badge__plan { margin: 1px 0 0; font-size: 10px; color: #5a6b60; }
+    .badge__qr-wrap {
+      display: flex; justify-content: center; margin: 4px 0 8px; padding: 6px;
+      background: #fff; border-radius: 10px; border: 1px solid #d7e5db;
+    }
+    .qr-fake {
+      width: 118px; height: 118px; border-radius: 8px;
+      background:
+        radial-gradient(circle at 50% 50%, #fff 0 18%, transparent 19%),
+        repeating-linear-gradient(0deg, #0b1f12 0 3px, #fff 3px 6px),
+        repeating-linear-gradient(90deg, #0b1f12 0 3px, #fff 3px 6px);
+      position: relative;
+    }
+    .qr-fake::after {
+      content: "MB";
+      position: absolute; inset: 38%;
+      background: #eaf5ee; border-radius: 50%;
+      display: grid; place-items: center;
+      font-size: 11px; font-weight: 900; color: #2f7439;
+      border: 2px solid #fff;
+    }
+    .badge__code-box {
+      border: 1.5px solid #2f7439; border-radius: 8px; padding: 7px 8px;
+      text-align: center; background: #f7fcf8;
+    }
+    .badge__code-label {
+      display: block; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #5a6b60; margin-bottom: 2px; font-weight: 700;
+    }
+    .badge__code {
+      font-size: 13px; font-weight: 800; letter-spacing: 0.05em;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    .badge__meta {
+      display: flex; justify-content: space-between; margin-top: 7px;
+      font-size: 9px; color: #405348; font-weight: 600;
+    }
+    .badge__foot { margin-top: 7px; font-size: 9px; color: #6a7a70; text-align: center; }
+    .powered {
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+      margin-top: 4px; font-size: 9px;
+    }
+    .powered a { font-weight: 800; color: #305f33; text-decoration: none; }
+    .powered__mark {
+      width: 16px; height: 16px; border-radius: 999px; background: #eaf5ee;
+      display: grid; place-items: center; font-size: 7px; font-weight: 900; color: #2f7439;
+    }
+    @media (max-width: 800px) { .sheet { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 520px) { .sheet { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <p class="hint">
+    Modèle <strong>badge hackathon</strong> utilisé pour <em>Imprimer / PDF (badges QR)</em> :
+    grille <strong>3 colonnes</strong>, QR ECC-H avec logo McBuleli au centre, code lisible, Powered by.
+    (QR ci-dessous illustratif — en prod ce sont de vrais QR scannables.)
+  </p>
+  <h1>Demo ISP · 3 vouchers Wi‑Fi / page</h1>
+  <div class="sheet">
+    <article class="badge">
+      <div class="badge__rail"></div>
+      <header class="badge__head">
+        <span class="badge__chip">1 JOUR</span>
+        <span class="badge__price">1$</span>
+      </header>
+      <div class="badge__brand">
+        <div class="logo">ISP</div>
+        <div>
+          <p class="badge__isp">Demo ISP</p>
+          <p class="badge__plan">Accès jour</p>
+        </div>
+      </div>
+      <div class="badge__qr-wrap"><div class="qr-fake" aria-hidden="true"></div></div>
+      <div class="badge__code-box">
+        <span class="badge__code-label">Voucher code</span>
+        <code class="badge__code">MB7K2H9Q4R</code>
+      </div>
+      <div class="badge__meta"><span>10M/5M</span><span>1 app.</span></div>
+      <footer class="badge__foot">
+        Valide 1j après activation
+        <div class="powered">
+          <span>Powered by</span>
+          <span class="powered__mark">MB</span>
+          <a href="https://x.com/McBuleli">McBuleli</a>
+        </div>
+      </footer>
+    </article>
+    <article class="badge">
+      <div class="badge__rail"></div>
+      <header class="badge__head">
+        <span class="badge__chip">7 JOURS</span>
+        <span class="badge__price">5$</span>
+      </header>
+      <div class="badge__brand">
+        <div class="logo">ISP</div>
+        <div>
+          <p class="badge__isp">Demo ISP</p>
+          <p class="badge__plan">Accès semaine</p>
+        </div>
+      </div>
+      <div class="badge__qr-wrap"><div class="qr-fake" aria-hidden="true"></div></div>
+      <div class="badge__code-box">
+        <span class="badge__code-label">Voucher code</span>
+        <code class="badge__code">MB3N8P2X6W</code>
+      </div>
+      <div class="badge__meta"><span>20M/10M</span><span>2 app.</span></div>
+      <footer class="badge__foot">
+        Valide 7j après activation
+        <div class="powered">
+          <span>Powered by</span>
+          <span class="powered__mark">MB</span>
+          <a href="https://x.com/McBuleli">McBuleli</a>
+        </div>
+      </footer>
+    </article>
+    <article class="badge">
+      <div class="badge__rail"></div>
+      <header class="badge__head">
+        <span class="badge__chip">30 JOURS</span>
+        <span class="badge__price">30$</span>
+      </header>
+      <div class="badge__brand">
+        <div class="logo">ISP</div>
+        <div>
+          <p class="badge__isp">Demo ISP</p>
+          <p class="badge__plan">Accès mois</p>
+        </div>
+      </div>
+      <div class="badge__qr-wrap"><div class="qr-fake" aria-hidden="true"></div></div>
+      <div class="badge__code-box">
+        <span class="badge__code-label">Voucher code</span>
+        <code class="badge__code">MB9F4T1C8Z</code>
+      </div>
+      <div class="badge__meta"><span>50M/20M</span><span>3 app.</span></div>
+      <footer class="badge__foot">
+        Valide 30j après activation
+        <div class="powered">
+          <span>Powered by</span>
+          <span class="powered__mark">MB</span>
+          <a href="https://x.com/McBuleli">McBuleli</a>
+        </div>
+      </footer>
+    </article>
+  </div>
+</body>
+</html>
