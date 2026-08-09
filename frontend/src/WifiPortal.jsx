@@ -62,6 +62,7 @@ export default function WifiPortal() {
 
   const [ispIdInput, setIspIdInput] = useState(ispIdFromQuery);
   const [activeIspId, setActiveIspId] = useState(ispIdFromQuery);
+  const [tenantIspId, setTenantIspId] = useState("");
   const [branding, setBranding] = useState(null);
   const [plans, setPlans] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
@@ -133,9 +134,18 @@ export default function WifiPortal() {
   }, []);
 
   useEffect(() => {
-    if (!ispIdFromQuery) return;
-    loadCatalog(ispIdFromQuery).catch((e) => setError(wifiErr(e.message)));
-  }, [ispIdFromQuery, loadCatalog]);
+    publicRequest("/tenant/context")
+      .then((row) => {
+        if (row?.matched && row.ispId) setTenantIspId(String(row.ispId));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const isp = ispIdFromQuery || tenantIspId;
+    if (!isp) return;
+    loadCatalog(isp).catch((e) => setError(wifiErr(e.message)));
+  }, [ispIdFromQuery, tenantIspId, loadCatalog]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { api, publicAssetUrl, setAuthToken } from "./api";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import PoweredByMcBuleli from "./PoweredByMcBuleli.jsx";
+import TenantLinkField from "./TenantLinkField.jsx";
 import { IconArrowLeft } from "./icons.jsx";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 import { setIndependentPublicPageTitle } from "./pageTitle.js";
+import { isValidSlug, normalizeSlug, slugifyName } from "./tenantSlug.js";
 
 function resolveSignupTitle(displayName) {
   const s = displayName != null ? String(displayName).trim() : "";
@@ -27,7 +29,8 @@ export default function Signup() {
     adminFullName: "",
     adminEmail: "",
     adminPassword: "",
-    packageCode: "essential"
+    packageCode: "essential",
+    subdomain: ""
   });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -78,20 +81,25 @@ export default function Signup() {
     if (!packages.length) {
       setError(
         isEn
-          ? "We couldn’t load the plans. Wait a moment and try again."
-          : "Les formules ne se chargent pas pour l’instant. Réessayez dans une minute."
+          ? "We couldn't load the plans. Wait a moment and try again."
+          : "Les formules ne se chargent pas pour l'instant. Réessayez dans une minute."
       );
+      return;
+    }
+    const slug = normalizeSlug(form.subdomain) || slugifyName(form.companyName);
+    if (!isValidSlug(slug)) {
+      setError(isEn ? "Invalid link - use a-z, 0-9, - (3-30)." : "Lien invalide - utilisez a-z, 0-9, - (3-30).");
       return;
     }
     try {
       const previousToken =
         typeof window !== "undefined" ? String(window.localStorage.getItem("token") || "").trim() : "";
       const hadActiveSession = Boolean(previousToken);
-      const res = await api.signupTenant(form);
+      const res = await api.signupTenant({ ...form, subdomain: slug });
       if (!hadActiveSession) {
         setAuthToken(res.token);
         setNotice(
-          isEn ? "Account created. Redirecting to your dashboard..." : "Compte créé. Redirection vers votre tableau de bord…"
+          isEn ? "Account created. Redirecting to your dashboard..." : "Compte créé. Redirection vers votre tableau de bord..."
         );
         window.location.href = "/";
         return;
@@ -140,7 +148,7 @@ export default function Signup() {
           />
         ) : null}
         <p className="auth-simple-sub">
-          {isEn ? "Create your workspace — 1-month trial." : "Créez votre espace — essai 1 mois."}
+          {isEn ? "Create your workspace - 1-month trial." : "Créez votre espace - essai 1 mois."}
         </p>
         {error ? (
           <div role="alert" className="auth-simple-banner auth-simple-banner--error">
@@ -159,6 +167,14 @@ export default function Signup() {
             onChange={(e) => setForm({ ...form, companyName: e.target.value })}
             required
           />
+          {form.companyName.trim() ? (
+            <TenantLinkField
+              nameValue={form.companyName}
+              slug={form.subdomain}
+              onSlugChange={(s) => setForm((prev) => ({ ...prev, subdomain: s }))}
+              isEn={isEn}
+            />
+          ) : null}
           <input
             placeholder={isEn ? "City or region" : "Ville ou région"}
             value={form.location}
@@ -209,7 +225,7 @@ export default function Signup() {
             ) : null}
             {packages.map((p) => (
               <option key={p.code} value={p.code}>
-                {isEn ? `${p.name} — $${p.monthlyPriceUsd}/mo` : `${p.name} — ${p.monthlyPriceUsd} $/mois`}
+                {isEn ? `${p.name} - $${p.monthlyPriceUsd}/mo` : `${p.name} - ${p.monthlyPriceUsd} $/mois`}
               </option>
             ))}
           </select>

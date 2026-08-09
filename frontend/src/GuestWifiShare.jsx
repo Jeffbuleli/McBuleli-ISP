@@ -2,16 +2,16 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { wifiGuestBaseUrl, wifiHotspotExampleUrl, wifiHotspotLoginTemplate } from "./wifiPortalUrls.js";
 
-export default function GuestWifiShare({ ispId, caption, t }) {
+export default function GuestWifiShare({ ispId, subdomain, caption, t }) {
   const [dataUrl, setDataUrl] = useState("");
   const [copyBase, setCopyBase] = useState(false);
   const [copyTemplate, setCopyTemplate] = useState(false);
   const [copyExample, setCopyExample] = useState(false);
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const baseUrl = ispId ? wifiGuestBaseUrl(origin, ispId) : "";
-  const hotspotTemplate = ispId ? wifiHotspotLoginTemplate(origin, ispId) : "";
-  const exampleUrl = ispId ? wifiHotspotExampleUrl(origin, ispId) : "";
+  const baseUrl = ispId ? wifiGuestBaseUrl(origin, ispId, subdomain) : "";
+  const hotspotTemplate = ispId ? wifiHotspotLoginTemplate(origin, ispId, subdomain) : "";
+  const exampleUrl = ispId ? wifiHotspotExampleUrl(origin, ispId, subdomain) : "";
 
   const tr = (fr, en) => (t ? t(fr, en) : fr);
 
@@ -68,10 +68,7 @@ export default function GuestWifiShare({ ispId, caption, t }) {
             {copyBase ? tr("Copié", "Copied") : tr("Copier le lien", "Copy link")}
           </button>
           <p className="guest-wifi-share__hint">
-            {tr(
-              "Sans paramètres client : utile pour affiche, SMS ou test manuel avec ispId.",
-              "Without client parameters: good for posters, SMS, or manual tests with ispId."
-            )}
+            {tr("Lien court pour affiche ou SMS.", "Short link for posters or SMS.")}
           </p>
         </div>
       </div>

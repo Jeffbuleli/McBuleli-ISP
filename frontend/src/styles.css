@@ -3924,6 +3924,92 @@ button:disabled {
   border: 0;
 }
 
+.tenant-link-field {
+  margin-top: 10px;
+}
+
+.tenant-link-field__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.tenant-link-field__ico {
+  flex: 0 0 auto;
+  color: #63b38f;
+}
+
+.tenant-link-field__url {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  font-weight: 650;
+  color: #dce8e1;
+  text-decoration: none;
+}
+
+.tenant-link-field__url:hover {
+  color: #63b38f;
+}
+
+.tenant-link-field__btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #c5d4cc;
+  cursor: pointer;
+}
+
+.tenant-link-field__btn:hover {
+  color: #63b38f;
+  border-color: rgba(99, 179, 143, 0.45);
+}
+
+.tenant-link-field__input {
+  width: 100%;
+  margin-top: 8px;
+  min-height: 40px;
+}
+
+.tenant-link-field__hint {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: #ff8a80;
+}
+
+.panel .tenant-link-field__row,
+.field-clients-create .tenant-link-field__row {
+  border-color: rgba(22, 32, 48, 0.12);
+  background: rgba(99, 179, 143, 0.06);
+}
+
+.panel .tenant-link-field__url,
+.field-clients-create .tenant-link-field__url {
+  color: #1e2a24;
+}
+
+.panel .tenant-link-field__btn,
+.field-clients-create .tenant-link-field__btn {
+  border-color: rgba(22, 32, 48, 0.14);
+  background: #fff;
+  color: #334;
+}
+
 .lang-switch {
   display: inline-flex;
   align-items: center;

@@ -26,6 +26,14 @@ import {
 } from "./platformBilling.js";
 import { fetchPawapayDepositStatus, initiatePawapayDeposit, initiatePawapayPayout } from "./pawapayClient.js";
 import { isLikelyDrCongoMsisdn, normalizeDrCongoMsisdn } from "./phoneNormalize.js";
+import {
+  allocateUniqueSlug,
+  isValidSlug,
+  normalizeSlug,
+  platformBaseHost,
+  publicUrlForSlug,
+  slugFromHost
+} from "./tenantSlug.js";
 import { processNotificationOutboxBatch, sendNotificationDirect } from "./notifications.js";
 import { provisionSubscriptionAccess, pushHotspotPaperVoucher } from "./networkProvisioning.js";
 import {
@@ -101,6 +109,23 @@ function configuredCorsOrigins() {
 }
 
 const corsOrigins = configuredCorsOrigins();
+
+function corsOriginAllowed(origin) {
+  if (!origin) return true;
+  if (corsOrigins.length === 0) return true;
+  const clean = String(origin).trim().replace(/\/$/, "");
+  if (corsOrigins.includes(clean)) return true;
+  try {
+    const host = new URL(clean).hostname.toLowerCase();
+    const base = platformBaseHost();
+    if (host === base || host.endsWith(`.${base}`)) return true;
+    // Cutover: legacy live apex still serves the same app briefly
+    if (host === "mcbuleli.live" || host.endsWith(".mcbuleli.live")) return true;
+  } catch (_err) {
+    return false;
+  }
+  return false;
+}
 
 function isUuidString(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -479,8 +504,8 @@ const rlRadiusAcct = createPublicRateLimiter("radius_acct_webhook", {
 app.use(helmet());
 app.use(
   cors({
-    /** When CORS_ORIGINS is unset, reflect the request Origin so SPA ↔ API on different hosts works (e.g. direct Render URL). */
-    origin: corsOrigins.length > 0 ? corsOrigins : true,
+    /** Allow configured origins plus *.isp.mcbuleli.org tenant hosts. */
+    origin: (origin, cb) => cb(null, corsOriginAllowed(origin)),
     allowedHeaders: ["Content-Type", "Authorization", "X-Portal-Token", "X-ISP-ID", "x-isp-id"]
   })
 );
@@ -559,6 +584,7 @@ app.use(async (req, _res, next) => {
   const host = extractTenantHost(req);
   req.tenantHost = host;
   if (!host || host === "localhost" || host === "127.0.0.1") return next();
+  const slug = slugFromHost(host);
   try {
     const tenant = await query(
       `SELECT i.id AS "ispId", i.name, i.subdomain, b.display_name AS "displayName",
@@ -566,18 +592,23 @@ app.use(async (req, _res, next) => {
               b.primary_color AS "primaryColor", b.secondary_color AS "secondaryColor"
        FROM isps i
        LEFT JOIN isp_branding b ON b.isp_id = i.id
-       WHERE LOWER(i.subdomain) = LOWER($1) OR LOWER(COALESCE(b.custom_domain, '')) = LOWER($1)
+       WHERE LOWER(COALESCE(b.custom_domain, '')) = LOWER($1)
+          OR LOWER(i.subdomain) = LOWER($1)
+          OR ($2::text IS NOT NULL AND LOWER(i.subdomain) = LOWER($2))
+          OR ($2::text IS NOT NULL AND LOWER(SPLIT_PART(i.subdomain, '.', 1)) = LOWER($2))
        LIMIT 1`,
-      [host]
+      [host, slug]
     );
     if (tenant.rows[0]) {
       const r = tenant.rows[0];
       const dataUrl = bufferToDataUrl(r.logoMime, r.logoBytes);
+      const storedSlug = normalizeSlug(r.subdomain) || slug || null;
       req.tenantIspId = r.ispId;
       req.tenantContext = {
         ispId: r.ispId,
         name: r.name,
-        subdomain: r.subdomain,
+        subdomain: storedSlug || r.subdomain,
+        publicUrl: storedSlug ? publicUrlForSlug(storedSlug) : null,
         displayName: r.displayName || r.name,
         logoUrl: dataUrl || r.logoUrl || null,
         primaryColor: r.primaryColor,
@@ -629,6 +660,11 @@ function mapPublicBrandingRow(row) {
   const prev = row.logoUrl;
   out.logoUrl = dataUrl || prev || null;
   out.wifiPortalBannerUrl = bannerDataUrl || null;
+  const slug = normalizeSlug(row.subdomain);
+  if (slug) {
+    out.subdomain = slug;
+    out.publicUrl = publicUrlForSlug(slug);
+  }
   return out;
 }
 
@@ -1394,12 +1430,11 @@ app.post("/api/public/signup", rlSignup, async (req, res) => {
   const dup = await query("SELECT id FROM users WHERE email = $1", [email]);
   if (dup.rows[0]) return res.status(409).json({ message: "An account with this email already exists" });
 
-  const safeSubdomain =
-    requestedSubdomain ||
-    `${String(companyName)
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "tenant"}-${crypto.randomBytes(2).toString("hex")}.tenant.local`;
+  const desiredSlug = requestedSubdomain ? normalizeSlug(requestedSubdomain) : "";
+  if (desiredSlug && !isValidSlug(desiredSlug)) {
+    return res.status(400).json({ message: "Lien invalide - utilisez a-z, 0-9, - (3-30)." });
+  }
+  const safeSubdomain = await allocateUniqueSlug(query, desiredSlug || companyName);
 
   const startsAt = new Date();
   const endsAt = new Date(startsAt);
@@ -1449,6 +1484,7 @@ app.post("/api/public/signup", rlSignup, async (req, res) => {
       isp_id: userRow.ispId,
       email: userRow.email
     });
+    const isp = insertedIsp.rows[0];
     return res.status(201).json({
       token,
       user: {
@@ -1460,7 +1496,10 @@ app.post("/api/public/signup", rlSignup, async (req, res) => {
         isActive: true,
         mustChangePassword: false
       },
-      isp: insertedIsp.rows[0],
+      isp: {
+        ...isp,
+        publicUrl: publicUrlForSlug(isp.subdomain)
+      },
       platformSubscription: insertedSub.rows[0],
       trialDays: TRIAL_DAYS
     });
@@ -2613,6 +2652,8 @@ app.get("/api/tenant/context", async (req, res) => {
     matched: true,
     host: req.tenantHost,
     ispId: req.tenantContext.ispId,
+    subdomain: req.tenantContext.subdomain || null,
+    publicUrl: req.tenantContext.publicUrl || null,
     displayName: req.tenantContext.displayName || req.tenantContext.name,
     logoUrl: req.tenantContext.logoUrl || null,
     primaryColor: req.tenantContext.primaryColor || "#1565d8",
@@ -2902,12 +2943,11 @@ app.get("/api/isps", authenticate, async (_req, res) => {
 app.post("/api/isps", authenticate, requireRoles("system_owner", "super_admin"), async (req, res) => {
   const { name, location, contactPhone, subdomain } = req.body;
   if (!name || !location || !contactPhone) return res.status(400).json({ message: "name, location and contactPhone are required" });
-  const safeSubdomain =
-    subdomain ||
-    `${name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "tenant"}-${crypto.randomBytes(2).toString("hex")}.tenant.local`;
+  const desired = subdomain ? normalizeSlug(subdomain) : "";
+  if (desired && !isValidSlug(desired)) {
+    return res.status(400).json({ message: "Lien invalide - utilisez a-z, 0-9, - (3-30)." });
+  }
+  const safeSubdomain = await allocateUniqueSlug(query, desired || name);
   const inserted = await query(
     "INSERT INTO isps (id, name, location, contact_phone, subdomain) VALUES (gen_random_uuid(), $1, $2, $3, $4) RETURNING id, name, location, subdomain, contact_phone AS \"contactPhone\", created_at AS \"createdAt\"",
     [name, location, contactPhone, safeSubdomain]
@@ -3024,20 +3064,25 @@ app.post(
       ]
     );
     if (subdomain !== undefined && subdomain !== null) {
-      const sd = String(subdomain).trim().toLowerCase();
+      const sd = normalizeSlug(subdomain);
       if (sd) {
-        if (sd.length > 190 || !/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(sd)) {
-          return res.status(400).json({
-            message:
-              "Sous-domaine technique invalide : lettres minuscules, chiffres, points et tirets uniquement (ex. mon-isp.tenant.local)."
-          });
+        if (!isValidSlug(sd)) {
+          return res.status(400).json({ message: "Lien invalide - utilisez a-z, 0-9, - (3-30)." });
         }
         const clash = await query(
-          "SELECT id FROM isps WHERE LOWER(subdomain) = LOWER($1) AND id <> $2 LIMIT 1",
+          `SELECT id FROM isps
+           WHERE id <> $2
+             AND (
+               LOWER(subdomain) = LOWER($1)
+               OR LOWER(SPLIT_PART(subdomain, '.', 1)) = LOWER($1)
+             )
+           LIMIT 1`,
           [sd, ispId]
         );
         if (clash.rows[0]) {
-          return res.status(409).json({ message: "Ce sous-domaine technique est déjà utilisé par un autre espace." });
+          return res.status(409).json({
+            message: `Ce lien est déjà utilisé. Essayez ${sd}-2 ou un autre nom.`
+          });
         }
         await query("UPDATE isps SET subdomain = $1 WHERE id = $2", [sd, ispId]);
       }

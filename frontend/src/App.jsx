@@ -26,12 +26,14 @@ import { PaymentPrimaryToggle } from "./components/PaymentPrimaryToggle.jsx";
 import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
+import TenantLinkField from "./TenantLinkField.jsx";
 import { openVoucherTicketsPrint } from "./voucherTicketPrint.js";
 import { formatStaffRole } from "./staffRoleLabels.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 import { clearPwaTeamChatBadge, onTeamChatUnreadTick } from "./teamChatAlerts.js";
 import { UI_LANG_SYNC_EVENT, getStoredUiLang } from "./uiLangSync.js";
 import { setIndependentPublicPageTitle, setWorkspaceTabTitle } from "./pageTitle.js";
+import { normalizeSlug } from "./tenantSlug.js";
 import {
   IconArrowLeft,
   IconHome,
@@ -2897,7 +2899,11 @@ api.getPaymentNotifications(activeIspId)
     setError("");
     setNotice("");
     try {
-      const saved = await api.updateBranding(selectedIspId, brandingForm);
+      const payload = {
+        ...brandingForm,
+        subdomain: normalizeSlug(brandingForm.subdomain) || brandingForm.subdomain
+      };
+      const saved = await api.updateBranding(selectedIspId, payload);
       setBranding(saved);
       if (saved) {
         setBrandingForm((prev) => ({
@@ -4890,15 +4896,13 @@ api.getPaymentNotifications(activeIspId)
             </button>
 
             <details className="field-clients-more" style={{ marginTop: 16 }}>
-              <summary>{t("Domaine & marque blanche", "Domain & white-label")}</summary>
+              <summary>{t("Lien & domaine", "Link & domain")}</summary>
               <div className="field-clients-more__body">
-                <input
-                  placeholder={t(
-                    "Sous-domaine technique (ex. mon-isp.tenant.local)",
-                    "Technical subdomain (e.g. my-isp.tenant.local)"
-                  )}
-                  value={brandingForm.subdomain}
-                  onChange={(e) => setBrandingForm({ ...brandingForm, subdomain: e.target.value })}
+                <TenantLinkField
+                  nameValue={brandingForm.displayName || ""}
+                  slug={brandingForm.subdomain || ""}
+                  onSlugChange={(s) => setBrandingForm((prev) => ({ ...prev, subdomain: s }))}
+                  isEn={uiLang === "en"}
                 />
                 <input
                   placeholder={t("Domaine DNS privé (Premium)", "Private DNS domain (Premium)")}
@@ -6707,7 +6711,12 @@ api.getPaymentNotifications(activeIspId)
         {selectedIspId ? (
           <div className="panel" style={{ margin: 0, boxShadow: "none", border: 0, padding: "12px 0 0" }}>
             <h3>{t("Lien Wi‑Fi invité", "Guest Wi‑Fi link")}</h3>
-            <GuestWifiShare ispId={selectedIspId} caption={t("Lien invité", "Guest link")} t={t} />
+            <GuestWifiShare
+              ispId={selectedIspId}
+              subdomain={brandingForm.subdomain}
+              caption={t("Lien invité", "Guest link")}
+              t={t}
+            />
           </div>
         ) : null}
 

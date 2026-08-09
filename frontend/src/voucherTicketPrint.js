@@ -81,7 +81,7 @@ export async function buildVoucherTicketsHtml({
   mcbuleliLogoAbsolute,
   isEn = false
 }) {
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://mcbuleli.live";
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://isp.mcbuleli.org";
   const mark = mcbuleliLogoAbsolute || mcbuleliLogoUrl;
   const title = isEn
     ? `${vouchers.length} Wi‑Fi vouchers`

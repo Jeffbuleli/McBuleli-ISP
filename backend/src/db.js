@@ -1352,9 +1352,20 @@ export async function initDb() {
   const demoIspId = "00000000-0000-4000-8000-000000000123";
   await query(
     `INSERT INTO isps (id, name, location, contact_phone, subdomain, is_demo)
-     VALUES ($1, 'McBuleli Demo ISP', 'Demo', '+243000000000', 'demo.mcbuleli.local', TRUE)
-     ON CONFLICT (id) DO UPDATE SET is_demo = TRUE`,
+     VALUES ($1, 'McBuleli Demo ISP', 'Demo', '+243000000000', 'demo', TRUE)
+     ON CONFLICT (id) DO UPDATE SET is_demo = TRUE, subdomain = 'demo'`,
     [demoIspId]
+  );
+  await query(
+    `UPDATE isps
+     SET subdomain = LOWER(SPLIT_PART(subdomain, '.', 1))
+     WHERE subdomain LIKE '%.%'
+       AND POSITION('.' IN subdomain) > 0
+       AND NOT EXISTS (
+         SELECT 1 FROM isps o
+         WHERE o.id <> isps.id
+           AND LOWER(SPLIT_PART(o.subdomain, '.', 1)) = LOWER(SPLIT_PART(isps.subdomain, '.', 1))
+       )`
   );
   await query(
     `INSERT INTO isp_branding (id, isp_id, display_name, contact_phone)
