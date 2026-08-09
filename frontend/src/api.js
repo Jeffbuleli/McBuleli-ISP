@@ -975,6 +975,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ...payload, ispId })
     }),
+  linkNetworkNode: (ispId, payload) =>
+    request(withIsp("/network/nodes/link", ispId), {
+      method: "POST",
+      body: JSON.stringify({ ...payload, ispId })
+    }),
+  getNetworkNodeLinkScript: (ispId, nodeId) =>
+    request(withIsp(`/network/nodes/${encodeURIComponent(nodeId)}/link-script`, ispId), {
+      method: "POST",
+      body: JSON.stringify({ ispId })
+    }),
   toggleNetworkNode: (ispId, nodeId, isActive) =>
     request(withIsp(`/network/nodes/${nodeId}/toggle`, ispId), {
       method: "POST",

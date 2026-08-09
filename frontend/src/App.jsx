@@ -36,6 +36,7 @@ import { setIndependentPublicPageTitle, setWorkspaceTabTitle } from "./pageTitle
 import { normalizeSlug } from "./tenantSlug.js";
 import {
   IconArrowLeft,
+  IconCopy,
   IconHome,
   IconMail,
   IconPhone
@@ -1556,9 +1557,12 @@ function App() {
     password: "",
     defaultPppoeProfile: "default",
     defaultHotspotProfile: "default",
-    isDefault: false,
+    isDefault: true,
     isActive: true
   });
+  const [mikrotikLinkName, setMikrotikLinkName] = useState("");
+  const [mikrotikLinkScript, setMikrotikLinkScript] = useState("");
+  const [mikrotikLinkBusy, setMikrotikLinkBusy] = useState(false);
   const [notificationTestForm, setNotificationTestForm] = useState({
     channel: "sms",
     recipient: "",
@@ -3331,7 +3335,7 @@ api.getPaymentNotifications(activeIspId)
   async function onCreateNetworkNode(e) {
     e.preventDefault();
     await api.createNetworkNode(selectedIspId, networkNodeForm);
-    setNotice("Nœud réseau enregistré.");
+    setNotice(t("Noeud REST enregistre.", "REST node saved."));
     setNetworkNodeForm({
       name: "",
       host: "",
@@ -3345,6 +3349,38 @@ api.getPaymentNotifications(activeIspId)
       isActive: true
     });
     refresh();
+  }
+
+  async function onLinkMikrotikDevice(e) {
+    e.preventDefault();
+    if (!selectedIspId || !mikrotikLinkName.trim()) return;
+    setError("");
+    setMikrotikLinkBusy(true);
+    try {
+      const res = await api.linkNetworkNode(selectedIspId, {
+        name: mikrotikLinkName.trim(),
+        isDefault: !networkNodes?.some((n) => n.isDefault || n.is_default)
+      });
+      setMikrotikLinkScript(res.script || "");
+      setMikrotikLinkName("");
+      setNotice(t("Script pret - coller dans Terminal MikroTik.", "Script ready - paste in MikroTik Terminal."));
+      refresh();
+    } catch (err) {
+      setError(audienceErr(err.message || t("Echec liaison.", "Link failed.")));
+    } finally {
+      setMikrotikLinkBusy(false);
+    }
+  }
+
+  async function onShowMikrotikLinkScript(nodeId) {
+    setError("");
+    try {
+      const res = await api.getNetworkNodeLinkScript(selectedIspId, nodeId);
+      setMikrotikLinkScript(res.script || "");
+      setNotice(t("Nouveau script genere.", "New script generated."));
+    } catch (err) {
+      setError(audienceErr(err.message || t("Echec script.", "Script failed.")));
+    }
   }
 
   async function onToggleNetworkNode(nodeId, isActive) {
@@ -5156,83 +5192,80 @@ api.getPaymentNotifications(activeIspId)
         />
 
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
-          <details className="panel field-clients-more" open={!networkNodes?.length}>
-            <summary>{t("Ajouter un noeud MikroTik", "Add MikroTik node")}</summary>
-            <form className="field-clients-more__body" onSubmit={onCreateNetworkNode}>
-              <div className="field-clients-create__row">
-                <input
-                  placeholder={t("Nom", "Name")}
-                  value={networkNodeForm.name}
-                  onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, name: e.target.value })}
-                  required
-                />
-                <input
-                  placeholder={t("Hote (IP / domaine)", "Host (IP / domain)")}
-                  value={networkNodeForm.host}
-                  onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, host: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="field-clients-create__row">
-                <input
-                  type="number"
-                  placeholder={t("Port API", "API port")}
-                  value={networkNodeForm.apiPort}
-                  onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, apiPort: e.target.value })}
-                />
-                <input
-                  placeholder={t("Utilisateur", "Username")}
-                  value={networkNodeForm.username}
-                  onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, username: e.target.value })}
-                />
-                <input
-                  type="password"
-                  placeholder={t("Mot de passe", "Password")}
-                  value={networkNodeForm.password}
-                  onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, password: e.target.value })}
-                />
-              </div>
-              <div className="field-clients-create__row">
-                <input
-                  placeholder={t("Profil PPPoE", "PPPoE profile")}
-                  value={networkNodeForm.defaultPppoeProfile}
-                  onChange={(e) =>
-                    setNetworkNodeForm({ ...networkNodeForm, defaultPppoeProfile: e.target.value })
-                  }
-                />
-                <input
-                  placeholder={t("Profil hotspot", "Hotspot profile")}
-                  value={networkNodeForm.defaultHotspotProfile}
-                  onChange={(e) =>
-                    setNetworkNodeForm({ ...networkNodeForm, defaultHotspotProfile: e.target.value })
-                  }
-                />
-              </div>
-              <div className="network-ops-checks">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={networkNodeForm.useTls}
-                    onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, useTls: e.target.checked })}
-                  />{" "}
-                  TLS
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={networkNodeForm.isDefault}
-                    onChange={(e) =>
-                      setNetworkNodeForm({ ...networkNodeForm, isDefault: e.target.checked })
-                    }
-                  />{" "}
-                  {t("Par defaut", "Default")}
-                </label>
-              </div>
-              <button type="submit" disabled={!selectedIspId}>
-                {t("Enregistrer", "Save")}
+          <div className="panel field-clients-create">
+            <h2>{t("Connecter un appareil", "Connect a device")}</h2>
+            <form onSubmit={onLinkMikrotikDevice}>
+              <input
+                placeholder={t("Nom du MikroTik (ex. Shop-1)", "MikroTik name (e.g. Shop-1)")}
+                value={mikrotikLinkName}
+                onChange={(e) => setMikrotikLinkName(e.target.value)}
+                required
+              />
+              <button type="submit" disabled={!selectedIspId || mikrotikLinkBusy}>
+                {mikrotikLinkBusy
+                  ? t("Preparation...", "Preparing...")
+                  : t("Generer le script", "Generate script")}
               </button>
             </form>
-          </details>
+            {mikrotikLinkScript ? (
+              <div className="mikrotik-link-script">
+                <div className="mikrotik-link-script__bar">
+                  <strong>{t("Coller dans Terminal MikroTik", "Paste in MikroTik Terminal")}</strong>
+                  <button
+                    type="button"
+                    className="tenant-link-field__btn"
+                    onClick={() => copyToClipboard(mikrotikLinkScript)}
+                    title={t("Copier", "Copy")}
+                  >
+                    <IconCopy width={16} height={16} aria-hidden />
+                  </button>
+                </div>
+                <pre className="mikrotik-link-script__pre">{mikrotikLinkScript}</pre>
+              </div>
+            ) : null}
+
+            <details className="field-clients-more" style={{ marginTop: 14 }}>
+              <summary>{t("Avance - REST (IP publique)", "Advanced - REST (public IP)")}</summary>
+              <form className="field-clients-more__body" onSubmit={onCreateNetworkNode}>
+                <div className="field-clients-create__row">
+                  <input
+                    placeholder={t("Nom", "Name")}
+                    value={networkNodeForm.name}
+                    onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, name: e.target.value })}
+                    required
+                  />
+                  <input
+                    placeholder={t("Hote (IP / domaine)", "Host (IP / domain)")}
+                    value={networkNodeForm.host}
+                    onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, host: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="field-clients-create__row">
+                  <input
+                    type="number"
+                    placeholder={t("Port API", "API port")}
+                    value={networkNodeForm.apiPort}
+                    onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, apiPort: e.target.value })}
+                  />
+                  <input
+                    placeholder={t("Utilisateur", "Username")}
+                    value={networkNodeForm.username}
+                    onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, username: e.target.value })}
+                  />
+                  <input
+                    type="password"
+                    placeholder={t("Mot de passe", "Password")}
+                    value={networkNodeForm.password}
+                    onChange={(e) => setNetworkNodeForm({ ...networkNodeForm, password: e.target.value })}
+                  />
+                </div>
+                <button type="submit" disabled={!selectedIspId}>
+                  {t("Enregistrer REST", "Save REST")}
+                </button>
+              </form>
+            </details>
+          </div>
         )}
 
         <div className="panel">
@@ -5253,8 +5286,13 @@ api.getPaymentNotifications(activeIspId)
               {
                 key: "status",
                 header: t("Statut", "Status"),
-                sortKey: "isActive",
-                cell: (n) => (n.isActive ? t("Actif", "Active") : t("Off", "Off"))
+                sortKey: "linkStatus",
+                cell: (n) => {
+                  const ls = String(n.linkStatus || "").toLowerCase();
+                  if (ls === "pending") return t("En attente", "Pending");
+                  if (ls === "connected") return t("Connecte", "Connected");
+                  return n.isActive ? t("Actif", "Active") : t("Off", "Off");
+                }
               },
               {
                 key: "default",
@@ -5269,6 +5307,13 @@ api.getPaymentNotifications(activeIspId)
                   <div className="network-ops-row-actions">
                     {canManageNetworkNodes(user.role) ? (
                       <>
+                        <button
+                          type="button"
+                          className="btn-secondary-outline"
+                          onClick={() => onShowMikrotikLinkScript(n.id)}
+                        >
+                          {t("Script", "Script")}
+                        </button>
                         <button type="button" onClick={() => onToggleNetworkNode(n.id, !n.isActive)}>
                           {n.isActive ? t("Off", "Off") : t("On", "On")}
                         </button>

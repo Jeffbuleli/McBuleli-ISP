@@ -945,6 +945,14 @@ export async function initDb() {
   await query(
     "UPDATE isp_network_nodes SET password_enc = password WHERE password_enc IS NULL AND password IS NOT NULL;"
   );
+  await query("ALTER TABLE isp_network_nodes ADD COLUMN IF NOT EXISTS link_token_hash TEXT NULL;");
+  await query("ALTER TABLE isp_network_nodes ADD COLUMN IF NOT EXISTS link_status TEXT NULL;");
+  await query("ALTER TABLE isp_network_nodes ADD COLUMN IF NOT EXISTS router_identity TEXT NULL;");
+  await query("ALTER TABLE isp_network_nodes ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NULL;");
+  await query("ALTER TABLE isp_network_nodes ADD COLUMN IF NOT EXISTS linked_at TIMESTAMPTZ NULL;");
+  await query(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_isp_network_nodes_link_token ON isp_network_nodes (link_token_hash) WHERE link_token_hash IS NOT NULL;"
+  );
   await query("CREATE INDEX IF NOT EXISTS idx_isp_network_nodes_isp ON isp_network_nodes (isp_id);");
 
   await query(`
