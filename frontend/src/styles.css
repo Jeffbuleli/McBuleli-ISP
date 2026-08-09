@@ -8042,6 +8042,100 @@ button.wifi-plan-card--v2:focus-visible {
   padding: 6px 4px;
 }
 
+.wifi-qr-scanner {
+  margin: 0 0 12px;
+}
+
+.wifi-qr-scanner__actions {
+  margin-bottom: 8px;
+}
+
+.wifi-qr-scanner__view {
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.wifi-qr-scanner__view.is-on {
+  min-height: 240px;
+  border: 1px solid rgba(99, 179, 143, 0.35);
+  background: #0a0a0a;
+}
+
+.wifi-qr-scanner__view video {
+  border-radius: 12px !important;
+}
+
+.wifi-qr-scanner__err {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: #ff8a80;
+}
+
+.wifi-paper-ready {
+  margin: 0 0 18px;
+  padding: 18px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(99, 179, 143, 0.4);
+  background: color-mix(in srgb, #63b38f 12%, #141414);
+  text-align: center;
+  animation: wifi-modal-in 0.28s ease;
+}
+
+.wifi-paper-ready__title {
+  margin: 0 0 6px !important;
+  font-size: 1.15rem !important;
+  color: #e8fff3 !important;
+}
+
+.wifi-paper-ready__lead {
+  margin: 0 0 14px;
+  font-size: 0.9rem;
+  color: #aeb4bf;
+}
+
+.wifi-paper-ready__code {
+  display: block;
+  margin: 0 auto 14px;
+  padding: 12px 14px;
+  max-width: 100%;
+  border-radius: 12px;
+  border: 1.5px solid #63b38f;
+  background: #0f0f0f;
+  color: #f4fff6;
+  font-size: clamp(1.1rem, 4vw, 1.45rem);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  word-break: break-all;
+}
+
+.wifi-paper-ready__actions {
+  display: grid;
+  gap: 8px;
+}
+
+.wifi-paper-ready .wifi-pay-submit {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  font-weight: 750;
+  background: #63b38f;
+  color: #0a0a0a;
+  cursor: pointer;
+}
+
+.wifi-paper-ready .wifi-pay-submit--secondary {
+  background: transparent;
+  color: #c5e4c7;
+  border: 1px solid rgba(99, 179, 143, 0.45);
+}
+
 .wifi-checkout-tab {
   display: inline-flex;
   align-items: center;

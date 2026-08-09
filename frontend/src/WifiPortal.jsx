@@ -4,6 +4,7 @@ import { mcbuleliLogoUrl } from "./brandAssets.js";
 import PoweredByMcBuleli from "./PoweredByMcBuleli.jsx";
 import { useReadOnlyUiLang } from "./uiLangSync.js";
 import HomeShortcut from "./HomeShortcut.jsx";
+import WifiVoucherQrScanner from "./WifiVoucherQrScanner.jsx";
 import {
   IconAntenna,
   IconPhone,
@@ -85,6 +86,7 @@ export default function WifiPortal() {
     password: ""
   });
   const [paperVoucherCode, setPaperVoucherCode] = useState("");
+  const [paperReady, setPaperReady] = useState(null);
   const [voucherBusy, setVoucherBusy] = useState(false);
   const [depositId, setDepositId] = useState(null);
   const [redirectUrl, setRedirectUrl] = useState(null);
@@ -237,6 +239,27 @@ export default function WifiPortal() {
     }
   }
 
+  function resolveHotspotLoginUrl() {
+    const router = captiveInfo.router;
+    if (router) {
+      const host = String(router).replace(/^https?:\/\//i, "").split("/")[0];
+      if (host) return `http://${host}/login`;
+    }
+    return "";
+  }
+
+  async function copyPaperCode(code) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(code);
+        return true;
+      }
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }
+
   async function onActivatePaperVoucher(e) {
     e.preventDefault();
     setError("");
@@ -246,23 +269,26 @@ export default function WifiPortal() {
       setError(t("errWifiVoucherCode"));
       return;
     }
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(code);
-      }
-    } catch {
-      /* ignore */
+    const copied = await copyPaperCode(code);
+    setSelectedPlan(null);
+    setPaperReady({ code, copied });
+    setNotice(copied ? t("wifiVoucherCopied") : t("wifiVoucherReady"));
+    const loginUrl = resolveHotspotLoginUrl();
+    if (loginUrl) {
+      window.setTimeout(() => {
+        window.location.href = loginUrl;
+      }, 900);
     }
-    setNotice(t("wifiVoucherReady"));
-    const router = captiveInfo.router;
-    if (router) {
-      const host = String(router).replace(/^https?:\/\//i, "").split("/")[0];
-      if (host) {
-        window.setTimeout(() => {
-          window.location.href = `http://${host}/login`;
-        }, 400);
-      }
+  }
+
+  function onOpenHotspotLogin() {
+    const loginUrl = resolveHotspotLoginUrl();
+    if (loginUrl) {
+      window.location.href = loginUrl;
+      return;
     }
+    // Common MikroTik defaults when captive params are missing
+    window.location.href = "http://192.168.88.1/login";
   }
 
   async function onRedeemVoucher(e) {
@@ -454,6 +480,29 @@ export default function WifiPortal() {
       {error ? <p className="error wifi-flash">{error}</p> : null}
       {notice ? <p className="wifi-flash wifi-flash--ok">{notice}</p> : null}
 
+      {paperReady ? (
+        <section className="wifi-paper-ready" aria-live="polite">
+          <h2 className="wifi-paper-ready__title">{t("wifiVoucherReadyTitle")}</h2>
+          <p className="wifi-paper-ready__lead">{t("wifiVoucherReadyLead")}</p>
+          <code className="wifi-paper-ready__code">{paperReady.code}</code>
+          <div className="wifi-paper-ready__actions">
+            <button
+              type="button"
+              className="wifi-pay-submit"
+              onClick={async () => {
+                const ok = await copyPaperCode(paperReady.code);
+                setNotice(ok ? t("wifiVoucherCopied") : t("wifiVoucherReady"));
+              }}
+            >
+              {t("wifiVoucherCopy")}
+            </button>
+            <button type="button" className="wifi-pay-submit wifi-pay-submit--secondary" onClick={onOpenHotspotLogin}>
+              {t("wifiVoucherOpenLogin")}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       {postPaySetup ? (
         <section className="panel wifi-postpay">
           <h2>{t("postPayTitle")}</h2>
@@ -494,6 +543,7 @@ export default function WifiPortal() {
                 setDepositId(null);
                 setCheckoutMode("mm");
                 setPaperVoucherCode("");
+                setPaperReady(null);
                 setNotice("");
                 setError("");
               }}
@@ -813,6 +863,15 @@ export default function WifiPortal() {
 
             {checkoutMode === "paper" ? (
               <form className="wifi-checkout-form" onSubmit={onActivatePaperVoucher}>
+                <WifiVoucherQrScanner
+                  scanLabel={t("wifiVoucherScan")}
+                  stopLabel={t("wifiVoucherScanStop")}
+                  onDetected={(code) => {
+                    setPaperVoucherCode(code);
+                    setNotice(t("wifiVoucherScanned"));
+                    setError("");
+                  }}
+                />
                 <label className="wifi-field">
                   <span className="wifi-field__label">{t("wifiVoucherTitle")}</span>
                   <div className="wifi-input-row">
