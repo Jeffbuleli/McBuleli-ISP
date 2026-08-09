@@ -1483,7 +1483,8 @@ function App() {
     planId: "",
     quantity: 1,
     maxDevices: "",
-    replaceUnused: false
+    replaceUnused: false,
+    syncToMikrotik: true
   });
   const [voucherRedeemForm, setVoucherRedeemForm] = useState({
     code: "",
@@ -3620,24 +3621,41 @@ api.getPaymentNotifications(activeIspId)
       setError(t("Choisissez une formule.", "Select a plan."));
       return;
     }
-    const created = await api.generateVouchers(selectedIspId, {
+    const res = await api.generateVouchers(selectedIspId, {
       planId: voucherForm.planId,
       quantity: Number(voucherForm.quantity || 1),
       replaceUnused: Boolean(voucherForm.replaceUnused),
+      syncToMikrotik: Boolean(voucherForm.syncToMikrotik),
+      codeStyle: "paper",
       ...(voucherForm.maxDevices !== "" && voucherForm.maxDevices != null
         ? { maxDevices: Number(voucherForm.maxDevices) }
         : {})
     });
-    const n = Array.isArray(created) ? created.length : 0;
-    setNotice(
-      voucherForm.replaceUnused
-        ? t(
-            `${n} bon(s) régénéré(s) - anciens inutilisés invalidés.`,
-            `${n} voucher(s) regenerated - previous unused codes invalidated.`
-          )
-        : t(`${n} bon(s) généré(s) avec succès.`, `${n} voucher(s) generated successfully.`)
-    );
-    setVoucherForm({ planId: voucherForm.planId, quantity: 1, maxDevices: "", replaceUnused: false });
+    const created = Array.isArray(res) ? res : Array.isArray(res?.items) ? res.items : [];
+    const n = created.length;
+    const sync = Array.isArray(res?.mikrotikSync) ? res.mikrotikSync : [];
+    const mkOk = sync.filter((s) => s.ok).length;
+    const mkSkip = sync.filter((s) => s.skipped).length;
+    const mkFail = sync.filter((s) => !s.ok && !s.skipped).length;
+    let msg = voucherForm.replaceUnused
+      ? t(
+          `${n} bon(s) régénéré(s) - anciens inutilisés invalidés.`,
+          `${n} voucher(s) regenerated - previous unused codes invalidated.`
+        )
+      : t(`${n} bon(s) Wi‑Fi généré(s).`, `${n} Wi‑Fi voucher(s) generated.`);
+    if (voucherForm.syncToMikrotik) {
+      if (mkOk) msg += ` ${t(`MikroTik: ${mkOk} poussé(s).`, `MikroTik: ${mkOk} pushed.`)}`;
+      if (mkSkip) msg += ` ${t("Aucun nœud MikroTik actif - codes McBuleli seuls.", "No active MikroTik node - McBuleli codes only.")}`;
+      if (mkFail) msg += ` ${t(`MikroTik: ${mkFail} échec(s).`, `MikroTik: ${mkFail} failed.`)}`;
+    }
+    setNotice(msg);
+    setVoucherForm({
+      planId: voucherForm.planId,
+      quantity: 1,
+      maxDevices: "",
+      replaceUnused: false,
+      syncToMikrotik: true
+    });
     refresh();
   }
 
@@ -3699,53 +3717,166 @@ api.getPaymentNotifications(activeIspId)
   }
 
   function onPrintVouchers() {
-    const printable = vouchers.filter((v) => v.status === "unused").slice(0, 24);
+    const printable = vouchers.filter((v) => v.status === "unused").slice(0, 48);
     if (printable.length === 0) {
-      setError("Aucun bon inutilisé à imprimer.");
+      setError(t("Aucun bon inutilisé à imprimer.", "No unused vouchers to print."));
       return;
     }
     const brandTitle = resolvePublicBrandName(branding?.displayName);
-    const mcLogoPrint =
-      typeof window !== "undefined"
-        ? new URL(mcbuleliLogoUrl, window.location.origin).href
-        : mcbuleliLogoUrl;
-    const html = `
-      <html lang="fr">
-      <head>
-        <meta charset="utf-8"/>
-        <title>Bons d'accès - McBuleli</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com"/>
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet"/>
-      </head>
-      <body style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;padding:16px;color:${branding?.secondaryColor || "#2d2420"};">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          <img src="${mcLogoPrint}" alt="McBuleli" style="height:40px;width:auto;object-fit:contain;" />
-          <h2 style="margin:0;color:${branding?.primaryColor || "#5d4037"};">${brandTitle} - bons d'accès Wi‑Fi</h2>
-        </div>
-        ${printable
-          .map(
-            (v) => `
-          <div style="border:1px solid ${branding?.primaryColor || "#5d4037"}; border-radius:8px; padding:12px; margin:8px 0;">
-            <strong style="color:${branding?.primaryColor || "#5d4037"};">${v.code}</strong><br/>
-            Débit : ${v.rateLimit}<br/>
-            Durée : ${v.durationDays} jour(s)<br/>
-            Appareils : ${v.maxDevices ?? 1}<br/>
-            Expire le : ${v.expiresAt ? new Date(v.expiresAt).toLocaleDateString("fr-FR") : "-"}
-          </div>
-        `
-          )
-          .join("")}
-        <p style="margin-top:16px;">${branding?.invoiceFooter || ""}</p>
-      </body>
-      </html>
-    `;
+    const logoSrc =
+      branding?.logoUrl != null && String(branding.logoUrl).trim()
+        ? publicAssetUrl(branding.logoUrl)
+        : typeof window !== "undefined"
+          ? new URL(mcbuleliLogoUrl, window.location.origin).href
+          : mcbuleliLogoUrl;
+    const esc = (s) =>
+      String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    const sheetTitle = t(
+      `${printable.length} vouchers Wi‑Fi`,
+      `${printable.length} Wi‑Fi vouchers`
+    );
+    const printHint = t(
+      "Utilisez Imprimer → Enregistrer au format PDF pour exporter.",
+      "Use Print → Save as PDF to export."
+    );
+    const cards = printable
+      .map((v) => {
+        const days = Number(v.durationDays) || 1;
+        const price = v.priceUsd != null ? Number(v.priceUsd).toFixed(0) : "-";
+        const plan = v.planName || brandTitle;
+        const dayLabel = days === 1 ? "1 day" : `${days} days`;
+        return `
+          <article class="ticket">
+            <header class="ticket__top">
+              <div>
+                <p class="ticket__bundle"><span>${esc(dayLabel)}</span> bundle</p>
+                <p class="ticket__plan">${esc(plan)}</p>
+              </div>
+              <p class="ticket__price">Price ${esc(price)}$</p>
+            </header>
+            <div class="ticket__brand">
+              <img src="${esc(logoSrc)}" alt="" />
+              <strong>${esc(brandTitle)}</strong>
+            </div>
+            <div class="ticket__code-box">
+              <span class="ticket__code-label">Voucher code</span>
+              <code class="ticket__code">${esc(v.code)}</code>
+            </div>
+            <div class="ticket__meta">
+              <p><strong>Traffic / speed</strong><br/>${esc(v.speedLabel || v.rateLimit || "-")}</p>
+              <p><strong>Devices</strong><br/>${esc(v.maxDevices ?? 1)}</p>
+            </div>
+            <footer class="ticket__foot">
+              Online time limit: ${esc(days)}d<br/>
+              Valid ${esc(days)} day(s) after activation
+            </footer>
+          </article>`;
+      })
+      .join("");
+    const html = `<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title>${esc(brandTitle)} - Wi‑Fi vouchers</title>
+  <style>
+    @page { size: A4; margin: 10mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: #1a1a1a;
+      background: #fff;
+    }
+    h1 { font-size: 14px; margin: 0 0 12px; font-weight: 700; }
+    .sheet {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .ticket {
+      border: 1px solid #222;
+      border-radius: 10px;
+      padding: 12px 14px;
+      min-height: 190px;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      background: #fff;
+    }
+    .ticket__top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .ticket__bundle { margin: 0; font-size: 15px; font-weight: 700; }
+    .ticket__bundle span { color: #1565c0; }
+    .ticket__plan { margin: 2px 0 0; font-size: 11px; color: #555; }
+    .ticket__price { margin: 0; font-size: 13px; font-weight: 700; }
+    .ticket__brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 10px 0;
+    }
+    .ticket__brand img { width: 42px; height: 42px; object-fit: contain; border-radius: 50%; }
+    .ticket__brand strong { font-size: 13px; }
+    .ticket__code-box {
+      border: 1px solid #bbb;
+      border-radius: 6px;
+      padding: 8px 10px;
+      text-align: center;
+      background: #fafafa;
+    }
+    .ticket__code-label {
+      display: block;
+      font-size: 11px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    .ticket__code {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    .ticket__meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 11px;
+      color: #333;
+    }
+    .ticket__meta p { margin: 0; }
+    .ticket__foot {
+      margin-top: 10px;
+      font-size: 10px;
+      color: #777;
+      line-height: 1.35;
+    }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <p class="no-print" style="padding:12px;background:#f3f4f6;margin:0 0 12px;font-size:13px;">
+    ${esc(printHint)}
+  </p>
+  <h1>${esc(brandTitle)} - ${esc(sheetTitle)}</h1>
+  <div class="sheet">${cards}</div>
+  <script>window.onload = function () { window.focus(); window.print(); };</script>
+</body>
+</html>`;
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(html);
     win.document.close();
-    win.focus();
-    win.print();
   }
 
   async function onChangePassword(e) {
@@ -7721,11 +7852,17 @@ api.getPaymentNotifications(activeIspId)
       )}
 
       <details className="panel field-clients-more">
-        <summary>{t("Bons d'accès", "Access vouchers")}</summary>
+        <summary>{t("Vouchers Wi‑Fi", "Wi‑Fi vouchers")}</summary>
         <div className="field-clients-more__body field-clients-more__body--stack">
       <div className="grid" style={{ margin: 0 }}>
         <form className="panel" onSubmit={onGenerateVouchers}>
-          <h2>{t("Générer des bons d'accès", "Generate access vouchers")}</h2>
+          <h2>{t("Vouchers Wi‑Fi (papier / MikroTik)", "Wi‑Fi vouchers (paper / MikroTik)")}</h2>
+          <p className="app-meta" style={{ marginTop: 0 }}>
+            {t(
+              "Tickets imprimables: un seul code (login = code). Optionnellement poussés sur le hotspot MikroTik.",
+              "Printable tickets: single code (login = code). Optionally pushed to the MikroTik hotspot."
+            )}
+          </p>
           <select
             value={voucherForm.planId}
             onChange={(e) => setVoucherForm({ ...voucherForm, planId: e.target.value })}
@@ -7762,6 +7899,19 @@ api.getPaymentNotifications(activeIspId)
           <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
             <input
               type="checkbox"
+              checked={Boolean(voucherForm.syncToMikrotik)}
+              onChange={(e) => setVoucherForm({ ...voucherForm, syncToMikrotik: e.target.checked })}
+            />
+            <span>
+              {t(
+                "Pousser sur MikroTik (code = login hotspot)",
+                "Push to MikroTik (code = hotspot login)"
+              )}
+            </span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <input
+              type="checkbox"
               checked={Boolean(voucherForm.replaceUnused)}
               onChange={(e) => setVoucherForm({ ...voucherForm, replaceUnused: e.target.checked })}
             />
@@ -7774,11 +7924,11 @@ api.getPaymentNotifications(activeIspId)
           </label>
           <button type="submit" disabled={!selectedIspId || !voucherForm.planId}>
             {voucherForm.replaceUnused
-              ? t("Régénérer les bons", "Regenerate vouchers")
-              : t("Générer les bons", "Generate vouchers")}
+              ? t("Régénérer les vouchers Wi‑Fi", "Regenerate Wi‑Fi vouchers")
+              : t("Générer les vouchers Wi‑Fi", "Generate Wi‑Fi vouchers")}
           </button>
           <button type="button" onClick={onPrintVouchers} disabled={!selectedIspId}>
-            {t("Imprimer les bons inutilisés", "Print unused vouchers")}
+            {t("Imprimer / PDF (tickets)", "Print / PDF (tickets)")}
           </button>
           <button type="button" onClick={onExportVouchers} disabled={!selectedIspId}>
             {t("Exporter CSV", "Export CSV")}
@@ -7786,7 +7936,13 @@ api.getPaymentNotifications(activeIspId)
         </form>
 
         <form className="panel" onSubmit={onRedeemVoucher}>
-          <h2>{t("Utiliser un bon", "Redeem voucher")}</h2>
+          <h2>{t("Activer un code McBuleli (portail)", "Redeem McBuleli code (portal)")}</h2>
+          <p className="app-meta" style={{ marginTop: 0 }}>
+            {t(
+              "Pour lier un code à un compte client McBuleli (téléphone / portail). Les tickets papier MikroTik se connectent directement sur le hotspot.",
+              "Link a code to a McBuleli customer account (phone / portal). Paper MikroTik tickets log in directly on the hotspot."
+            )}
+          </p>
           <input
             placeholder={t("Code du bon", "Voucher code")}
             value={voucherRedeemForm.code}

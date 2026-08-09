@@ -206,6 +206,49 @@ async function ensureHotspotUser(node, context, disabled) {
   return { username, password, mode: "updated" };
 }
 
+/**
+ * Paper-style hotspot voucher: single code = username = password on MikroTik.
+ */
+export async function pushHotspotPaperVoucher(ispId, {
+  code,
+  durationDays = 1,
+  planName = "",
+  rateLimit = ""
+}) {
+  const node = await getDefaultNode(ispId);
+  if (!node) {
+    return { ok: false, skipped: true, reason: "no_node" };
+  }
+  const voucherCode = String(code || "").trim();
+  if (!voucherCode) {
+    return { ok: false, skipped: false, reason: "empty_code" };
+  }
+  const days = Math.max(1, Number(durationDays) || 1);
+  const body = {
+    name: voucherCode,
+    password: voucherCode,
+    profile: node.default_hotspot_profile || "default",
+    "limit-uptime": `${days}d`,
+    disabled: "false",
+    comment: `mcbuleli-paper-voucher|plan:${String(planName).slice(0, 40)}|rate:${String(rateLimit).slice(0, 24)}`
+  };
+  try {
+    const all = await mikrotikRequest(node, "/ip/hotspot/user");
+    const existing = Array.isArray(all) ? all.find((row) => row.name === voucherCode) : null;
+    if (!existing || !existing[".id"]) {
+      await mikrotikRequest(node, "/ip/hotspot/user", { method: "PUT", body });
+      return { ok: true, skipped: false, mode: "created", node: node.name };
+    }
+    await mikrotikRequest(node, `/ip/hotspot/user/${encodeURIComponent(existing[".id"])}`, {
+      method: "PATCH",
+      body
+    });
+    return { ok: true, skipped: false, mode: "updated", node: node.name };
+  } catch (err) {
+    return { ok: false, skipped: false, reason: err.message || String(err) };
+  }
+}
+
 export async function provisionSubscriptionAccess({ ispId, subscriptionId, action }) {
   const context = await loadSubscriptionContext(ispId, subscriptionId);
   if (!context) {

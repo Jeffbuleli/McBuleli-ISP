@@ -84,6 +84,7 @@ export default function WifiPortal() {
     phone: "",
     password: ""
   });
+  const [paperVoucherCode, setPaperVoucherCode] = useState("");
   const [voucherBusy, setVoucherBusy] = useState(false);
   const [depositId, setDepositId] = useState(null);
   const [redirectUrl, setRedirectUrl] = useState(null);
@@ -455,6 +456,7 @@ export default function WifiPortal() {
                 setSelectedPlan(plan);
                 setDepositId(null);
                 setCheckoutMode("mm");
+                setPaperVoucherCode("");
                 setNotice("");
                 setError("");
               }}
@@ -536,7 +538,7 @@ export default function WifiPortal() {
               </span>
             </div>
 
-            <div className="wifi-checkout-tabs" role="tablist" aria-label={t("payTitle")}>
+            <div className="wifi-checkout-tabs wifi-checkout-tabs--3" role="tablist" aria-label={t("payTitle")}>
               <button
                 type="button"
                 role="tab"
@@ -549,12 +551,21 @@ export default function WifiPortal() {
               <button
                 type="button"
                 role="tab"
-                aria-selected={checkoutMode === "voucher"}
-                className={`wifi-checkout-tab${checkoutMode === "voucher" ? " is-active" : ""}`}
-                onClick={() => setCheckoutMode("voucher")}
+                aria-selected={checkoutMode === "mcbuleli"}
+                className={`wifi-checkout-tab${checkoutMode === "mcbuleli" ? " is-active" : ""}`}
+                onClick={() => setCheckoutMode("mcbuleli")}
+              >
+                {t("payTabMcbuleli")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={checkoutMode === "paper"}
+                className={`wifi-checkout-tab${checkoutMode === "paper" ? " is-active" : ""}`}
+                onClick={() => setCheckoutMode("paper")}
               >
                 <IconTicket width={14} height={14} aria-hidden />
-                {t("payTabVoucher")}
+                {t("payTabWifiVoucher")}
               </button>
             </div>
 
@@ -688,9 +699,11 @@ export default function WifiPortal() {
                   </>
                 ) : null}
               </>
-            ) : (
+            ) : null}
+
+            {checkoutMode === "mcbuleli" ? (
               <>
-                <p className="wifi-checkout-section-title">{t("payTabVoucher")}</p>
+                <p className="wifi-checkout-section-title">{t("payTabMcbuleli")}</p>
                 <form className="wifi-checkout-form" onSubmit={onRedeemVoucher}>
                   <label className="wifi-field">
                     <span className="wifi-field__label">{t("voucherCodeLabel")}</span>
@@ -759,7 +772,33 @@ export default function WifiPortal() {
                   </button>
                 </form>
               </>
-            )}
+            ) : null}
+
+            {checkoutMode === "paper" ? (
+              <>
+                <p className="wifi-checkout-section-title">{t("wifiVoucherTitle")}</p>
+                <p className="wifi-checkout-foot" style={{ marginBottom: 12 }}>
+                  <small>{t("wifiVoucherHelp")}</small>
+                </p>
+                <label className="wifi-field">
+                  <span className="wifi-field__label">Voucher code</span>
+                  <div className="wifi-input-row">
+                    <span className="wifi-input-row__lead" aria-hidden="true">
+                      <IconTicket width={18} height={18} />
+                    </span>
+                    <input
+                      id="wifi-checkout-paper-code"
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder={t("wifiVoucherCodePh")}
+                      value={paperVoucherCode}
+                      onChange={(e) => setPaperVoucherCode(e.target.value)}
+                    />
+                  </div>
+                </label>
+                <p className="wifi-checkout-phone-norm">{t("wifiVoucherHint")}</p>
+              </>
+            ) : null}
             {import.meta.env.DEV ? (
               <p>
                 <small>API: {API_URL}</small>

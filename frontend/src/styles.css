@@ -8032,6 +8032,16 @@ button.wifi-plan-card--v2:focus-visible {
   margin: 0 0 14px;
 }
 
+.wifi-checkout-tabs--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.wifi-checkout-tabs--3 .wifi-checkout-tab {
+  font-size: 0.72rem;
+  min-height: 44px;
+  padding: 6px 4px;
+}
+
 .wifi-checkout-tab {
   display: inline-flex;
   align-items: center;

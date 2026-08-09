@@ -27,7 +27,7 @@ import {
 import { fetchPawapayDepositStatus, initiatePawapayDeposit, initiatePawapayPayout } from "./pawapayClient.js";
 import { isLikelyDrCongoMsisdn, normalizeDrCongoMsisdn } from "./phoneNormalize.js";
 import { processNotificationOutboxBatch, sendNotificationDirect } from "./notifications.js";
-import { provisionSubscriptionAccess } from "./networkProvisioning.js";
+import { provisionSubscriptionAccess, pushHotspotPaperVoucher } from "./networkProvisioning.js";
 import {
   processExpiredSubscriptions,
   processOverdueInvoices,
@@ -6595,10 +6595,19 @@ app.post(
   async (req, res) => {
     const ispId = resolveIspId(req, res);
     if (!ispId) return;
-    const { planId, quantity = 1, maxDevices: maxDevicesBody, replaceUnused = false } = req.body;
+    const {
+      planId,
+      quantity = 1,
+      maxDevices: maxDevicesBody,
+      replaceUnused = false,
+      syncToMikrotik = true,
+      codeStyle = "paper"
+    } = req.body;
     if (!planId) return res.status(400).json({ message: "planId is required" });
     const planResult = await query(
-      "SELECT id, rate_limit, duration_days, max_devices FROM plans WHERE id = $1 AND isp_id = $2",
+      `SELECT id, name, rate_limit, duration_days, max_devices, price_usd AS "priceUsd",
+              speed_label AS "speedLabel"
+       FROM plans WHERE id = $1 AND isp_id = $2`,
       [planId, ispId]
     );
     const plan = planResult.rows[0];
@@ -6618,12 +6627,23 @@ app.post(
       );
       replaced = expired.rowCount || 0;
     }
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const makePaperCode = () => {
+      const bytes = crypto.randomBytes(8);
+      let s = "MB";
+      for (let i = 0; i < 8; i += 1) s += alphabet[bytes[i] % alphabet.length];
+      return s;
+    };
     const created = [];
+    const mikrotikSync = [];
     for (let i = 0; i < qty; i += 1) {
       let code = "";
       let row = null;
       for (let attempt = 0; attempt < 5; attempt += 1) {
-        code = `VCH-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+        code =
+          String(codeStyle).toLowerCase() === "legacy"
+            ? `VCH-${crypto.randomBytes(4).toString("hex").toUpperCase()}`
+            : makePaperCode();
         try {
           row = await query(
             `INSERT INTO access_vouchers (id, isp_id, plan_id, code, rate_limit, duration_days, status, created_by, expires_at, max_devices)
@@ -6640,16 +6660,45 @@ app.post(
       if (!row?.rows?.[0]) {
         return res.status(500).json({ message: "Could not generate unique voucher codes" });
       }
-      created.push(row.rows[0]);
+      const item = {
+        ...row.rows[0],
+        planName: plan.name,
+        priceUsd: plan.priceUsd,
+        speedLabel: plan.speedLabel || plan.rate_limit
+      };
+      created.push(item);
+      if (syncToMikrotik) {
+        const sync = await pushHotspotPaperVoucher(ispId, {
+          code: item.code,
+          durationDays: plan.duration_days,
+          planName: plan.name,
+          rateLimit: plan.rate_limit
+        });
+        mikrotikSync.push({ code: item.code, ...sync });
+      }
     }
     await logAudit({
       ispId,
       actorUserId: req.user.sub,
       action: "voucher.generated",
       entityType: "voucher_batch",
-      details: { planId, quantity: qty, rateLimit: plan.rate_limit, maxDevices, replaceUnused: Boolean(replaceUnused), replaced }
+      details: {
+        planId,
+        quantity: qty,
+        rateLimit: plan.rate_limit,
+        maxDevices,
+        replaceUnused: Boolean(replaceUnused),
+        replaced,
+        syncToMikrotik: Boolean(syncToMikrotik),
+        mikrotikOk: mikrotikSync.filter((s) => s.ok).length,
+        mikrotikSkipped: mikrotikSync.filter((s) => s.skipped).length
+      }
     });
-    return res.status(201).json(created);
+    return res.status(201).json({
+      items: created,
+      replaced,
+      mikrotikSync
+    });
   }
 );
 
@@ -6657,9 +6706,15 @@ app.get("/api/vouchers", authenticate, async (req, res) => {
   const ispId = resolveIspId(req, res);
   if (!ispId) return;
   const result = await query(
-    `SELECT id, code, rate_limit AS "rateLimit", duration_days AS "durationDays", max_devices AS "maxDevices",
-            status, expires_at AS "expiresAt", used_at AS "usedAt"
-     FROM access_vouchers WHERE isp_id = $1 ORDER BY created_at DESC LIMIT 200`,
+    `SELECT v.id, v.code, v.rate_limit AS "rateLimit", v.duration_days AS "durationDays",
+            v.max_devices AS "maxDevices", v.status, v.expires_at AS "expiresAt", v.used_at AS "usedAt",
+            p.name AS "planName", p.price_usd AS "priceUsd",
+            COALESCE(NULLIF(p.speed_label, ''), p.rate_limit) AS "speedLabel"
+     FROM access_vouchers v
+     JOIN plans p ON p.id = v.plan_id
+     WHERE v.isp_id = $1
+     ORDER BY v.created_at DESC
+     LIMIT 200`,
     [ispId]
   );
   return res.json(result.rows);
