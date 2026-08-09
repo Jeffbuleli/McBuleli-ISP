@@ -228,6 +228,34 @@ export default function WifiPortal() {
     }
   }
 
+  async function onActivatePaperVoucher(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    const code = String(paperVoucherCode || "").trim();
+    if (!code) {
+      setError(t("errWifiVoucherCode"));
+      return;
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(code);
+      }
+    } catch {
+      /* ignore */
+    }
+    setNotice(t("wifiVoucherReady"));
+    const router = captiveInfo.router;
+    if (router) {
+      const host = String(router).replace(/^https?:\/\//i, "").split("/")[0];
+      if (host) {
+        window.setTimeout(() => {
+          window.location.href = `http://${host}/login`;
+        }, 400);
+      }
+    }
+  }
+
   async function onRedeemVoucher(e) {
     e.preventDefault();
     setError("");
@@ -775,13 +803,9 @@ export default function WifiPortal() {
             ) : null}
 
             {checkoutMode === "paper" ? (
-              <>
-                <p className="wifi-checkout-section-title">{t("wifiVoucherTitle")}</p>
-                <p className="wifi-checkout-foot" style={{ marginBottom: 12 }}>
-                  <small>{t("wifiVoucherHelp")}</small>
-                </p>
+              <form className="wifi-checkout-form" onSubmit={onActivatePaperVoucher}>
                 <label className="wifi-field">
-                  <span className="wifi-field__label">Voucher code</span>
+                  <span className="wifi-field__label">{t("wifiVoucherTitle")}</span>
                   <div className="wifi-input-row">
                     <span className="wifi-input-row__lead" aria-hidden="true">
                       <IconTicket width={18} height={18} />
@@ -796,8 +820,18 @@ export default function WifiPortal() {
                     />
                   </div>
                 </label>
-                <p className="wifi-checkout-phone-norm">{t("wifiVoucherHint")}</p>
-              </>
+                <button
+                  type="submit"
+                  className="wifi-pay-submit"
+                  disabled={!String(paperVoucherCode || "").trim()}
+                >
+                  <IconTicket width={18} height={18} aria-hidden />
+                  <span>{t("wifiVoucherActivate")}</span>
+                </button>
+                <p className="wifi-checkout-foot">
+                  <small>{t("wifiVoucherHint")}</small>
+                </p>
+              </form>
             ) : null}
             {import.meta.env.DEV ? (
               <p>

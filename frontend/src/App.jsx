@@ -3729,6 +3729,10 @@ api.getPaymentNotifications(activeIspId)
         : typeof window !== "undefined"
           ? new URL(mcbuleliLogoUrl, window.location.origin).href
           : mcbuleliLogoUrl;
+    const mcbuleliMarkSrc =
+      typeof window !== "undefined"
+        ? new URL(mcbuleliLogoUrl, window.location.origin).href
+        : mcbuleliLogoUrl;
     const esc = (s) =>
       String(s ?? "")
         .replaceAll("&", "&amp;")
@@ -3743,6 +3747,12 @@ api.getPaymentNotifications(activeIspId)
       "Utilisez Imprimer → Enregistrer au format PDF pour exporter.",
       "Use Print → Save as PDF to export."
     );
+    const poweredByHtml = `
+      <div class="powered">
+        <span>Powered by</span>
+        <span class="powered__mark"><img src="${esc(mcbuleliMarkSrc)}" alt="" width="18" height="18"/></span>
+        <a href="https://x.com/McBuleli" target="_blank" rel="noopener noreferrer">McBuleli</a>
+      </div>`;
     const cards = printable
       .map((v) => {
         const days = Number(v.durationDays) || 1;
@@ -3771,8 +3781,8 @@ api.getPaymentNotifications(activeIspId)
               <p><strong>Devices</strong><br/>${esc(v.maxDevices ?? 1)}</p>
             </div>
             <footer class="ticket__foot">
-              Online time limit: ${esc(days)}d<br/>
               Valid ${esc(days)} day(s) after activation
+              ${poweredByHtml}
             </footer>
           </article>`;
       })
@@ -3858,6 +3868,33 @@ api.getPaymentNotifications(activeIspId)
       color: #777;
       line-height: 1.35;
     }
+    .powered {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 10px;
+      color: #555;
+    }
+    .powered__mark {
+      display: inline-flex;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .powered__mark img { width: 18px; height: 18px; object-fit: contain; display: block; }
+    .powered a {
+      font-weight: 800;
+      color: #305f33;
+      text-decoration: none;
+    }
+    .sheet-powered {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid #ddd;
+    }
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .no-print { display: none !important; }
@@ -3870,6 +3907,7 @@ api.getPaymentNotifications(activeIspId)
   </p>
   <h1>${esc(brandTitle)} - ${esc(sheetTitle)}</h1>
   <div class="sheet">${cards}</div>
+  <div class="sheet-powered">${poweredByHtml}</div>
   <script>window.onload = function () { window.focus(); window.print(); };</script>
 </body>
 </html>`;
