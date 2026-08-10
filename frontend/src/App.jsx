@@ -27,6 +27,7 @@ import { applyWorkspacePwaManifest } from "./pwaWorkspaceManifest.js";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
 import TenantLinkField from "./TenantLinkField.jsx";
+import SecuritySettings from "./SecuritySettings.jsx";
 import { openVoucherTicketsPrint } from "./voucherTicketPrint.js";
 import { formatStaffRole } from "./staffRoleLabels.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
@@ -1543,9 +1544,6 @@ function App() {
     networkKey: "orange",
     mfaCode: ""
   });
-  const [totpSetup, setTotpSetup] = useState(null);
-  const [totpSetupCode, setTotpSetupCode] = useState("");
-  const [totpSetupLoading, setTotpSetupLoading] = useState(false);
   const [upgradePackageId, setUpgradePackageId] = useState("");
   const [platformBillingStatus, setPlatformBillingStatus] = useState(null);
   const [networkNodeForm, setNetworkNodeForm] = useState({
@@ -2802,37 +2800,6 @@ api.getPaymentNotifications(activeIspId)
       await refresh();
     } catch (err) {
       setError(audienceErr(err.message || "Impossible de créer le retrait."));
-    }
-  }
-
-  async function onStartTotpSetup() {
-    setError("");
-    setNotice("");
-    setTotpSetupLoading(true);
-    try {
-      const data = await api.startTotpSetup();
-      setTotpSetup(data);
-      setTotpSetupCode("");
-      setNotice("Secret Google Authenticator généré.");
-    } catch (err) {
-      setError(audienceErr(err.message || "Impossible de démarrer la configuration MFA."));
-    } finally {
-      setTotpSetupLoading(false);
-    }
-  }
-
-  async function onEnableTotp(e) {
-    e.preventDefault();
-    setError("");
-    setNotice("");
-    try {
-      await api.enableTotp({ code: totpSetupCode });
-      setTotpSetup(null);
-      setTotpSetupCode("");
-      setNotice("Google Authenticator activé pour les retraits.");
-      await refresh();
-    } catch (err) {
-      setError(audienceErr(err.message || "Code Google Authenticator invalide."));
     }
   }
 
@@ -6196,134 +6163,117 @@ api.getPaymentNotifications(activeIspId)
         hash="#security-settings"
         isFieldAgent={isFieldAgent}
       >
-      {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
-        <section className="panel" id="security-settings">
-          <h2>{t("Retrait Mobile Money sécurisé", "Secure Mobile Money withdrawal")}</h2>
-          <p>
-            {t(
-              "Les retraits sont limités aux paiements Mobile Money confirmés via Pawapay. Les encaissements cash et TID manuel restent visibles dans les statistiques, mais ne sont pas retirables depuis le compte Pawapay.",
-              "Withdrawals are limited to Mobile Money payments confirmed via Pawapay. Cash and manual TID collections still appear in statistics but cannot be withdrawn from the Pawapay account."
-            )}
-          </p>
-          <section className="panel dashboard-totp-setup-card">
-            <h3>{t("Google Authenticator", "Google Authenticator")}</h3>
-            <p>
-              {t("Statut :", "Status:")}{" "}
-              {user.mfaTotpEnabled
-                ? t("configuré", "enabled")
-                : t("non configuré", "not configured")}
-              .{" "}
-              {t(
-                "Scannez l'URL otpauth avec Google Authenticator/Authy, puis validez avec le code à 6 chiffres.",
-                "Scan the otpauth URL with Google Authenticator or Authy, then confirm with the 6-digit code."
-              )}
-            </p>
-            <button type="button" onClick={onStartTotpSetup} disabled={totpSetupLoading}>
-              {user.mfaTotpEnabled
-                ? t("Regénérer le secret MFA", "Regenerate MFA secret")
-                : t("Configurer Google Authenticator", "Set up Google Authenticator")}
-            </button>
-            {totpSetup ? (
-              <form onSubmit={onEnableTotp}>
-                <input readOnly value={totpSetup.secret || ""} />
-                <input readOnly value={totpSetup.otpauthUrl || ""} />
+        <SecuritySettings
+          t={t}
+          isEn={isEn}
+          user={user}
+          onUserRefresh={refresh}
+          audienceErr={audienceErr}
+          setError={setError}
+          setNotice={setNotice}
+        />
+        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
+          <section className="panel security-withdrawals">
+            <details>
+              <summary>
+                {t("Retrait Mobile Money (Pawapay)", "Mobile Money withdrawal (Pawapay)")}
+              </summary>
+              <p>
+                {t(
+                  "Retraits limités aux paiements Mobile Money confirmés via Pawapay. Google Authenticator est requis.",
+                  "Withdrawals are limited to Mobile Money payments confirmed via Pawapay. Google Authenticator is required."
+                )}
+              </p>
+              <form onSubmit={onCreateWithdrawal}>
+                <input
+                  type="number"
+                  min={withdrawalForm.currency === "CDF" ? "1000" : "0.5"}
+                  step="0.01"
+                  placeholder={
+                    withdrawalForm.currency === "CDF"
+                      ? t("Montant à retirer (CDF)", "Amount to withdraw (CDF)")
+                      : t("Montant à retirer (USD)", "Amount to withdraw (USD)")
+                  }
+                  value={withdrawalForm.amountUsd}
+                  onChange={(e) => setWithdrawalForm({ ...withdrawalForm, amountUsd: e.target.value })}
+                />
+                <select
+                  value={withdrawalForm.currency}
+                  onChange={(e) => setWithdrawalForm({ ...withdrawalForm, currency: e.target.value })}
+                >
+                  <option value="USD">USD</option>
+                  <option value="CDF">CDF</option>
+                </select>
+                <input
+                  placeholder={t("Téléphone bénéficiaire", "Beneficiary phone")}
+                  value={withdrawalForm.phoneNumber}
+                  onChange={(e) => setWithdrawalForm({ ...withdrawalForm, phoneNumber: e.target.value })}
+                />
+                <select
+                  value={withdrawalForm.networkKey}
+                  onChange={(e) => setWithdrawalForm({ ...withdrawalForm, networkKey: e.target.value })}
+                >
+                  {availablePawapayNetworks.map((n) => (
+                    <option key={n.key} value={n.key}>
+                      {n.label}
+                    </option>
+                  ))}
+                </select>
                 <input
                   placeholder={t("Code Google Authenticator", "Google Authenticator code")}
-                  value={totpSetupCode}
-                  onChange={(e) => setTotpSetupCode(e.target.value)}
+                  value={withdrawalForm.mfaCode}
+                  onChange={(e) => setWithdrawalForm({ ...withdrawalForm, mfaCode: e.target.value })}
                 />
-                <button type="submit">{t("Activer MFA", "Enable MFA")}</button>
+                <button type="submit" disabled={!selectedIspId || !user.mfaTotpEnabled}>
+                  {t("Valider le retrait", "Submit withdrawal")}
+                </button>
               </form>
-            ) : null}
+              <DataTable
+                t={t}
+                title={t("Historique des retraits", "Withdrawal history")}
+                rows={withdrawalTableView.pageRows}
+                columns={[
+                  {
+                    key: "createdAt",
+                    header: t("Date", "Date"),
+                    sortKey: "createdAt",
+                    cell: (w) =>
+                      w.createdAt ? new Date(w.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "-"
+                  },
+                  {
+                    key: "amount",
+                    header: t("Montant", "Amount"),
+                    sortKey: "amountUsd",
+                    cell: (w) => `${w.amountUsd ?? "-"} ${w.currency || ""}`.trim()
+                  },
+                  {
+                    key: "phoneNumber",
+                    header: t("Destination", "Destination"),
+                    sortKey: "phoneNumber",
+                    cell: (w) => w.phoneNumber || "-"
+                  },
+                  { key: "provider", header: t("Réseau", "Network"), sortKey: "provider", cell: (w) => w.provider || "-" },
+                  {
+                    key: "status",
+                    header: t("Statut", "Status"),
+                    sortKey: "status",
+                    cell: (w) =>
+                      `${withdrawalStatusLabel(w.status, isEn)}${w.failureMessage ? ` - ${w.failureMessage}` : ""}`
+                  }
+                ]}
+                searchValue={withdrawalTable.q}
+                onSearchValueChange={(q) => setWithdrawalTable((s) => ({ ...s, q, page: 1 }))}
+                page={withdrawalTable.page}
+                pageSize={withdrawalTable.pageSize}
+                totalRows={withdrawalTableView.total}
+                onPageChange={(page) => setWithdrawalTable((s) => ({ ...s, page }))}
+                onPageSizeChange={(pageSize) => setWithdrawalTable((s) => ({ ...s, pageSize, page: 1 }))}
+                sort={withdrawalTable.sort}
+                onSortChange={(sort) => setWithdrawalTable((s) => ({ ...s, sort }))}
+              />
+            </details>
           </section>
-          <form onSubmit={onCreateWithdrawal}>
-            <input
-              type="number"
-              min={withdrawalForm.currency === "CDF" ? "1000" : "0.5"}
-              step="0.01"
-              placeholder={
-                withdrawalForm.currency === "CDF"
-                  ? t("Montant à retirer (CDF)", "Amount to withdraw (CDF)")
-                  : t("Montant à retirer (USD)", "Amount to withdraw (USD)")
-              }
-              value={withdrawalForm.amountUsd}
-              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, amountUsd: e.target.value })}
-            />
-            <select
-              value={withdrawalForm.currency}
-              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, currency: e.target.value })}
-            >
-              <option value="USD">USD</option>
-              <option value="CDF">CDF</option>
-            </select>
-            <p style={{ fontSize: "0.85rem", color: "var(--mb-muted)" }}>
-              {t(
-                "Le solde retirable est suivi en USD. Si vous choisissez CDF, le montant est converti au taux plateforme avant comparaison, puis envoyé à Pawapay en CDF.",
-                "Withdrawable balance is tracked in USD. If you choose CDF, the amount is converted at the platform rate before validation, then sent to Pawapay in CDF."
-              )}
-            </p>
-            <input
-              placeholder={t("Téléphone bénéficiaire", "Beneficiary phone")}
-              value={withdrawalForm.phoneNumber}
-              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, phoneNumber: e.target.value })}
-            />
-            <select
-              value={withdrawalForm.networkKey}
-              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, networkKey: e.target.value })}
-            >
-              {availablePawapayNetworks.map((n) => (
-                <option key={n.key} value={n.key}>
-                  {n.label}
-                </option>
-              ))}
-            </select>
-            <input
-              placeholder={t("Code Google Authenticator", "Google Authenticator code")}
-              value={withdrawalForm.mfaCode}
-              onChange={(e) => setWithdrawalForm({ ...withdrawalForm, mfaCode: e.target.value })}
-            />
-            <button type="submit" disabled={!selectedIspId || !user.mfaTotpEnabled}>
-              {t("Valider le retrait", "Submit withdrawal")}
-            </button>
-          </form>
-          <DataTable
-            t={t}
-            title={t("Historique des retraits", "Withdrawal history")}
-            rows={withdrawalTableView.pageRows}
-            columns={[
-              {
-                key: "createdAt",
-                header: t("Date", "Date"),
-                sortKey: "createdAt",
-                cell: (w) => (w.createdAt ? new Date(w.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "-")
-              },
-              {
-                key: "amount",
-                header: t("Montant", "Amount"),
-                sortKey: "amountUsd",
-                cell: (w) => `${w.amountUsd ?? "-"} ${w.currency || ""}`.trim()
-              },
-              { key: "phoneNumber", header: t("Destination", "Destination"), sortKey: "phoneNumber", cell: (w) => w.phoneNumber || "-" },
-              { key: "provider", header: t("Réseau", "Network"), sortKey: "provider", cell: (w) => w.provider || "-" },
-              {
-                key: "status",
-                header: t("Statut", "Status"),
-                sortKey: "status",
-                cell: (w) => `${withdrawalStatusLabel(w.status, isEn)}${w.failureMessage ? ` - ${w.failureMessage}` : ""}`
-              }
-            ]}
-            searchValue={withdrawalTable.q}
-            onSearchValueChange={(q) => setWithdrawalTable((s) => ({ ...s, q, page: 1 }))}
-            page={withdrawalTable.page}
-            pageSize={withdrawalTable.pageSize}
-            totalRows={withdrawalTableView.total}
-            onPageChange={(page) => setWithdrawalTable((s) => ({ ...s, page }))}
-            onPageSizeChange={(pageSize) => setWithdrawalTable((s) => ({ ...s, pageSize, page: 1 }))}
-            sort={withdrawalTable.sort}
-            onSortChange={(sort) => setWithdrawalTable((s) => ({ ...s, sort }))}
-          />
-        </section>
-      )}
+        )}
       </DashboardScreenGate>
 
 

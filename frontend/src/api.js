@@ -390,6 +390,30 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ code: payload?.code ?? payload })
     }),
+  disableTotp: (payload) =>
+    request("/auth/mfa/totp/disable", {
+      method: "POST",
+      body: JSON.stringify({ code: payload?.code ?? payload })
+    }),
+  getSecurityStatus: () => request("/auth/security/status"),
+  sendSecurityEmailCode: () =>
+    request("/auth/security/email/send-code", { method: "POST", body: JSON.stringify({}) }),
+  verifySecurityEmailCode: (payload) =>
+    request("/auth/security/email/verify", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  webauthnRegisterOptions: () =>
+    request("/auth/mfa/webauthn/register/options", { method: "POST", body: JSON.stringify({}) }),
+  webauthnRegisterVerify: (payload) =>
+    request("/auth/mfa/webauthn/register/verify", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  deletePasskey: (credentialRowId) =>
+    request(`/auth/mfa/webauthn/${encodeURIComponent(credentialRowId)}`, {
+      method: "DELETE"
+    }),
   changePassword: (payload) =>
     request("/auth/change-password", {
       method: "POST",

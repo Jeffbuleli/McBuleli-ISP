@@ -297,6 +297,33 @@ export function IconXSocial(props) {
   );
 }
 
+export function IconKey(props) {
+  return (
+    <svg {...base} {...props}>
+      <path
+        d="M21 2l-2 2m-7.6 7.6a5 5 0 1 1-2.8 2.8L3 21l-1-4 4-1 5.4-5.4Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IconShield(props) {
+  return (
+    <svg {...base} {...props}>
+      <path
+        d="M12 3 4 6v6c0 5 3.4 8.4 8 9 4.6-.6 8-4 8-9V6l-8-3Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /** Flèche retour (ex. accueil) */
 export function IconArrowLeft(props) {
   return (

@@ -7487,6 +7487,128 @@ body:has(.app-shell--dashboard-dark) {
   color: #fff;
 }
 
+.security-settings h2 {
+  margin-bottom: 0.75rem;
+}
+
+.security-methods {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 900px) {
+  .security-methods {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.security-method {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.app-shell--dashboard-dark .security-method {
+  background: rgba(32, 36, 40, 0.95);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.security-method__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.security-method__head strong {
+  flex: 1;
+  min-width: 0;
+}
+
+.security-method__badge {
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: var(--mb-muted, #6b7280);
+}
+
+.security-method__badge.is-on {
+  border-color: rgba(99, 179, 143, 0.45);
+  color: #1f7a4d;
+  background: rgba(99, 179, 143, 0.12);
+}
+
+.app-shell--dashboard-dark .security-method__badge.is-on {
+  color: #dffaed;
+}
+
+.security-method__meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--mb-muted, #6b7280);
+  word-break: break-all;
+}
+
+.security-method__row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.security-method__row input {
+  flex: 1;
+  min-width: 140px;
+}
+
+.security-method__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.security-method__list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.security-totp-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.security-settings__hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 0.88rem;
+  color: var(--mb-muted, #6b7280);
+}
+
+.security-withdrawals {
+  margin-top: 16px;
+}
+
+.security-withdrawals summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
 .app-shell--dashboard-dark .app-meta {
   color: #aeb4bf;
 }

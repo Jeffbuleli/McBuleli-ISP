@@ -90,6 +90,7 @@ import { validateAnnouncementContent, validatePublicPageSlot } from "./announcem
 import { registerTeamChatRoutes } from "./teamChat.js";
 import { streamInvoiceProformaPdf } from "./proformaPdf.js";
 import { registerNetworkRoutes } from "./routes/network.js";
+import { registerSecurityRoutes } from "./routes/security.js";
 import { createHealthRouter } from "./routes/health.js";
 
 function authenticate(req, res, next) {
@@ -1004,6 +1005,8 @@ function publicUserPayload(user, extra = {}) {
     mustChangePassword: user.must_change_password,
     mfaRequired: MFA_REQUIRED_ROLES.has(user.role),
     mfaTotpEnabled: Boolean(user.mfa_totp_enabled),
+    mfaEmailEnabled: Boolean(user.mfa_email_enabled),
+    emailVerified: Boolean(user.email_verified_at),
     chatUsername: user.chat_username ?? null,
     chatAvatarUrl: user.chat_avatar_url ?? null,
     ...extra
@@ -2853,43 +2856,7 @@ app.get("/api/auth/me", authenticate, async (req, res) => {
 
 app.post("/api/auth/refresh", (req, res) => refreshSessionToken(req, res));
 
-app.post("/api/auth/mfa/totp/setup", authenticate, async (req, res) => {
-  const result = await query(
-    "SELECT id, email, role, mfa_totp_enabled FROM users WHERE id = $1",
-    [req.user.sub]
-  );
-  const user = result.rows[0];
-  if (!user) return res.status(404).json({ message: "User not found" });
-  if (!MFA_REQUIRED_ROLES.has(user.role)) {
-    return res.status(400).json({ message: "MFA setup is required only for protected roles." });
-  }
-  const secret = generateTotpSecret();
-  await query("UPDATE users SET mfa_totp_secret = $1, mfa_totp_enabled = FALSE WHERE id = $2", [
-    secret,
-    req.user.sub
-  ]);
-  return res.json({
-    secret,
-    otpauthUrl: totpAuthUrl({
-      secret,
-      accountName: user.email,
-      issuer: "McBuleli"
-    }),
-    enabled: false
-  });
-});
-
-app.post("/api/auth/mfa/totp/enable", authenticate, async (req, res) => {
-  const { code } = req.body;
-  const result = await query("SELECT id, mfa_totp_secret FROM users WHERE id = $1", [req.user.sub]);
-  const user = result.rows[0];
-  if (!user?.mfa_totp_secret) return res.status(400).json({ message: "Start TOTP setup first." });
-  if (!verifyTotpCode({ secret: user.mfa_totp_secret, code })) {
-    return res.status(400).json({ message: "Invalid authenticator code." });
-  }
-  await query("UPDATE users SET mfa_totp_enabled = TRUE WHERE id = $1", [req.user.sub]);
-  return res.json({ enabled: true });
-});
+// TOTP + passkey + email MFA: registerSecurityRoutes() (routes/security.js)
 
 app.post("/api/auth/change-password", authenticate, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
@@ -3417,6 +3384,7 @@ app.delete(
 
 registerTeamChatRoutes(app);
 registerNetworkRoutes(app, { authenticate, logAudit });
+registerSecurityRoutes(app, { authenticate, logAudit });
 
 app.get("/api/platform/packages", authenticate, async (_req, res) => {
   const result = await query(

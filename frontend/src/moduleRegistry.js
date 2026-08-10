@@ -108,9 +108,9 @@ export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
   if (canSeeSecurity) {
     modules.push({
       key: "settings.security",
-      nav: { category: "security", categoryLabel: t("Securite", "Security"), categoryIcon: IconSettings },
+      nav: { category: "security", categoryLabel: t("Sécurité", "Security"), categoryIcon: IconSettings },
       href: "#security-settings",
-      label: t("Securite", "Security"),
+      label: t("Sécurité", "Security"),
       mobileScreen: "settings"
     });
   }

@@ -100,7 +100,24 @@ export async function initDb() {
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS accreditation_level TEXT NOT NULL DEFAULT 'basic';");
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_totp_secret TEXT NULL;");
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_totp_enabled BOOLEAN NOT NULL DEFAULT FALSE;");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_email_enabled BOOLEAN NOT NULL DEFAULT FALSE;");
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ NULL;");
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NULL;");
+  await query(`
+    CREATE TABLE IF NOT EXISTS user_webauthn_credentials (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      credential_id TEXT NOT NULL UNIQUE,
+      public_key TEXT NOT NULL,
+      counter BIGINT NOT NULL DEFAULT 0,
+      transports JSONB NULL,
+      device_name TEXT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_user_webauthn_user ON user_webauthn_credentials (user_id, created_at DESC);"
+  );
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT NULL;");
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_site TEXT NULL;");
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS seeded_account_key TEXT UNIQUE NULL;");
@@ -195,6 +212,12 @@ export async function initDb() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       verified_at TIMESTAMP NULL
     );
+  `);
+  await query("ALTER TABLE user_mfa_challenges DROP CONSTRAINT IF EXISTS user_mfa_challenges_purpose_check;");
+  await query(`
+    ALTER TABLE user_mfa_challenges
+    ADD CONSTRAINT user_mfa_challenges_purpose_check
+    CHECK (purpose IN ('login', 'withdrawal', 'email_verify'));
   `);
   await query("CREATE INDEX IF NOT EXISTS idx_user_mfa_challenges_user ON user_mfa_challenges (user_id, purpose, status, expires_at DESC);");
 
