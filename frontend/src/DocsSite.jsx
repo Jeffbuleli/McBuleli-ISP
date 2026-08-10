@@ -51,7 +51,7 @@ export default function DocsSite() {
     <div className="docs-shell">
       <header className="docs-top">
         <a className="docs-brand" href="#overview">
-          <img src={mcbuleliLogoUrl} alt="" width={28} height={28} />
+          <img src={mcbuleliLogoUrl} alt="" width={40} height={40} />
           <span>
             McBuleli ISP <em>Docs</em>
           </span>
@@ -100,6 +100,7 @@ export default function DocsSite() {
           </section>
 
           <section id="domains" className="docs-section">
+            <p className="docs-kicker">Routing</p>
             <h2>Domains</h2>
             <table className="docs-table">
               <thead>
@@ -136,19 +137,20 @@ export default function DocsSite() {
           </section>
 
           <section id="stack" className="docs-section">
+            <p className="docs-kicker">Architecture</p>
             <h2>Stack</h2>
             <ul className="docs-list">
               <li>
-                <strong>Frontend</strong> — React + Vite SPA (<Code>frontend/</Code>)
+                <strong>Frontend</strong> - React + Vite SPA (<Code>frontend/</Code>)
               </li>
               <li>
-                <strong>Backend</strong> — Node / Express (<Code>backend/src</Code>)
+                <strong>Backend</strong> - Node / Express (<Code>backend/src</Code>)
               </li>
               <li>
-                <strong>DB</strong> — Postgres (Docker on VPS)
+                <strong>DB</strong> - Postgres (Docker on VPS)
               </li>
               <li>
-                <strong>Edge</strong> — Nginx → static <Code>frontend/dist</Code> + proxy{" "}
+                <strong>Edge</strong> - Nginx → static <Code>frontend/dist</Code> + proxy{" "}
                 <Code>/api</Code> → <Code>:4000</Code>
               </li>
             </ul>
@@ -159,6 +161,7 @@ cd "McBuleli APP"
           </section>
 
           <section id="auth" className="docs-section">
+            <p className="docs-kicker">Security</p>
             <h2>Auth</h2>
             <p>
               JWT bearer after login. Store token client-side; send{" "}
@@ -175,20 +178,22 @@ cd "McBuleli APP"
           </section>
 
           <section id="tenants" className="docs-section">
+            <p className="docs-kicker">Multi-tenant</p>
             <h2>Tenants</h2>
             <p>
-              Slug <Code>a-z0-9-</Code> (3–30). Host header resolves the ISP:{" "}
+              Slug <Code>a-z0-9-</Code> (3-30). Host header resolves the ISP:{" "}
               <Code>demo.isp.mcbuleli.org</Code> → tenant <Code>demo</Code>.
             </p>
             <Pre>{`GET /api/tenant/context
 → { "matched": true, "ispId": "…", "subdomain": "demo", "publicUrl": "https://demo.isp.mcbuleli.org" }`}</Pre>
             <p>
               Reserved labels include <Code>docs</Code>, <Code>api</Code>, <Code>www</Code>,{" "}
-              <Code>portal</Code>, <Code>wifi</Code> — they cannot be partner slugs.
+              <Code>portal</Code>, <Code>wifi</Code> - they cannot be partner slugs.
             </p>
           </section>
 
           <section id="api" className="docs-section">
+            <p className="docs-kicker">HTTP</p>
             <h2>API conventions</h2>
             <ul className="docs-list">
               <li>
@@ -210,6 +215,7 @@ Authorization: Bearer <token>`}</Pre>
           </section>
 
           <section id="mikrotik" className="docs-section">
+            <p className="docs-kicker">Network</p>
             <h2>MikroTik link</h2>
             <ol className="docs-list docs-list--ol">
               <li>
@@ -231,6 +237,7 @@ Authorization: Bearer <token>`}</Pre>
           </section>
 
           <section id="payments" className="docs-section">
+            <p className="docs-kicker">Billing</p>
             <h2>Payments</h2>
             <p>
               Customer invoices: portal Mobile Money (USD/CDF). Platform fee is applied server-side
@@ -248,6 +255,7 @@ Authorization: Bearer <token>`}</Pre>
           </section>
 
           <section id="deploy" className="docs-section">
+            <p className="docs-kicker">Ops</p>
             <h2>Deploy (VPS)</h2>
             <Pre>{`# on origin
 bash /opt/mcbuleli-isp/ops/vps/deploy.sh
