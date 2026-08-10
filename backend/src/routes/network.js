@@ -10,6 +10,7 @@ import { assertNoCrossTenantQuery } from "../tenantScope.js";
 import { platformBaseHost, platformPublicOrigin } from "../tenantSlug.js";
 import {
   buildBootstrapRsc,
+  buildHotspotLoginHtml,
   buildLinkScript,
   buildPortalUrls,
   hashLinkToken,
@@ -116,7 +117,7 @@ export function registerNetworkRoutes(app, { authenticate, logAudit }) {
 
       const script = buildLinkScript({
         token,
-        apiOrigin: urls.origin,
+        apiOrigin: platformPublicOrigin(),
         deviceName: name
       });
 
@@ -166,7 +167,7 @@ export function registerNetworkRoutes(app, { authenticate, logAudit }) {
       });
       const script = buildLinkScript({
         token,
-        apiOrigin: urls.origin,
+        apiOrigin: platformPublicOrigin(),
         deviceName: updated.rows[0].name
       });
       return res.json({
@@ -252,12 +253,39 @@ export function registerNetworkRoutes(app, { authenticate, logAudit }) {
       origin: platformPublicOrigin()
     });
     await query("UPDATE isp_network_nodes SET last_seen_at = NOW() WHERE id = $1", [node.id]);
+    const loginHtmlUrl = `${platformPublicOrigin().replace(/\/$/, "")}/api/public/mikrotik/hotspot-login.html?token=${encodeURIComponent(token)}`;
     const body = buildBootstrapRsc({
       hotspotLogin: urls.hotspotLogin,
-      platformHost: platformBaseHost()
+      platformHost: platformBaseHost(),
+      loginHtmlUrl
     });
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     return res.send(body);
+  });
+
+  app.get("/api/public/mikrotik/hotspot-login.html", rlMikrotikLink, async (req, res) => {
+    const token = String(req.query?.token || "").trim();
+    if (!token) return res.status(400).type("text/html").send("<p>token missing</p>");
+    const tokenHash = hashLinkToken(token);
+    const found = await query(
+      `SELECT n.id, n.isp_id AS "ispId", i.subdomain
+       FROM isp_network_nodes n
+       JOIN isps i ON i.id = n.isp_id
+       WHERE n.link_token_hash = $1
+       LIMIT 1`,
+      [tokenHash]
+    );
+    if (!found.rows[0]) return res.status(404).type("text/html").send("<p>invalid token</p>");
+    const node = found.rows[0];
+    const urls = buildPortalUrls({
+      subdomain: node.subdomain,
+      ispId: node.ispId,
+      origin: platformPublicOrigin()
+    });
+    const html = buildHotspotLoginHtml(urls.hotspotLogin);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    return res.send(html);
   });
 
   app.post(
