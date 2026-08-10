@@ -28,6 +28,7 @@ import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
 import TenantLinkField from "./TenantLinkField.jsx";
 import SecuritySettings from "./SecuritySettings.jsx";
+import PasskeyLoginButton from "./PasskeyLoginButton.jsx";
 import BillingWithdrawals from "./BillingWithdrawals.jsx";
 import { openVoucherTicketsPrint } from "./voucherTicketPrint.js";
 import { formatStaffRole } from "./staffRoleLabels.js";
@@ -786,6 +787,7 @@ function App() {
   const [tenantContext, setTenantContext] = useState(null);
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [loginWorkspaces, setLoginWorkspaces] = useState(null);
+  const [passkeyTicket, setPasskeyTicket] = useState(null);
   const [mfaLogin, setMfaLogin] = useState(null);
   const [mfaCode, setMfaCode] = useState("");
   const [loginAuthStep, setLoginAuthStep] = useState("signin");
@@ -2227,8 +2229,11 @@ api.getPaymentNotifications(activeIspId)
     setError("");
     setNotice("");
     try {
-      const payload = await api.login({ ...loginForm, ispId });
+      const payload = passkeyTicket
+        ? await api.passkeyLoginComplete({ ticket: passkeyTicket, ispId })
+        : await api.login({ ...loginForm, ispId });
       setLoginWorkspaces(null);
+      setPasskeyTicket(null);
       if (payload.mfaRequired) {
         setMfaLogin(payload);
         setMfaCode("");
@@ -2241,6 +2246,24 @@ api.getPaymentNotifications(activeIspId)
     } catch (err) {
       setError(audienceErr(err.message));
     }
+  }
+
+  function applyLoginPayload(payload) {
+    if (payload.needWorkspaceChoice && Array.isArray(payload.workspaces)) {
+      setLoginWorkspaces(payload.workspaces);
+      setPasskeyTicket(payload.passkeyTicket || null);
+      return;
+    }
+    if (payload.mfaRequired) {
+      setMfaLogin(payload);
+      setMfaCode("");
+      setNotice(payload.message || "Code MFA requis.");
+      return;
+    }
+    setPasskeyTicket(null);
+    setAuthToken(payload.token);
+    setUser(payload.user);
+    refresh(payload.user.ispId || "");
   }
 
   async function onForgotPassword(e) {
@@ -2296,23 +2319,11 @@ api.getPaymentNotifications(activeIspId)
     setError("");
     setNotice("");
     setLoginWorkspaces(null);
+    setPasskeyTicket(null);
     /** Drop any stale JWT before sign-in so a fresh session always wins. */
     clearAuthSession("LOGIN_RESET");
     try {
-      const payload = await api.login(loginForm);
-      if (payload.needWorkspaceChoice && Array.isArray(payload.workspaces)) {
-        setLoginWorkspaces(payload.workspaces);
-        return;
-      }
-      if (payload.mfaRequired) {
-        setMfaLogin(payload);
-        setMfaCode("");
-        setNotice(payload.message || "Code MFA requis.");
-        return;
-      }
-      setAuthToken(payload.token);
-      setUser(payload.user);
-      refresh(payload.user.ispId || "");
+      applyLoginPayload(await api.login(loginForm));
     } catch (err) {
       setError(audienceErr(err.message));
     }
@@ -2351,6 +2362,7 @@ api.getPaymentNotifications(activeIspId)
     setMfaLogin(null);
     setMfaCode("");
     setLoginWorkspaces(null);
+    setPasskeyTicket(null);
     setIsps([]);
     setSelectedIspId("");
     setSuperDashboard(null);
@@ -3888,6 +3900,7 @@ api.getPaymentNotifications(activeIspId)
                 className="btn-secondary-outline"
                 onClick={() => {
                   setLoginWorkspaces(null);
+                  setPasskeyTicket(null);
                   setError("");
                 }}
               >
@@ -4003,6 +4016,20 @@ api.getPaymentNotifications(activeIspId)
                 required
               />
               <button type="submit">{isEn ? "Sign in" : "Se connecter"}</button>
+              <div className="auth-simple-or" aria-hidden>
+                {isEn ? "or" : "ou"}
+              </div>
+              <PasskeyLoginButton
+                email={loginForm.email}
+                isEn={isEn}
+                onResult={(payload) => {
+                  setError("");
+                  setNotice("");
+                  clearAuthSession("LOGIN_RESET");
+                  applyLoginPayload(payload);
+                }}
+                onError={(msg) => setError(audienceErr(msg))}
+              />
               <button
                 type="button"
                 className="auth-simple-link-btn"

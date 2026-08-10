@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -142,6 +143,74 @@ async function verifyAuthentication({ userId, response, credential, expectedOrig
   };
 }
 
+
+const loginChallenges = new Map();
+const passkeyTickets = new Map();
+
+function setLoginChallenge(challengeId, payload) {
+  loginChallenges.set(challengeId, { ...payload, exp: Date.now() + 5 * 60_000 });
+}
+
+function takeLoginChallenge(challengeId) {
+  const row = loginChallenges.get(challengeId);
+  loginChallenges.delete(challengeId);
+  if (!row || row.exp < Date.now()) return null;
+  return row;
+}
+
+function mintPasskeyTicket(userId) {
+  const id = crypto.randomUUID();
+  passkeyTickets.set(id, { userId, exp: Date.now() + 5 * 60_000 });
+  return id;
+}
+
+function takePasskeyTicket(ticketId) {
+  const row = passkeyTickets.get(ticketId);
+  passkeyTickets.delete(ticketId);
+  if (!row || row.exp < Date.now()) return null;
+  return row;
+}
+
+async function buildPasskeyLoginOptions({ allowCredentials } = {}) {
+  const list =
+    allowCredentials && allowCredentials.length
+      ? allowCredentials.map((c) => ({
+          id: c.credentialId,
+          transports: c.transports || undefined
+        }))
+      : undefined;
+  const options = await generateAuthenticationOptions({
+    rpID: platformRpId(),
+    allowCredentials: list,
+    userVerification: "preferred"
+  });
+  const challengeId = crypto.randomUUID();
+  setLoginChallenge(challengeId, { challenge: options.challenge });
+  return { options, challengeId };
+}
+
+async function verifyPasskeyLogin({ challengeId, response, credential, expectedOrigin }) {
+  const row = takeLoginChallenge(challengeId);
+  if (!row?.challenge) return { ok: false, message: "Challenge expired. Try again." };
+  const verification = await verifyAuthenticationResponse({
+    response,
+    expectedChallenge: row.challenge,
+    expectedOrigin: expectedOrigin || platformOrigin(),
+    expectedRPID: platformRpId(),
+    credential: {
+      id: credential.credentialId,
+      publicKey: base64UrlToUint8(credential.publicKey),
+      counter: Number(credential.counter) || 0,
+      transports: credential.transports || undefined
+    }
+  });
+  if (!verification.verified) return { ok: false, message: "Passkey verification failed." };
+  return {
+    ok: true,
+    newCounter: verification.authenticationInfo?.newCounter ?? credential.counter
+  };
+}
+
 export {
   platformOrigin,
   platformRpId,
@@ -149,5 +218,10 @@ export {
   buildRegistrationOptions,
   verifyRegistration,
   buildAuthenticationOptions,
-  verifyAuthentication
+  verifyAuthentication,
+  buildPasskeyLoginOptions,
+  verifyPasskeyLogin,
+  mintPasskeyTicket,
+  takePasskeyTicket
 };
+

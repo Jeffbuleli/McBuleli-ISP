@@ -4424,6 +4424,66 @@ body:has(.auth-simple--dark) {
   filter: brightness(1.06);
 }
 
+.auth-simple-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 12px;
+  color: rgba(240, 242, 245, 0.55);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.auth-simple-or::before,
+.auth-simple-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.auth-passkey-btn {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(127, 212, 174, 0.35);
+  background: rgba(47, 116, 57, 0.22);
+  color: #e8f5ee;
+  font-size: 0.95rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.auth-passkey-btn:hover:not(:disabled) {
+  border-color: rgba(127, 212, 174, 0.55);
+  background: rgba(47, 116, 57, 0.34);
+  color: #fff;
+}
+
+.auth-passkey-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.auth-passkey-btn__icon {
+  width: 20px;
+  height: 20px;
+  color: #7fd4ae;
+  flex-shrink: 0;
+}
+
+
 .auth-simple--dark .btn-secondary,
 .auth-simple--dark .auth-simple-workspace-btn {
   padding: 16px 18px;

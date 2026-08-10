@@ -192,7 +192,7 @@ async function request(path, options) {
       err.sessionExpired = true;
       /** Do not clear during login/password flows that still attach a stale Bearer by accident. */
       const p = String(path || "");
-      if (!p.startsWith("/auth/login") && !p.startsWith("/auth/mfa/") && !p.startsWith("/auth/forgot") && !p.startsWith("/auth/reset")) {
+      if (!p.startsWith("/auth/login") && !p.startsWith("/auth/passkey/") && !p.startsWith("/auth/mfa/") && !p.startsWith("/auth/forgot") && !p.startsWith("/auth/reset")) {
         clearAuthSession(err.code);
       }
     }
@@ -348,6 +348,21 @@ export const api = {
   getTenantContext: () => publicRequest("/tenant/context"),
   login: (payload) =>
     publicRequest("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  passkeyLoginOptions: (payload = {}) =>
+    publicRequest("/auth/passkey/login", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  passkeyLoginVerify: (payload) =>
+    publicRequest("/auth/passkey/login", {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+  passkeyLoginComplete: (payload) =>
+    publicRequest("/auth/passkey/login/complete", {
       method: "POST",
       body: JSON.stringify(payload)
     }),

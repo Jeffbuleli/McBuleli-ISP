@@ -97,6 +97,13 @@ import { registerTeamChatRoutes } from "./teamChat.js";
 import { streamInvoiceProformaPdf } from "./proformaPdf.js";
 import { registerNetworkRoutes } from "./routes/network.js";
 import { registerSecurityRoutes } from "./routes/security.js";
+import {
+  buildPasskeyLoginOptions,
+  mintPasskeyTicket,
+  resolveExpectedOrigin,
+  takePasskeyTicket,
+  verifyPasskeyLogin
+} from "./webauthn.js";
 import { createHealthRouter } from "./routes/health.js";
 
 function authenticate(req, res, next) {
@@ -2792,6 +2799,209 @@ app.post("/api/auth/login", async (req, res) => {
   ]);
   const token = signToken(sessionUser);
   return res.json({ token, user: await attachDashboardPayload(publicUserPayload(sessionUser)) });
+});
+
+
+/** Issue JWT / workspace choice after password or Passkey auth. skipMfa: Passkey satisfies 2FA. */
+async function finalizeStaffLogin(req, res, user, { requestedIspId = null, skipMfa = false } = {}) {
+  if (!user?.is_active) return res.status(403).json({ message: "User account is deactivated" });
+
+  if (user.role === "system_owner") {
+    if (req.tenantIspId) {
+      return res.status(403).json({ message: "This account does not belong to this ISP workspace." });
+    }
+    if (!skipMfa && MFA_REQUIRED_ROLES.has(user.role) && user.mfa_totp_enabled) {
+      const challenge = await createMfaChallenge({ user, purpose: "login", metadata: {} });
+      return res.status(202).json({
+        mfaRequired: true,
+        challengeId: challenge.id,
+        delivery: challenge.delivery,
+        expiresAt: challenge.expiresAt,
+        devCode: challenge.code,
+        message: "MFA code required. Check the notification outbox or configured SMS provider."
+      });
+    }
+    const token = signToken(user);
+    return res.json({ token, user: await attachDashboardPayload(publicUserPayload(user)) });
+  }
+
+  const workspaces = await fetchLoginWorkspaceRows(user.id);
+  if (!workspaces.length && user.role === "super_admin" && !user.isp_id) {
+    if (req.tenantIspId) {
+      return res.status(403).json({ message: "This account does not belong to this ISP workspace." });
+    }
+    if (!skipMfa && MFA_REQUIRED_ROLES.has(user.role) && user.mfa_totp_enabled) {
+      const challenge = await createMfaChallenge({
+        user,
+        purpose: "login",
+        metadata: { superAdminGlobal: true }
+      });
+      return res.status(202).json({
+        mfaRequired: true,
+        challengeId: challenge.id,
+        delivery: challenge.delivery,
+        expiresAt: challenge.expiresAt,
+        devCode: challenge.code,
+        message: "MFA code required. Check the notification outbox or configured SMS provider."
+      });
+    }
+    const token = signToken(user);
+    return res.json({ token, user: await attachDashboardPayload(publicUserPayload(user)) });
+  }
+
+  if (!workspaces.length) {
+    return res.status(403).json({ message: "No active workspace for this account." });
+  }
+
+  let selected = null;
+  if (requestedIspId) {
+    selected = workspaces.find((m) => String(m.ispId) === String(requestedIspId));
+    if (!selected) {
+      return res.status(403).json({ message: "This account is not part of the selected workspace." });
+    }
+  } else if (req.tenantIspId) {
+    selected = workspaces.find((m) => String(m.ispId) === String(req.tenantIspId));
+    if (!selected) {
+      return res.status(403).json({ message: "This account does not belong to this ISP workspace." });
+    }
+  } else if (workspaces.length === 1) {
+    selected = workspaces[0];
+  } else {
+    const body = {
+      needWorkspaceChoice: true,
+      workspaces: workspaces.map((m) => ({
+        ispId: m.ispId,
+        role: m.role,
+        name: m.ispDisplayName || m.ispName || m.ispId
+      }))
+    };
+    if (skipMfa) {
+      body.passkeyTicket = mintPasskeyTicket(user.id);
+    }
+    return res.status(200).json(body);
+  }
+
+  const sessionUser = sessionUserFromWorkspaceRow(user, selected);
+  if (!skipMfa && MFA_REQUIRED_ROLES.has(sessionUser.role) && user.mfa_totp_enabled) {
+    const challenge = await createMfaChallenge({
+      user: { ...user, isp_id: selected.ispId },
+      purpose: "login",
+      metadata: { ispId: selected.ispId, role: selected.role }
+    });
+    return res.status(202).json({
+      mfaRequired: true,
+      challengeId: challenge.id,
+      delivery: challenge.delivery,
+      expiresAt: challenge.expiresAt,
+      devCode: challenge.code,
+      message: "MFA code required. Check the notification outbox or configured SMS provider."
+    });
+  }
+
+  await query(`UPDATE users SET isp_id = $1, role = $2 WHERE id = $3`, [
+    selected.ispId,
+    selected.role,
+    user.id
+  ]);
+  const token = signToken(sessionUser);
+  return res.json({ token, user: await attachDashboardPayload(publicUserPayload(sessionUser)) });
+}
+
+app.post("/api/auth/passkey/login", async (req, res) => {
+  try {
+    const emailRaw = String(req.body?.email || "").trim().toLowerCase();
+    let allowCredentials;
+    if (emailRaw) {
+      const u = await query("SELECT id FROM users WHERE email = $1", [emailRaw]);
+      const user = u.rows[0];
+      if (user) {
+        const creds = await query(
+          `SELECT credential_id AS "credentialId", transports
+           FROM user_webauthn_credentials WHERE user_id = $1`,
+          [user.id]
+        );
+        if (!creds.rows.length) {
+          return res.status(400).json({ message: "No Passkey registered for this account." });
+        }
+        allowCredentials = creds.rows.map((c) => ({
+          credentialId: c.credentialId,
+          transports: Array.isArray(c.transports) ? c.transports : undefined
+        }));
+      }
+    }
+    const { options, challengeId } = await buildPasskeyLoginOptions({ allowCredentials });
+    return res.json({ options, challengeId });
+  } catch (err) {
+    console.error("passkey login options", err);
+    return res.status(500).json({ message: "Could not start Passkey login." });
+  }
+});
+
+app.put("/api/auth/passkey/login", async (req, res) => {
+  try {
+    const challengeId = String(req.body?.challengeId || "");
+    const response = req.body?.response || req.body?.credential;
+    const requestedIspId =
+      req.body?.ispId != null && String(req.body.ispId).trim() ? String(req.body.ispId).trim() : null;
+    if (!challengeId || !response?.id) {
+      return res.status(400).json({ message: "challengeId and response are required" });
+    }
+    const row = await query(
+      `SELECT c.user_id AS "userId", c.credential_id AS "credentialId", c.public_key AS "publicKey",
+              c.counter, c.transports
+       FROM user_webauthn_credentials c
+       WHERE c.credential_id = $1`,
+      [response.id]
+    );
+    const credential = row.rows[0];
+    if (!credential) return res.status(401).json({ message: "Unknown Passkey." });
+
+    const verified = await verifyPasskeyLogin({
+      challengeId,
+      response,
+      credential: {
+        credentialId: credential.credentialId,
+        publicKey: credential.publicKey,
+        counter: credential.counter,
+        transports: Array.isArray(credential.transports) ? credential.transports : undefined
+      },
+      expectedOrigin: resolveExpectedOrigin(req)
+    });
+    if (!verified.ok) return res.status(401).json({ message: verified.message });
+
+    await query(`UPDATE user_webauthn_credentials SET counter = $1 WHERE credential_id = $2`, [
+      verified.newCounter,
+      credential.credentialId
+    ]);
+
+    const u = await query("SELECT * FROM users WHERE id = $1", [credential.userId]);
+    const user = u.rows[0];
+    if (!user) return res.status(401).json({ message: "Unknown Passkey." });
+    return finalizeStaffLogin(req, res, user, { requestedIspId, skipMfa: true });
+  } catch (err) {
+    console.error("passkey login verify", err);
+    return res.status(500).json({ message: "Passkey login failed." });
+  }
+});
+
+app.post("/api/auth/passkey/login/complete", async (req, res) => {
+  try {
+    const ticket = String(req.body?.ticket || req.body?.passkeyTicket || "");
+    const ispId =
+      req.body?.ispId != null && String(req.body.ispId).trim() ? String(req.body.ispId).trim() : null;
+    if (!ticket || !ispId) {
+      return res.status(400).json({ message: "ticket and ispId are required" });
+    }
+    const pending = takePasskeyTicket(ticket);
+    if (!pending?.userId) return res.status(401).json({ message: "Passkey session expired. Try again." });
+    const u = await query("SELECT * FROM users WHERE id = $1", [pending.userId]);
+    const user = u.rows[0];
+    if (!user) return res.status(401).json({ message: "Passkey session expired. Try again." });
+    return finalizeStaffLogin(req, res, user, { requestedIspId: ispId, skipMfa: true });
+  } catch (err) {
+    console.error("passkey login complete", err);
+    return res.status(500).json({ message: "Passkey login failed." });
+  }
 });
 
 app.post("/api/auth/mfa/verify-login", async (req, res) => {
