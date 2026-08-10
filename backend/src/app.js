@@ -32,7 +32,7 @@ import {
   withdrawalDebit
 } from "./transactionFees.js";
 import { isLikelyDrCongoMsisdn, normalizeDrCongoMsisdn } from "./phoneNormalize.js";
-import {
+import { RESERVED,
   allocateUniqueSlug,
   isValidSlug,
   normalizeSlug,
@@ -592,6 +592,8 @@ app.use(async (req, _res, next) => {
   req.tenantHost = host;
   if (!host || host === "localhost" || host === "127.0.0.1") return next();
   const slug = slugFromHost(host);
+  // Platform reserved hosts (docs, api, …) are not partner tenants
+  if (slug && RESERVED.has(String(slug).toLowerCase())) return next();
   try {
     const tenant = await query(
       `SELECT i.id AS "ispId", i.name, i.subdomain, b.display_name AS "displayName",

@@ -10,6 +10,7 @@ const Signup = lazy(() => import("./Signup.jsx"));
 const WifiPortal = lazy(() => import("./WifiPortal.jsx"));
 const PrivacyPolicy = lazy(() => import("./PrivacyPolicy.jsx"));
 const WifiZone = lazy(() => import("./WifiZone.jsx"));
+const DocsSite = lazy(() => import("./DocsSite.jsx"));
 
 registerServiceWorker();
 
@@ -22,6 +23,14 @@ const LazyFallback = () => (
   </main>
 );
 
+function isDocsHost() {
+  if (typeof window === "undefined") return false;
+  const host = String(window.location.hostname || "").toLowerCase();
+  if (host === "docs.isp.mcbuleli.org") return true;
+  if (host.startsWith("docs.") && host.endsWith(".isp.mcbuleli.org")) return true;
+  return host === "docs.localhost";
+}
+
 function Root() {
   const path = typeof window !== "undefined" ? window.location.pathname : "";
   const search = typeof window !== "undefined" ? window.location.search || "" : "";
@@ -29,6 +38,14 @@ function Root() {
     typeof window !== "undefined" &&
     new URLSearchParams(search).get("site") === "public";
   const hasToken = typeof window !== "undefined" && Boolean(window.localStorage.getItem("token"));
+  const normalizedPath = path.replace(/\/$/, "") || "/";
+  if (isDocsHost() || normalizedPath === "/docs" || normalizedPath.startsWith("/docs/")) {
+    return (
+      <Suspense fallback={<LazyFallback />}>
+        <DocsSite />
+      </Suspense>
+    );
+  }
   const dashScreenPaths = new Set([
     "/dashboard",
     "/network",

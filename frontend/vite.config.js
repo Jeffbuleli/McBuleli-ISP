@@ -13,6 +13,8 @@ export default defineConfig({
           if (
             req.method === "GET" &&
             (base === "/portal" ||
+              base === "/docs" ||
+              base.startsWith("/docs/") ||
               base === "/signup" ||
               base === "/wifi" ||
               base.startsWith("/wifi/") ||

@@ -64,9 +64,9 @@ export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
     },
     {
       key: "clients.team",
-      nav: { category: "team", categoryLabel: t("Equipe", "Team"), categoryIcon: IconUserCheck },
+      nav: { category: "team", categoryLabel: t("Équipe", "Team"), categoryIcon: IconUserCheck },
       href: "#team-settings",
-      label: t("Equipe", "Team"),
+      label: t("Équipe", "Team"),
       mobileScreen: "users"
     }
   );

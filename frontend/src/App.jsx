@@ -5430,7 +5430,7 @@ api.getPaymentNotifications(activeIspId)
             <h2>{t("Nouveau membre", "New member")}</h2>
             <div className="field-clients-create__row">
               <input
-                placeholder={t("Nom complet", "Full name")}
+                placeholder={t("Nom", "Name")}
                 value={userForm.fullName}
                 onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
                 required
@@ -5444,10 +5444,7 @@ api.getPaymentNotifications(activeIspId)
             </div>
             <div className="field-clients-create__row">
               <input
-                placeholder={t(
-                  "Mot de passe (obligatoire seulement pour un nouvel e-mail)",
-                  "Password (required only for a new email)"
-                )}
+                placeholder={t("Mot de passe", "Password")}
                 type="password"
                 value={userForm.password}
                 onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
@@ -5463,64 +5460,24 @@ api.getPaymentNotifications(activeIspId)
                 ))}
               </select>
             </div>
-            <p className="app-meta">
-              {t(
-                "Si l’e-mail existe déjà sur McBuleli, le compte est rattaché à ce FAI sans changer le mot de passe.",
-                "If the email already exists on McBuleli, the account is linked to this ISP without changing the password."
-              )}
-            </p>
-            <div className="field-clients-create__row">
-              <input
-                placeholder={t("Téléphone (facultatif)", "Phone (optional)")}
-                value={userForm.phone}
-                onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
-              />
-              <input
-                placeholder={t("Adresse (facultatif)", "Address (optional)")}
-                value={userForm.address}
-                onChange={(e) => setUserForm({ ...userForm, address: e.target.value })}
-              />
-            </div>
-            <div className="field-clients-create__row">
-              <input
-                placeholder={t("Site / zone affectée (facultatif)", "Site / zone (optional)")}
-                value={userForm.assignedSite}
-                onChange={(e) => setUserForm({ ...userForm, assignedSite: e.target.value })}
-              />
-              <select
-                value={userForm.accreditationLevel}
-                onChange={(e) =>
-                  setUserForm({ ...userForm, accreditationLevel: e.target.value })
-                }
-              >
-                <option value="basic">{t("Accréditation : basique", "Accreditation: basic")}</option>
-                <option value="standard">{t("Accréditation : standard", "Accreditation: standard")}</option>
-                <option value="senior">{t("Accréditation : senior", "Accreditation: senior")}</option>
-                <option value="manager">{t("Accréditation : manager", "Accreditation: manager")}</option>
-              </select>
-            </div>
+            <input
+              placeholder={t("Téléphone (facultatif)", "Phone (optional)")}
+              value={userForm.phone}
+              onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
+            />
             <button type="submit" disabled={!selectedIspId}>
-              {t("Créer l'utilisateur", "Create user")}
+              {t("Ajouter", "Add")}
             </button>
           </form>
         )}
 
         <section className="panel">
-          <h2>{t("Équipe du FAI", "ISP team")}</h2>
-          {generatedInvite && (
-            <div>
-              <p>
-                {t("Dernier lien d'invitation :", "Latest invite link:")}{" "}
-                <code>{generatedInvite.inviteLink}</code>
-              </p>
-              <p>
-                {t("Jeton :", "Token:")} <code>{generatedInvite.token}</code>
-              </p>
-              <p>
-                {t("Expire :", "Expires:")} {generatedInvite.expiresIn}
-              </p>
-            </div>
-          )}
+          <h2>{t("Équipe", "Team")}</h2>
+          {generatedInvite ? (
+            <p className="app-meta">
+              {t("Invitation :", "Invite:")} <code>{generatedInvite.inviteLink}</code>
+            </p>
+          ) : null}
           {users.map((item) => {
             const d =
               teamRowDraft[item.id] || {
@@ -5534,152 +5491,88 @@ api.getPaymentNotifications(activeIspId)
               isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin";
             return (
               <div key={item.id} className="panel" style={{ marginBottom: 12 }}>
-                <p style={{ marginTop: 0 }}>
-                  <strong>{item.fullName}</strong> - {item.email}{" "}
+                <p style={{ marginTop: 0, marginBottom: 8 }}>
+                  <strong>{item.fullName}</strong> · {item.email}
                   <span className="app-meta">
-                    [
-                    {item.isActive
-                      ? t("actif dans ce FAI", "active in this ISP")
-                      : t("inactif dans ce FAI", "inactive in this ISP")}
-                    {item.userAccountActive === false
-                      ? t(" · compte global suspendu", " · account suspended globally")
-                      : ""}
-                    ]
+                    {" "}
+                    · {item.isActive ? t("actif", "active") : t("inactif", "inactive")}
+                    {item.userAccountActive === false ? t(" · suspendu", " · suspended") : ""}
                   </span>
                 </p>
                 {canManageTeam ? (
-                  <div className="grid" style={{ gap: 8 }}>
-                    {assignableStaffRoles(user.role).includes(d.role) ? (
-                      <select
-                        value={d.role}
+                  <>
+                    <div className="field-clients-create__row">
+                      {assignableStaffRoles(user.role).includes(d.role) ? (
+                        <select
+                          value={d.role}
+                          onChange={(e) =>
+                            setTeamRowDraft({
+                              ...teamRowDraft,
+                              [item.id]: { ...d, role: e.target.value }
+                            })
+                          }
+                        >
+                          {assignableStaffRoles(user.role).map((role) => (
+                            <option key={role} value={role}>
+                              {staffRoleOptionLabel(role, t)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="app-meta">{staffRoleOptionLabel(d.role, t)}</span>
+                      )}
+                      <input
+                        placeholder={t("Téléphone", "Phone")}
+                        value={d.phone}
                         onChange={(e) =>
-                          setTeamRowDraft({
-                            ...teamRowDraft,
-                            [item.id]: { ...d, role: e.target.value }
-                          })
+                          setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, phone: e.target.value } })
                         }
-                      >
-                        {assignableStaffRoles(user.role).map((role) => (
-                          <option key={role} value={role}>
-                            {staffRoleOptionLabel(role, t)}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <p className="app-meta" style={{ margin: 0 }}>
-                        {staffRoleOptionLabel(d.role, t)}
-                      </p>
-                    )}
-                    <select
-                      value={d.accreditationLevel}
-                      onChange={(e) =>
-                        setTeamRowDraft({
-                          ...teamRowDraft,
-                          [item.id]: { ...d, accreditationLevel: e.target.value }
-                        })
-                      }
-                    >
-                      <option value="basic">{t("Accréditation : basique", "Accreditation: basic")}</option>
-                      <option value="standard">{t("Accréditation : standard", "Accreditation: standard")}</option>
-                      <option value="senior">{t("Accréditation : senior", "Accreditation: senior")}</option>
-                      <option value="manager">{t("Accréditation : manager", "Accreditation: manager")}</option>
-                    </select>
-                    <input
-                      placeholder={t("Téléphone", "Phone")}
-                      value={d.phone}
-                      onChange={(e) =>
-                        setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, phone: e.target.value } })
-                      }
-                    />
-                    <input
-                      placeholder={t("Adresse", "Address")}
-                      value={d.address}
-                      onChange={(e) =>
-                        setTeamRowDraft({ ...teamRowDraft, [item.id]: { ...d, address: e.target.value } })
-                      }
-                    />
-                    <input
-                      placeholder={t("Site / zone", "Site / zone")}
-                      value={d.assignedSite}
-                      onChange={(e) =>
-                        setTeamRowDraft({
-                          ...teamRowDraft,
-                          [item.id]: { ...d, assignedSite: e.target.value }
-                        })
-                      }
-                    />
-                    <button type="button" onClick={() => onSaveTeamUser(item.id)}>
-                      {t("Enregistrer fiche & rôle", "Save profile & role")}
-                    </button>
-                  </div>
-                ) : null}
-                {canManageTeam ? (
-                  <p style={{ marginBottom: 0 }}>
-                    <button type="button" onClick={() => onResetPassword(item.id)}>
-                      {t("Réinitialiser le mot de passe", "Reset password")}
-                    </button>{" "}
-                    <button type="button" onClick={() => onCreateInvite(item.id)}>
-                      {t("Créer une invitation", "Create invite")}
-                    </button>{" "}
-                    {item.isActive ? (
-                      <button type="button" onClick={() => onDeactivateUser(item.id)}>
-                        {t("Désactiver dans ce FAI", "Disable in this ISP")}
+                      />
+                    </div>
+                    <div className="field-clients-create__row" style={{ marginTop: 8 }}>
+                      <button type="button" onClick={() => onSaveTeamUser(item.id)}>
+                        {t("Enregistrer", "Save")}
                       </button>
-                    ) : (
-                      <button type="button" onClick={() => onReactivateUser(item.id)}>
-                        {t("Réactiver dans ce FAI", "Reactivate in this ISP")}
+                      <button type="button" className="btn-secondary-outline" onClick={() => onResetPassword(item.id)}>
+                        {t("Reset MDP", "Reset password")}
                       </button>
-                    )}{" "}
-                    <button type="button" onClick={() => onSuspendUserGlobally(item.id)}>
-                      {t("Suspendre compte (toutes entreprises)", "Suspend account (all companies)")}
-                    </button>{" "}
-                    {item.userAccountActive === false ? (
-                      <button type="button" onClick={() => onReactivateUserGlobally(item.id)}>
-                        {t("Réactiver connexion (global)", "Reactivate login (global)")}
+                      <button type="button" className="btn-secondary-outline" onClick={() => onCreateInvite(item.id)}>
+                        {t("Invitation", "Invite")}
                       </button>
-                    ) : null}
-                  </p>
+                      {item.isActive ? (
+                        <button type="button" className="btn-secondary-outline" onClick={() => onDeactivateUser(item.id)}>
+                          {t("Désactiver", "Disable")}
+                        </button>
+                      ) : (
+                        <button type="button" className="btn-secondary-outline" onClick={() => onReactivateUser(item.id)}>
+                          {t("Réactiver", "Reactivate")}
+                        </button>
+                      )}
+                    </div>
+                  </>
                 ) : null}
               </div>
             );
           })}
-
         </section>
 
         {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
           <details className="panel field-clients-more">
-            <summary>{t("Import / export CSV", "Import / export CSV")}</summary>
+            <summary>{t("CSV", "CSV")}</summary>
             <div className="field-clients-more__body">
-              <p>
-                {t(
-                  "Téléchargez les comptes pour sauvegarde ou importez avec les colonnes : fullName, email, role, mot de passe facultatif. Les lignes sans mot de passe utilisent le défaut ci-dessous (min. 6 caractères).",
-                  "Download accounts for backup or import with columns: fullName, email, role, optional password. Rows without a password use the default below (min. 6 characters)."
-                )}
-              </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                 <button type="button" onClick={onDownloadTeamUsersCsv} disabled={!selectedIspId}>
-                  {t("Télécharger le CSV équipe", "Download team users CSV")}
+                  {t("Exporter", "Export")}
                 </button>
                 <button type="button" onClick={() => api.downloadTeamImportTemplate()}>
-                  {t("Télécharger le modèle d'import", "Download import template")}
+                  {t("Modèle", "Template")}
                 </button>
               </div>
-              <p className="app-meta" style={{ marginTop: 8, fontSize: "0.9em" }}>
-                {t("Modèle : ligne d'en-tête uniquement -", "Template: header row only -")}{" "}
-                <code>fullName,email,role,password,accreditationLevel</code>.{" "}
-                {t(
-                  "Mot de passe vide = défaut ci-dessous ; rôle vide = rôle par défaut.",
-                  "Empty password = default below; empty role = default role."
-                )}
-              </p>
               <form onSubmit={onImportTeamUsersCsv} style={{ marginTop: 12 }}>
                 <input ref={teamCsvInputRef} type="file" accept=".csv,text/csv" />
                 <input
                   type="password"
-                  placeholder={t(
-                    "Mot de passe par défaut pour les lignes sans (min. 6)",
-                    "Default password for rows without one (min. 6)"
-                  )}
+                  placeholder={t("Mot de passe défaut (min. 6)", "Default password (min. 6)")}
                   value={teamImportPassword}
                   onChange={(e) => setTeamImportPassword(e.target.value)}
                 />
@@ -5691,7 +5584,7 @@ api.getPaymentNotifications(activeIspId)
                   ))}
                 </select>
                 <button type="submit" disabled={!selectedIspId}>
-                  {t("Importer le CSV équipe", "Import team CSV")}
+                  {t("Importer", "Import")}
                 </button>
               </form>
               {teamImportReport ? (
@@ -5703,306 +5596,6 @@ api.getPaymentNotifications(activeIspId)
                   onDismiss={() => setTeamImportReport(null)}
                 />
               ) : null}
-            </div>
-          </details>
-        )}
-
-        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
-          <details className="panel field-clients-more">
-            <summary>{t("Notifications", "Notifications")}</summary>
-            <div className="field-clients-more__body field-clients-more__body--stack">
-          <form className="field-clients-more__body" onSubmit={onUpsertNotificationProvider} style={{ margin: 0, boxShadow: "none", border: 0, padding: 0 }}>
-            <h3>{t("Fournisseurs de notifications", "Notification providers")}</h3>
-            <select
-              value={notificationProviderForm.channel}
-              onChange={(e) =>
-                setNotificationProviderForm({ ...notificationProviderForm, channel: e.target.value })
-              }
-            >
-              <option value="sms">SMS</option>
-              <option value="email">{t("E-mail", "Email")}</option>
-              <option value="whatsapp">WhatsApp</option>
-            </select>
-            <select
-              value={notificationProviderForm.providerKey}
-              onChange={(e) =>
-                setNotificationProviderForm({
-                  ...notificationProviderForm,
-                  providerKey: e.target.value
-                })
-              }
-            >
-              <option value="webhook">{t("Webhook HTTP", "HTTP webhook")}</option>
-              <option value="twilio">Twilio</option>
-              <option value="smtp">SMTP</option>
-            </select>
-            {notificationProviderForm.providerKey === "twilio" ? (
-              <>
-                <input
-                  placeholder="SID compte Twilio"
-                  value={notificationProviderForm.twilioAccountSid}
-                  onChange={(e) =>
-                    setNotificationProviderForm({
-                      ...notificationProviderForm,
-                      twilioAccountSid: e.target.value
-                    })
-                  }
-                />
-                <input
-                  placeholder="Jeton d'authentification Twilio"
-                  value={notificationProviderForm.twilioAuthToken}
-                  onChange={(e) =>
-                    setNotificationProviderForm({
-                      ...notificationProviderForm,
-                      twilioAuthToken: e.target.value
-                    })
-                  }
-                />
-                <input
-                  placeholder="Numéro expéditeur Twilio (ou whatsapp:+…)"
-                  value={notificationProviderForm.twilioFrom}
-                  onChange={(e) =>
-                    setNotificationProviderForm({
-                      ...notificationProviderForm,
-                      twilioFrom: e.target.value
-                    })
-                  }
-                />
-                <input
-                  placeholder="SID service de messagerie (facultatif)"
-                  value={notificationProviderForm.twilioMessagingServiceSid}
-                  onChange={(e) =>
-                    setNotificationProviderForm({
-                      ...notificationProviderForm,
-                      twilioMessagingServiceSid: e.target.value
-                    })
-                  }
-                />
-              </>
-            ) : notificationProviderForm.providerKey === "smtp" ? (
-              <>
-                <input
-                  placeholder="Hôte SMTP"
-                  value={notificationProviderForm.smtpHost}
-                  onChange={(e) =>
-                    setNotificationProviderForm({ ...notificationProviderForm, smtpHost: e.target.value })
-                  }
-                />
-                <input
-                  placeholder="Port (défaut 587)"
-                  value={notificationProviderForm.smtpPort}
-                  onChange={(e) =>
-                    setNotificationProviderForm({ ...notificationProviderForm, smtpPort: e.target.value })
-                  }
-                />
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={notificationProviderForm.smtpSecure}
-                    onChange={(e) =>
-                      setNotificationProviderForm({
-                        ...notificationProviderForm,
-                        smtpSecure: e.target.checked
-                      })
-                    }
-                  />{" "}
-                  TLS (sécurisé)
-                </label>
-                <input
-                  placeholder="Utilisateur SMTP (facultatif)"
-                  value={notificationProviderForm.smtpUser}
-                  onChange={(e) =>
-                    setNotificationProviderForm({ ...notificationProviderForm, smtpUser: e.target.value })
-                  }
-                />
-                <input
-                  type="password"
-                  placeholder="Mot de passe SMTP (facultatif)"
-                  value={notificationProviderForm.smtpPass}
-                  onChange={(e) =>
-                    setNotificationProviderForm({ ...notificationProviderForm, smtpPass: e.target.value })
-                  }
-                />
-                <input
-                  placeholder="Adresse expéditrice (obligatoire)"
-                  value={notificationProviderForm.smtpFrom}
-                  onChange={(e) =>
-                    setNotificationProviderForm({ ...notificationProviderForm, smtpFrom: e.target.value })
-                  }
-                />
-              </>
-            ) : (
-              <>
-                <input
-                  placeholder="URL du webhook"
-                  value={notificationProviderForm.webhookUrl}
-                  onChange={(e) =>
-                    setNotificationProviderForm({
-                      ...notificationProviderForm,
-                      webhookUrl: e.target.value
-                    })
-                  }
-                />
-                <input
-                  placeholder="Nom d'en-tête d'authentification (facultatif)"
-                  value={notificationProviderForm.authHeaderName}
-                  onChange={(e) =>
-                    setNotificationProviderForm({
-                      ...notificationProviderForm,
-                      authHeaderName: e.target.value
-                    })
-                  }
-                />
-                <input
-                  placeholder="Jeton d'authentification (facultatif)"
-                  value={notificationProviderForm.authToken}
-                  onChange={(e) =>
-                    setNotificationProviderForm({
-                      ...notificationProviderForm,
-                      authToken: e.target.value
-                    })
-                  }
-                />
-              </>
-            )}
-            <label>
-              <input
-                type="checkbox"
-                checked={notificationProviderForm.isActive}
-                onChange={(e) =>
-                  setNotificationProviderForm({
-                    ...notificationProviderForm,
-                    isActive: e.target.checked
-                  })
-                }
-              />{" "}
-              Actif
-            </label>
-            <button type="submit" disabled={!selectedIspId}>
-              Enregistrer le fournisseur
-            </button>
-            {notificationProviders.map((provider) => (
-              <p key={provider.id}>
-                {provider.channel} - {provider.providerKey} [{provider.isActive ? "actif" : "inactif"}]
-              </p>
-            ))}
-          </form>
-
-      <div className="panel" style={{ margin: 0, boxShadow: "none", border: 0, padding: "12px 0" }}>
-        <h3>{t("File d'attente des notifications", "Notification outbox")}</h3>
-        <p>
-          {t("En file :", "Queued:")}{" "}
-          {notificationOutbox.filter((row) => row.status === "queued").length} | {t("Envoyé :", "Sent:")}{" "}
-          {notificationOutbox.filter((row) => row.status === "sent").length} | {t("Échec :", "Failed:")}{" "}
-          {notificationOutbox.filter((row) => row.status === "failed").length}
-        </p>
-        <button onClick={onProcessNotificationOutbox} disabled={!selectedIspId}>
-          {t("Traiter la file maintenant", "Process outbox now")}
-        </button>
-        {notificationOutbox.slice(0, 12).map((row) => (
-          <p key={row.id}>
-            {new Date(row.createdAt).toLocaleString()} - {row.templateKey} via {row.channel} ({row.status})
-            {row.lastError ? ` - ${row.lastError}` : ""}
-          </p>
-        ))}
-      </div>
-
-      <div className="panel" style={{ margin: 0, boxShadow: "none", border: 0, padding: "12px 0" }}>
-        <h3>{t("Envoyer une notification de test", "Send test notification")}</h3>
-        <form onSubmit={onSendTestNotification}>
-          <select
-            value={notificationTestForm.channel}
-            onChange={(e) =>
-              setNotificationTestForm({ ...notificationTestForm, channel: e.target.value })
-            }
-          >
-            <option value="sms">SMS</option>
-            <option value="email">{t("E-mail", "Email")}</option>
-            <option value="whatsapp">WhatsApp</option>
-          </select>
-          <input
-            placeholder={t("Destinataire (téléphone ou e-mail)", "Recipient (phone or email)")}
-            value={notificationTestForm.recipient}
-            onChange={(e) =>
-              setNotificationTestForm({ ...notificationTestForm, recipient: e.target.value })
-            }
-          />
-          <input
-            placeholder={t("Message", "Message")}
-            value={notificationTestForm.message}
-            onChange={(e) =>
-              setNotificationTestForm({ ...notificationTestForm, message: e.target.value })
-            }
-          />
-          <button type="submit" disabled={!selectedIspId}>
-            {t("Envoyer le test", "Send test")}
-          </button>
-        </form>
-      </div>
-
-            </div>
-          </details>
-        )}
-        {(isPlatformSuperRole(user.role) || user.role === "company_manager") && (
-          <details className="panel field-clients-more">
-            <summary>{t("Profils d'habilitation", "Accreditation profiles")}</summary>
-            <div className="field-clients-more__body">
-              <form className="panel" onSubmit={onUpsertRoleProfile}>
-                          <h3>{t("Configurer les profils", "Configure profiles")}</h3>
-                          <select
-                            value={roleProfileForm.roleKey}
-                            onChange={(e) => setRoleProfileForm({ ...roleProfileForm, roleKey: e.target.value })}
-                          >
-                            {ROLE_PROFILE_OPTIONS.map((r) => (
-                              <option key={r.key} value={r.key}>
-                                {t(r.fr, r.en)}
-                              </option>
-                            ))}
-                          </select>
-                          <select
-                            value={roleProfileForm.accreditationLevel}
-                            onChange={(e) =>
-                              setRoleProfileForm({ ...roleProfileForm, accreditationLevel: e.target.value })
-                            }
-                          >
-                            <option value="basic">{t("Basique", "Basic")}</option>
-                            <option value="standard">{t("Standard", "Standard")}</option>
-                            <option value="senior">{t("Senior", "Senior")}</option>
-                            <option value="manager">{t("Manager", "Manager")}</option>
-                          </select>
-                          <fieldset style={{ border: "1px solid var(--mb-border, rgba(255,255,255,0.12))", borderRadius: 10, padding: 10 }}>
-                            <legend className="app-meta">{t("Droits accordés", "Granted permissions")}</legend>
-                            {ROLE_PERMISSION_OPTIONS.map((p) => {
-                              const checked = Array.isArray(roleProfileForm.permissions) && roleProfileForm.permissions.includes(p.key);
-                              return (
-                                <label key={p.key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={(e) => {
-                                      const next = new Set(Array.isArray(roleProfileForm.permissions) ? roleProfileForm.permissions : []);
-                                      if (e.target.checked) next.add(p.key);
-                                      else next.delete(p.key);
-                                      setRoleProfileForm({ ...roleProfileForm, permissions: Array.from(next) });
-                                    }}
-                                  />
-                                  <span>{t(p.fr, p.en)}</span>
-                                </label>
-                              );
-                            })}
-                          </fieldset>
-                          <button type="submit" disabled={!selectedIspId}>
-                            {t("Enregistrer le profil de rôle", "Save role profile")}
-                          </button>
-                          {roleProfiles.map((profile) => (
-                            <p key={profile.id}>
-                              {roleProfileLabel(profile.roleKey, t)} - {accreditationLabel(profile.accreditationLevel, t)} -{" "}
-                              {Array.isArray(profile.permissions)
-                                ? profile.permissions.map((perm) => rolePermissionLabel(perm, t)).join(", ")
-                                : ""}
-                            </p>
-                          ))}
-                        </form>
             </div>
           </details>
         )}
