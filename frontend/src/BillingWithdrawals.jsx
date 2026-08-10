@@ -1,5 +1,5 @@
 /**
- * Tenant Pawapay withdrawal (USD/CDF) — Facturation.
+ * Tenant Mobile Money withdrawal (USD/CDF) — Facturation.
  */
 export default function BillingWithdrawals({
   t,
@@ -22,7 +22,7 @@ export default function BillingWithdrawals({
 
   return (
     <section className="panel billing-withdrawals">
-      <h2>{t("Retrait Pawapay", "Pawapay withdrawal")}</h2>
+      <h2>{t("Retrait Mobile Money", "Mobile Money withdrawal")}</h2>
       <p className="app-meta">
         {t(
           `Solde retirable : ${formatUsd ? formatUsd(withdrawable, isEn ? "en-GB" : "fr-FR") : `$${withdrawable.toFixed(2)}`}`,

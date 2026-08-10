@@ -96,7 +96,7 @@ export async function processPawapayCallback(body) {
         `UPDATE isp_withdrawal_requests
          SET status = 'failed', completed_at = NOW(), failure_message = $2
          WHERE payout_id = $1::uuid`,
-        [payoutId, body?.failureReason?.failureMessage || body?.message || "Pawapay payout failed"]
+        [payoutId, body?.failureReason?.failureMessage || body?.message || "Mobile Money payout failed"]
       );
     }
     await logPawapayCallback({ action: "pawapay.callback.payout", pawapayId: body.payoutId, body });

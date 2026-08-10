@@ -4895,19 +4895,24 @@ api.getPaymentNotifications(activeIspId)
                 onChange={(e) => setBrandingForm({ ...brandingForm, contactPhone: e.target.value })}
               />
             </div>
+            <div style={{ marginTop: 14 }}>
+              <p className="app-meta" style={{ marginBottom: 6 }}>
+                {t("Lien espace FAI", "ISP workspace link")}
+              </p>
+              <TenantLinkField
+                nameValue={brandingForm.displayName || ""}
+                slug={brandingForm.subdomain || ""}
+                onSlugChange={(s) => setBrandingForm((prev) => ({ ...prev, subdomain: s }))}
+                isEn={uiLang === "en"}
+              />
+            </div>
             <button type="submit" disabled={!selectedIspId}>
               {t("Enregistrer l'image de marque", "Save branding")}
             </button>
 
             <details className="field-clients-more" style={{ marginTop: 16 }}>
-              <summary>{t("Lien & domaine", "Link & domain")}</summary>
+              <summary>{t("Domaine DNS privé", "Private DNS domain")}</summary>
               <div className="field-clients-more__body">
-                <TenantLinkField
-                  nameValue={brandingForm.displayName || ""}
-                  slug={brandingForm.subdomain || ""}
-                  onSlugChange={(s) => setBrandingForm((prev) => ({ ...prev, subdomain: s }))}
-                  isEn={uiLang === "en"}
-                />
                 <input
                   placeholder={t("Domaine DNS privé (Premium)", "Private DNS domain (Premium)")}
                   value={brandingForm.customDomain}
@@ -6663,7 +6668,7 @@ api.getPaymentNotifications(activeIspId)
         <form className="panel" onSubmit={onCreatePaymentIntent}>
           <h2>{t("Encaissement manuel standard", "Standard manual collection")}</h2>
           <p className="app-meta">
-            {t("Enregistrement d’un paiement hors Pawapay (preuve + validation).", "Record a non-Pawapay payment (proof + validation).")}
+            {t("Enregistrement d’un paiement manuel (preuve + validation).", "Record a manual payment (proof + validation).")}
           </p>
           <select
             value={paymentIntentForm.invoiceId}

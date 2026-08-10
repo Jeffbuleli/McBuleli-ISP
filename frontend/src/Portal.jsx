@@ -663,7 +663,7 @@ export default function Portal() {
           <form className="panel" onSubmit={onStartMobileMoneyPayment}>
             <h2>{t("payMobileTitle")}</h2>
             <p className="app-meta">
-              {isEnPortal ? "Pawapay USD / CDF" : "Pawapay USD / CDF"}
+              {isEnPortal ? "Mobile Money USD / CDF" : "Mobile Money USD / CDF"}
             </p>
             <select
               value={mobilePayForm.invoiceId}

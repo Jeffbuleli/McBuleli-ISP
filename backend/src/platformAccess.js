@@ -40,7 +40,7 @@ export async function enforcePlatformAccess(req, res, next) {
     return res.status(402).json({
       code: "PLATFORM_SUBSCRIPTION_REQUIRED",
       message:
-        "Your workspace trial or subscription has ended. Pay your monthly plan (Mobile Money via Pawapay) or upgrade to continue.",
+        "Your workspace trial or subscription has ended. Pay your monthly plan (Mobile Money) or upgrade to continue.",
       ispId
     });
   } catch (err) {

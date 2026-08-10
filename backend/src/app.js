@@ -2549,7 +2549,7 @@ app.post("/api/portal/mobile-money/initiate", authenticatePortal, async (req, re
     });
     if (pw.status !== "ACCEPTED" && pw.status !== "DUPLICATE_IGNORED") {
       return res.status(400).json({
-        message: pw.failureReason?.failureMessage || "Pawapay did not accept this invoice payment",
+        message: pw.failureReason?.failureMessage || "Mobile Money did not accept this invoice payment",
         pawapay: pw
       });
     }
@@ -2572,7 +2572,7 @@ app.post("/api/portal/mobile-money/initiate", authenticatePortal, async (req, re
       message: "Demande envoyée au téléphone. Validez le PIN Mobile Money."
     });
   } catch (err) {
-    return res.status(400).json({ message: err.message || "Pawapay initiation failed" });
+    return res.status(400).json({ message: err.message || "Mobile Money initiation failed" });
   }
 });
 
@@ -3532,7 +3532,7 @@ app.post(
       const pw = await initiatePawapayDeposit(body);
       if (pw.status !== "ACCEPTED" && pw.status !== "DUPLICATE_IGNORED") {
         return res.status(400).json({
-          message: pw.failureReason?.failureMessage || "Pawapay did not accept this deposit request",
+          message: pw.failureReason?.failureMessage || "Mobile Money did not accept this deposit request",
           pawapay: pw
         });
       }
@@ -3560,11 +3560,11 @@ app.post(
         currency: cur,
         message:
           pw.status === "ACCEPTED"
-            ? "Payment prompt sent to the handset. Complete the PIN step; we will extend your subscription when Pawapay confirms."
+            ? "Payment prompt sent to the handset. Complete the PIN step; we will extend your subscription when Mobile Money confirms."
             : pw.failureReason?.failureMessage || "See pawapay.status"
       });
     } catch (err) {
-      return res.status(400).json({ message: err.message || "Pawapay initiation failed" });
+      return res.status(400).json({ message: err.message || "Mobile Money initiation failed" });
     }
   }
 );
@@ -3802,7 +3802,7 @@ app.post(
     if (debit.total > cashbox.withdrawableMobileMoneyUsd) {
       return res.status(400).json({
         message:
-          "Withdrawal exceeds available Pawapay balance. Cash and TID are not withdrawable.",
+          "Withdrawal exceeds available Mobile Money balance. Cash and TID are not withdrawable.",
         requestedAmount,
         requestedCurrency: cur,
         requestedAmountUsd: amountUsdForBalance,
@@ -3837,10 +3837,10 @@ app.post(
       failureMessage =
         pawapay.status === "ACCEPTED" || pawapay.status === "DUPLICATE_IGNORED"
           ? null
-          : pawapay.failureReason?.failureMessage || "Pawapay did not accept payout request";
+          : pawapay.failureReason?.failureMessage || "Mobile Money did not accept payout request";
     } catch (err) {
       status = "failed";
-      failureMessage = err.message || "Pawapay payout initiation failed";
+      failureMessage = err.message || "Mobile Money payout initiation failed";
     }
     const inserted = await query(
       `INSERT INTO isp_withdrawal_requests

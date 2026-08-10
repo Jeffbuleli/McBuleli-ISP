@@ -7,8 +7,8 @@ export function PaymentPrimaryToggle({ t }) {
       <h2 style={{ marginBottom: 8 }}>{t("Paiements", "Payments")}</h2>
       <p className="app-meta" style={{ marginBottom: 0 }}>
         {t(
-          "Manuel + Pawapay (USD/CDF) via le portail client.",
-          "Manual + Pawapay (USD/CDF) via the customer portal."
+          "Manuel + Mobile Money (USD/CDF) via le portail client.",
+          "Manual + Mobile Money (USD/CDF) via the customer portal."
         )}
       </p>
     </div>
