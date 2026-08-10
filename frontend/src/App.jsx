@@ -28,6 +28,7 @@ import { mcbuleliLogoUrl } from "./brandAssets.js";
 import GuestWifiShare from "./GuestWifiShare.jsx";
 import TenantLinkField from "./TenantLinkField.jsx";
 import SecuritySettings from "./SecuritySettings.jsx";
+import BillingWithdrawals from "./BillingWithdrawals.jsx";
 import { openVoucherTicketsPrint } from "./voucherTicketPrint.js";
 import { formatStaffRole } from "./staffRoleLabels.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
@@ -5027,11 +5028,7 @@ api.getPaymentNotifications(activeIspId)
         isFieldAgent={isFieldAgent}
       >
       <section className="grid" id="billing-ops">
-        <PaymentPrimaryToggle
-          t={t}
-          showAdvanced={showAdvancedPayments}
-          onToggle={() => setShowAdvancedPayments((v) => !v)}
-        />
+        <PaymentPrimaryToggle t={t} />
 <section className="panel billing-invoices-panel">
         <h2>{t("Factures", "Invoices")}</h2>
         <DataTable
@@ -6172,108 +6169,7 @@ api.getPaymentNotifications(activeIspId)
           setError={setError}
           setNotice={setNotice}
         />
-        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
-          <section className="panel security-withdrawals">
-            <details>
-              <summary>
-                {t("Retrait Mobile Money (Pawapay)", "Mobile Money withdrawal (Pawapay)")}
-              </summary>
-              <p>
-                {t(
-                  "Retraits limités aux paiements Mobile Money confirmés via Pawapay. Google Authenticator est requis.",
-                  "Withdrawals are limited to Mobile Money payments confirmed via Pawapay. Google Authenticator is required."
-                )}
-              </p>
-              <form onSubmit={onCreateWithdrawal}>
-                <input
-                  type="number"
-                  min={withdrawalForm.currency === "CDF" ? "1000" : "0.5"}
-                  step="0.01"
-                  placeholder={
-                    withdrawalForm.currency === "CDF"
-                      ? t("Montant à retirer (CDF)", "Amount to withdraw (CDF)")
-                      : t("Montant à retirer (USD)", "Amount to withdraw (USD)")
-                  }
-                  value={withdrawalForm.amountUsd}
-                  onChange={(e) => setWithdrawalForm({ ...withdrawalForm, amountUsd: e.target.value })}
-                />
-                <select
-                  value={withdrawalForm.currency}
-                  onChange={(e) => setWithdrawalForm({ ...withdrawalForm, currency: e.target.value })}
-                >
-                  <option value="USD">USD</option>
-                  <option value="CDF">CDF</option>
-                </select>
-                <input
-                  placeholder={t("Téléphone bénéficiaire", "Beneficiary phone")}
-                  value={withdrawalForm.phoneNumber}
-                  onChange={(e) => setWithdrawalForm({ ...withdrawalForm, phoneNumber: e.target.value })}
-                />
-                <select
-                  value={withdrawalForm.networkKey}
-                  onChange={(e) => setWithdrawalForm({ ...withdrawalForm, networkKey: e.target.value })}
-                >
-                  {availablePawapayNetworks.map((n) => (
-                    <option key={n.key} value={n.key}>
-                      {n.label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  placeholder={t("Code Google Authenticator", "Google Authenticator code")}
-                  value={withdrawalForm.mfaCode}
-                  onChange={(e) => setWithdrawalForm({ ...withdrawalForm, mfaCode: e.target.value })}
-                />
-                <button type="submit" disabled={!selectedIspId || !user.mfaTotpEnabled}>
-                  {t("Valider le retrait", "Submit withdrawal")}
-                </button>
-              </form>
-              <DataTable
-                t={t}
-                title={t("Historique des retraits", "Withdrawal history")}
-                rows={withdrawalTableView.pageRows}
-                columns={[
-                  {
-                    key: "createdAt",
-                    header: t("Date", "Date"),
-                    sortKey: "createdAt",
-                    cell: (w) =>
-                      w.createdAt ? new Date(w.createdAt).toLocaleString(isEn ? "en-GB" : "fr-FR") : "-"
-                  },
-                  {
-                    key: "amount",
-                    header: t("Montant", "Amount"),
-                    sortKey: "amountUsd",
-                    cell: (w) => `${w.amountUsd ?? "-"} ${w.currency || ""}`.trim()
-                  },
-                  {
-                    key: "phoneNumber",
-                    header: t("Destination", "Destination"),
-                    sortKey: "phoneNumber",
-                    cell: (w) => w.phoneNumber || "-"
-                  },
-                  { key: "provider", header: t("Réseau", "Network"), sortKey: "provider", cell: (w) => w.provider || "-" },
-                  {
-                    key: "status",
-                    header: t("Statut", "Status"),
-                    sortKey: "status",
-                    cell: (w) =>
-                      `${withdrawalStatusLabel(w.status, isEn)}${w.failureMessage ? ` - ${w.failureMessage}` : ""}`
-                  }
-                ]}
-                searchValue={withdrawalTable.q}
-                onSearchValueChange={(q) => setWithdrawalTable((s) => ({ ...s, q, page: 1 }))}
-                page={withdrawalTable.page}
-                pageSize={withdrawalTable.pageSize}
-                totalRows={withdrawalTableView.total}
-                onPageChange={(page) => setWithdrawalTable((s) => ({ ...s, page }))}
-                onPageSizeChange={(pageSize) => setWithdrawalTable((s) => ({ ...s, pageSize, page: 1 }))}
-                sort={withdrawalTable.sort}
-                onSortChange={(sort) => setWithdrawalTable((s) => ({ ...s, sort }))}
-              />
-            </details>
-          </section>
-        )}
+
       </DashboardScreenGate>
 
 
@@ -6767,10 +6663,7 @@ api.getPaymentNotifications(activeIspId)
         <form className="panel" onSubmit={onCreatePaymentIntent}>
           <h2>{t("Encaissement manuel standard", "Standard manual collection")}</h2>
           <p className="app-meta">
-            {t(
-              "Procédure: 1) collecte preuve client, 2) validation financière FAI, 3) activation internet après confirmation.",
-              "Procedure: 1) capture customer proof, 2) FAI finance validation, 3) internet activation after confirmation."
-            )}
+            {t("Enregistrement d’un paiement hors Pawapay (preuve + validation).", "Record a non-Pawapay payment (proof + validation).")}
           </p>
           <select
             value={paymentIntentForm.invoiceId}
@@ -6844,80 +6737,6 @@ api.getPaymentNotifications(activeIspId)
             {t("Enregistrer l'encaissement manuel", "Record manual collection")}
           </button>
         </form>
-
-        <form className="panel" onSubmit={onSubmitTid}>
-          <h2>{t("Mobile Money manuel (TID)", "Manual Mobile Money (TID)")}</h2>
-          <select
-            value={tidForm.invoiceId}
-            onChange={(e) => setTidForm({ ...tidForm, invoiceId: e.target.value })}
-          >
-            <option value="">
-              {t("Choisir une facture ouverte (impayée / en retard)", "Select an open invoice (unpaid / overdue)")}
-            </option>
-            {invoices
-              .filter((inv) => inv.status === "unpaid" || inv.status === "overdue")
-              .map((inv) => (
-                <option key={inv.id} value={inv.id}>
-                  {inv.id.slice(0, 8)} - ${inv.amountUsd} ({invoiceStatusShort(inv.status, isEn)})
-                </option>
-              ))}
-          </select>
-          <input
-            placeholder={t("Référence de transaction (TID)", "Transaction reference (TID)")}
-            value={tidForm.tid}
-            onChange={(e) => setTidForm({ ...tidForm, tid: e.target.value })}
-          />
-          <input
-            placeholder={t("Téléphone payeur", "Payer phone")}
-            value={tidForm.submittedByPhone}
-            onChange={(e) => setTidForm({ ...tidForm, submittedByPhone: e.target.value })}
-          />
-          <input
-            placeholder={t("Montant (facultatif)", "Amount (optional)")}
-            value={tidForm.amountUsd}
-            onChange={(e) => setTidForm({ ...tidForm, amountUsd: e.target.value })}
-          />
-          <button type="submit" disabled={!selectedIspId}>
-            {t("Envoyer la TID", "Submit TID")}
-          </button>
-        </form>
-
-        <section className="panel">
-          <h2>{t("File de vérification des TID", "TID verification queue")}</h2>
-          <button type="button" onClick={onQueueTidReminders} disabled={!selectedIspId}>
-            {t("Mettre en file les rappels TID en attente", "Queue pending TID reminders")}
-          </button>
-          {tidSubmissions.map((row) => (
-            <p key={row.id}>
-              {row.tid} - {tidSubmissionStatusLabel(row.status, isEn)} - {t("facture", "invoice")}{" "}
-              {row.invoiceId?.slice(0, 8)}{" "}
-              {(isPlatformSuperRole(user.role) ||
-                user.role === "company_manager" ||
-                user.role === "isp_admin" ||
-                user.role === "billing_agent") &&
-                row.status === "pending" && (
-                  <>
-                    <button type="button" onClick={() => onReviewTid(row.id, "approved")}>
-                      {t("Approuver", "Approve")}
-                    </button>{" "}
-                    <button type="button" onClick={() => onReviewTid(row.id, "rejected")}>
-                      {t("Rejeter", "Reject")}
-                    </button>
-                  </>
-                )}
-            </p>
-          ))}
-          {tidConflicts.length > 0 && (
-            <>
-              <h3>{t("Conflits TID en double", "Duplicate TID conflicts")}</h3>
-              {tidConflicts.map((c) => (
-                <p key={c.tid}>
-                  {c.tid} - {c.duplicates} {t("envoi(s)", "submission(s)")} - {c.statuses?.join(", ")}
-                </p>
-              ))}
-            </>
-          )}
-        </section>
 
         {showAdvancedPayments ? (
         <section className="panel">
@@ -7051,143 +6870,25 @@ api.getPaymentNotifications(activeIspId)
         ) : null}
       </section>
 
-        {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
-          <details className="panel field-clients-more">
-            <summary>{t("Moyens de paiement", "Payment methods")}</summary>
-            <div className="field-clients-more__body">
-              <form className="panel" onSubmit={onCreatePaymentMethod}>
-                          <h3>{t("Configurer les moyens de paiement", "Configure payment methods")}</h3>
-                          <p className="app-meta">
-                            {t(
-                              "Cash, Mobile Money (TID), Pawapay. Autres methodes en avance.",
-                              "Cash, Mobile Money (TID), Pawapay. Other methods under advanced."
-                            )}
-                          </p>
-                          <select
-                            value={paymentMethodForm.methodType}
-                            onChange={(e) =>
-                              setPaymentMethodForm({ ...paymentMethodForm, methodType: e.target.value })
-                            }
-                          >
-                            {["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card"].map((key) => (
-                              <option key={key} value={key}>
-                                {paymentMethodTypeText(key, t)}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            placeholder={t("Nom du fournisseur", "Provider name")}
-                            value={paymentMethodForm.providerName}
-                            onChange={(e) =>
-                              setPaymentMethodForm({ ...paymentMethodForm, providerName: e.target.value })
-                            }
-                          />
-                          <input
-                            placeholder={t("Délai de validation (minutes)", "Validation ETA (minutes)")}
-                            value={paymentMethodForm.validationEtaMinutes}
-                            onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, validationEtaMinutes: e.target.value })}
-                          />
-                          <input
-                            placeholder={t("Note visible côté client", "Customer-facing note")}
-                            value={paymentMethodForm.note}
-                            onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, note: e.target.value })}
-                          />
-                          {paymentMethodForm.methodType === "cash" ? (
-                            <>
-                              <input
-                                placeholder={t("Point de collecte", "Collection point")}
-                                value={paymentMethodForm.collectionPoint}
-                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, collectionPoint: e.target.value })}
-                              />
-                              <input
-                                placeholder={t("Contact collecte", "Collection contact")}
-                                value={paymentMethodForm.collectionContact}
-                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, collectionContact: e.target.value })}
-                              />
-                            </>
-                          ) : null}
-                          {paymentMethodForm.methodType === "mobile_money" ? (
-                            <>
-                              <input
-                                placeholder={t("Numéro Mobile Money", "Mobile Money number")}
-                                value={paymentMethodForm.mobileMoneyNumber}
-                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, mobileMoneyNumber: e.target.value })}
-                              />
-                              <input
-                                placeholder={t("Nom bénéficiaire", "Beneficiary name")}
-                                value={paymentMethodForm.accountName}
-                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, accountName: e.target.value })}
-                              />
-                            </>
-                          ) : null}
-                          {paymentMethodForm.methodType === "bank_transfer" ? (
-                            <>
-                              <input placeholder={t("Banque", "Bank")} value={paymentMethodForm.bankName} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, bankName: e.target.value })} />
-                              <input placeholder={t("Titulaire", "Account owner")} value={paymentMethodForm.accountName} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, accountName: e.target.value })} />
-                              <input placeholder={t("N° compte", "Account number")} value={paymentMethodForm.accountNumber} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, accountNumber: e.target.value })} />
-                              <input placeholder="IBAN" value={paymentMethodForm.iban} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, iban: e.target.value })} />
-                              <input placeholder="SWIFT/BIC" value={paymentMethodForm.swiftCode} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, swiftCode: e.target.value })} />
-                            </>
-                          ) : null}
-                          {(paymentMethodForm.methodType === "crypto_wallet" || paymentMethodForm.methodType === "binance_pay") ? (
-                            <>
-                              <input placeholder={t("Adresse wallet", "Wallet address")} value={paymentMethodForm.walletAddress} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, walletAddress: e.target.value })} />
-                              <input placeholder={t("Réseau wallet", "Wallet network")} value={paymentMethodForm.walletNetwork} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, walletNetwork: e.target.value })} />
-                              <input placeholder={t("Memo/Tag (optionnel)", "Memo/Tag (optional)")} value={paymentMethodForm.memoTag} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, memoTag: e.target.value })} />
-                            </>
-                          ) : null}
-                          {paymentMethodForm.methodType === "visa_card" ? (
-                            <>
-                              <input placeholder={t("Acquéreur / PSP", "Processor / PSP")} value={paymentMethodForm.processorName} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, processorName: e.target.value })} />
-                              <input placeholder={t("Libellé commerçant", "Merchant label")} value={paymentMethodForm.merchantLabel} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, merchantLabel: e.target.value })} />
-                              <input placeholder={t("Contact support", "Support contact")} value={paymentMethodForm.supportContact} onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, supportContact: e.target.value })} />
-                            </>
-                          ) : null}
-                          <button type="submit" disabled={!selectedIspId}>
-                            {t("Ajouter un moyen de paiement", "Add payment method")}
-                          </button>
-                          {paymentMethods
-                            .filter((pm) => ["cash", "mobile_money", "binance_pay", "bank_transfer", "crypto_wallet", "visa_card"].includes(pm.methodType))
-                            .map((pm) => (
-                            <p key={pm.id}>
-                              {paymentMethodTypeText(pm.methodType, t)} - {pm.providerName} [
-                              {pm.isActive ? t("actif", "active") : t("inactif", "inactive")}]{" "}
-                              <button type="button" onClick={() => onTogglePaymentMethod(pm.id, !pm.isActive)}>
-                                {pm.isActive ? t("Désactiver", "Disable") : t("Activer", "Enable")}
-                              </button>
-                              {" "}
-                              <button type="button" onClick={() => onGenerateGatewayCallback(pm.id)} disabled={!pm.isActive}>
-                                {t("Générer callback gateway", "Generate gateway callback")}
-                              </button>
-                              {" "}
-                              <button type="button" onClick={() => onTestGatewayCallback(pm.id)} disabled={!pm.isActive}>
-                                {t("Tester callback (activation)", "Test callback (activation)")}
-                              </button>
-                              {gatewayCallbackByMethod[pm.id] ? (
-                                <span>
-                                  {" "}
-                                  - {t("URL", "URL")}: <code>{gatewayCallbackByMethod[pm.id].callbackUrl}</code>{" "}
-                                  <button
-                                    type="button"
-                                    onClick={() => copyToClipboard(gatewayCallbackByMethod[pm.id].callbackUrl)}
-                                  >
-                                    {t("Copier URL", "Copy URL")}
-                                  </button>{" "}
-                                  - {t("Secret", "Secret")}: <code>{gatewayCallbackByMethod[pm.id].callbackSecret}</code>{" "}
-                                  <button
-                                    type="button"
-                                    onClick={() => copyToClipboard(gatewayCallbackByMethod[pm.id].callbackSecret)}
-                                  >
-                                    {t("Copier secret", "Copy secret")}
-                                  </button>
-                                </span>
-                              ) : null}
-                            </p>
-                          ))}
-                        </form>
-            </div>
-          </details>
-        )}
+      {(isPlatformSuperRole(user.role) || user.role === "company_manager" || user.role === "isp_admin") && (
+        <BillingWithdrawals
+          t={t}
+          isEn={isEn}
+          user={user}
+          selectedIspId={selectedIspId}
+          cashbox={dashboard?.cashbox || dashboard?.cashboxMonth}
+          withdrawalForm={withdrawalForm}
+          setWithdrawalForm={setWithdrawalForm}
+          availablePawapayNetworks={availablePawapayNetworks}
+          onCreateWithdrawal={onCreateWithdrawal}
+          withdrawalTableView={withdrawalTableView}
+          withdrawalTable={withdrawalTable}
+          setWithdrawalTable={setWithdrawalTable}
+          withdrawalStatusLabel={withdrawalStatusLabel}
+          DataTable={DataTable}
+          formatUsd={formatUsd}
+        />
+      )}
 
       {(isPlatformSuperRole(user.role) ||
         user.role === "company_manager" ||
@@ -7225,15 +6926,15 @@ api.getPaymentNotifications(activeIspId)
           <div className="field-clients-more__body field-clients-more__body--stack">
           <p className="expenses-lead">
             {t(
-              "Dépenses types d'un FAI : liaisons et transit (fibre, radio, location de tours), énergie sur sites, équipement (CPE, baies, onduleurs), salaires NOC et terrain, véhicule et carburant, licences et outils, marketing, impôts et cotisations, cloud et prestataires. Chaque catégorie sert à documenter les sorties de caisse pour les agents et la direction.",
-              "Typical ISP costs: backhaul and transit (fiber, radio, tower rent), on-site power, equipment (CPE, racks, UPS), NOC and field payroll, vehicle and fuel, licenses and tools, marketing, taxes and social contributions, cloud and vendors. Each category documents cash outflows for staff and management."
+              "Saisie et suivi des sorties de caisse.",
+              "Log and track cash outflows."
             )}
           </p>
           <p className="expenses-lead app-meta">
-            <strong>{t("Validation en deux étapes :", "Two-step validation:")}</strong>{" "}
+            <strong>{t("Validation :", "Validation:")}</strong>{" "}
             {t(
-              "une fois la saisie enregistrée, la ligne est « En attente ». Un autre super administrateur, gestionnaire ou administrateur FAI doit l'approuver pour qu'elle entre dans les totaux « dépenses validées » utilisés pour le net (encaissements − dépenses). Si au moins deux validateurs sont inscrits sur l'espace, le demandeur ne peut pas approuver ni rejeter sa propre demande. Avec un seul validateur, l'auto-approbation reste possible (voir journal d'audit). Rejet : motif optionnel ; ligne retirée des totaux jusqu'à nouvelle soumission. Les rôles facturation et NOC consultent ; ils ne valident pas. Création, approbation, rejet et suppression tracent une opération d'audit. Les clôtures de période (bloc ci-dessous) figent les dépenses après inventaire ou révision.",
-              "once recorded, the line stays pending. Another super admin, company manager or ISP admin must approve it before it counts toward validated expenses used for net cash (collections − validated expenses). If at least two approvers are registered on the workspace, the requester cannot approve or reject their own request. With a single approver, self-approval may still apply (see audit log). Rejection: optional reason; the line is excluded from totals until resubmitted. Billing and NOC roles can view but cannot approve. Create, approve, reject and delete actions are audit-logged. Period closures (below) lock expenses after inventory or review."
+              "saisie en attente, puis approbation par un autre admin FAI.",
+              "pending entry, then approval by another ISP admin."
             )}
             {user.role === "system_owner" ? (
               <>
@@ -7755,10 +7456,7 @@ api.getPaymentNotifications(activeIspId)
         <form className="panel" onSubmit={onGenerateVouchers}>
           <h2>{t("Vouchers Wi‑Fi (papier / MikroTik)", "Wi‑Fi vouchers (paper / MikroTik)")}</h2>
           <p className="app-meta" style={{ marginTop: 0 }}>
-            {t(
-              "Tickets imprimables: un seul code (login = code). Optionnellement poussés sur le hotspot MikroTik.",
-              "Printable tickets: single code (login = code). Optionally pushed to the MikroTik hotspot."
-            )}
+            {t("Codes d’accès Wi‑Fi (impression / MikroTik).", "Wi‑Fi access codes (print / MikroTik).")}
           </p>
           <select
             value={voucherForm.planId}

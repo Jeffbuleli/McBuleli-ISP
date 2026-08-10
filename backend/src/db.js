@@ -675,6 +675,7 @@ export async function initDb() {
     );
   `);
   await query("CREATE INDEX IF NOT EXISTS idx_isp_withdrawals_isp ON isp_withdrawal_requests (isp_id, created_at DESC);");
+  await query("ALTER TABLE isp_withdrawal_requests ADD COLUMN IF NOT EXISTS fee_usd NUMERIC(12,2) NOT NULL DEFAULT 0;");
 
   await query(`
     CREATE TABLE IF NOT EXISTS isp_role_profiles (

@@ -25,6 +25,12 @@ import {
   usdAmountString
 } from "./platformBilling.js";
 import { fetchPawapayDepositStatus, initiatePawapayDeposit, initiatePawapayPayout } from "./pawapayClient.js";
+import {
+  TRANSACTION_FEE_RATE,
+  amountWithDepositFee,
+  feeOnAmount,
+  withdrawalDebit
+} from "./transactionFees.js";
 import { isLikelyDrCongoMsisdn, normalizeDrCongoMsisdn } from "./phoneNormalize.js";
 import {
   allocateUniqueSlug,
@@ -1320,14 +1326,18 @@ async function getCashboxSummary(
     };
   }
   const withdrawals = await query(
-    `SELECT COALESCE(SUM(amount_usd), 0)::float AS total
+    `SELECT COALESCE(SUM(amount_usd + COALESCE(fee_usd, 0)), 0)::float AS total
      FROM isp_withdrawal_requests
      WHERE isp_id = $1 AND status IN ('requested', 'processing', 'completed')`,
     [ispId]
   );
   const withdrawnUsd = Number(withdrawals.rows[0]?.total) || 0;
+  /* Deposit fee: client pays invoice+4% at portal; tenant cashbox keeps face value.
+     Withdrawal fee: amount_usd + fee_usd deducted from withdrawable. */
   return {
     ...breakdown,
+    feeRate: TRANSACTION_FEE_RATE,
+    depositFeeRate: TRANSACTION_FEE_RATE,
     withdrawnMobileMoneyUsd: withdrawnUsd,
     withdrawableMobileMoneyUsd: Math.max(0, breakdown.mobileMoneyUsd - withdrawnUsd)
   };
@@ -2510,7 +2520,11 @@ app.post("/api/portal/mobile-money/initiate", authenticatePortal, async (req, re
       message: "Numéro invalide. Exemple: 0812345678 (converti en 243812345678)."
     });
   }
-  const amount = cur === "USD" ? usdAmountString(invoice.amount_usd) : cdfAmountForUsd(invoice.amount_usd);
+  const invoiceUsd = Number(invoice.amount_usd) || 0;
+  const chargedUsd = amountWithDepositFee(invoiceUsd);
+  const feeUsd = feeOnAmount(invoiceUsd);
+  const amount =
+    cur === "USD" ? usdAmountString(chargedUsd) : cdfAmountForUsd(chargedUsd);
   try {
     await query(
       `INSERT INTO portal_invoice_payment_sessions
@@ -2550,8 +2564,12 @@ app.post("/api/portal/mobile-money/initiate", authenticatePortal, async (req, re
       depositId,
       amount,
       currency: cur,
+      invoiceAmountUsd: invoiceUsd,
+      feeUsd,
+      feeRate: TRANSACTION_FEE_RATE,
+      chargedAmountUsd: chargedUsd,
       pawapay: pw,
-      message: "Demande envoyée au téléphone. Validez le PIN Mobile Money."
+      message: "Demande envoyée au téléphone (facture + frais 4%). Validez le PIN Mobile Money."
     });
   } catch (err) {
     return res.status(400).json({ message: err.message || "Pawapay initiation failed" });
@@ -3741,7 +3759,9 @@ app.get(
     const rows = await query(
       `SELECT id, amount_usd AS "amountUsd", currency, phone_number AS "phoneNumber", provider,
               status, payout_id AS "payoutId", pawapay_init_status AS "pawapayInitStatus",
-              mobile_money_basis_usd AS "mobileMoneyBasisUsd", failure_message AS "failureMessage",
+              mobile_money_basis_usd AS "mobileMoneyBasisUsd",
+              COALESCE(fee_usd, 0)::float AS "feeUsd",
+              failure_message AS "failureMessage",
               requested_by AS "requestedBy", created_at AS "createdAt", completed_at AS "completedAt"
        FROM isp_withdrawal_requests
        WHERE isp_id = $1
@@ -3778,13 +3798,17 @@ app.post(
     const mfa = await verifyTotpForUser(req.user.sub, mfaCode);
     if (!mfa.ok) return res.status(400).json({ message: mfa.message || "Invalid authenticator code" });
     const cashbox = await getCashboxSummary(ispId);
-    if (amountUsdForBalance > cashbox.withdrawableMobileMoneyUsd) {
+    const debit = withdrawalDebit(amountUsdForBalance);
+    if (debit.total > cashbox.withdrawableMobileMoneyUsd) {
       return res.status(400).json({
         message:
-          "Withdrawal amount exceeds confirmed Pawapay balance after currency conversion. Cash and TID payments are not withdrawable.",
+          "Withdrawal exceeds available Pawapay balance (amount + 4% fee). Cash and TID are not withdrawable.",
         requestedAmount,
         requestedCurrency: cur,
         requestedAmountUsd: amountUsdForBalance,
+        feeUsd: debit.fee,
+        feeRate: TRANSACTION_FEE_RATE,
+        totalDebitUsd: debit.total,
         cashbox
       });
     }
@@ -3821,15 +3845,17 @@ app.post(
     const inserted = await query(
       `INSERT INTO isp_withdrawal_requests
        (id, isp_id, amount_usd, currency, phone_number, provider, status, payout_id, pawapay_init_status,
-        mobile_money_basis_usd, failure_message, requested_by, mfa_challenge_id)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::uuid, $8, $9, $10, $11, NULL)
+        mobile_money_basis_usd, fee_usd, failure_message, requested_by, mfa_challenge_id)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::uuid, $8, $9, $10, $11, $12, NULL)
        RETURNING id, amount_usd AS "amountUsd", currency, phone_number AS "phoneNumber", provider, status,
                  payout_id AS "payoutId", pawapay_init_status AS "pawapayInitStatus",
-                 mobile_money_basis_usd AS "mobileMoneyBasisUsd", failure_message AS "failureMessage",
+                 mobile_money_basis_usd AS "mobileMoneyBasisUsd",
+                 COALESCE(fee_usd, 0)::float AS "feeUsd",
+                 failure_message AS "failureMessage",
                  created_at AS "createdAt"`,
       [
         ispId,
-        amountUsdForBalance,
+        debit.principal,
         cur,
         phone,
         pawapayProvider,
@@ -3837,6 +3863,7 @@ app.post(
         payoutId,
         pawapay?.status || null,
         cashbox.mobileMoneyUsd,
+        debit.fee,
         failureMessage,
         req.user.sub
       ]
@@ -3850,7 +3877,10 @@ app.post(
       details: {
         requestedAmount,
         requestedCurrency: cur,
-        amountUsd: amountUsdForBalance,
+        amountUsd: debit.principal,
+        feeUsd: debit.fee,
+        feeRate: TRANSACTION_FEE_RATE,
+        totalDebitUsd: debit.total,
         networkKey,
         provider: pawapayProvider,
         payoutId,

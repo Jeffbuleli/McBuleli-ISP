@@ -662,7 +662,11 @@ export default function Portal() {
           {selectedInstructionType === "mobile_money" ? (
           <form className="panel" onSubmit={onStartMobileMoneyPayment}>
             <h2>{t("payMobileTitle")}</h2>
-            <p className="app-meta">{isEnPortal ? "ⓘ Mobile Money flow" : "ⓘ Flux Mobile Money"}</p>
+            <p className="app-meta">
+              {isEnPortal
+                ? "Pawapay USD/CDF · network fee 4% added to the invoice."
+                : "Pawapay USD/CDF · frais réseau 4% ajoutés à la facture."}
+            </p>
             <select
               value={mobilePayForm.invoiceId}
               onChange={(e) => setMobilePayForm({ ...mobilePayForm, invoiceId: e.target.value })}
