@@ -1,5 +1,5 @@
 /**
- * Tenant Pawapay withdrawal (USD/CDF) with 4% fee — Facturation.
+ * Tenant Pawapay withdrawal (USD/CDF) — Facturation.
  */
 export default function BillingWithdrawals({
   t,
@@ -19,21 +19,14 @@ export default function BillingWithdrawals({
   formatUsd
 }) {
   const withdrawable = Number(cashbox?.withdrawableMobileMoneyUsd) || 0;
-  const feeRate = Number(cashbox?.feeRate) || 0.04;
-  const amount = Number(withdrawalForm.amountUsd) || 0;
-  const feePreview =
-    withdrawalForm.currency === "CDF"
-      ? null
-      : Math.round(amount * feeRate * 100) / 100;
-  const totalPreview = feePreview != null ? Math.round((amount + feePreview) * 100) / 100 : null;
 
   return (
     <section className="panel billing-withdrawals">
       <h2>{t("Retrait Pawapay", "Pawapay withdrawal")}</h2>
       <p className="app-meta">
         {t(
-          `Solde retirable : ${formatUsd ? formatUsd(withdrawable, isEn ? "en-GB" : "fr-FR") : `$${withdrawable.toFixed(2)}`} · frais 4%.`,
-          `Withdrawable: ${formatUsd ? formatUsd(withdrawable, isEn ? "en-GB" : "fr-FR") : `$${withdrawable.toFixed(2)}`} · 4% fee.`
+          `Solde retirable : ${formatUsd ? formatUsd(withdrawable, isEn ? "en-GB" : "fr-FR") : `$${withdrawable.toFixed(2)}`}`,
+          `Withdrawable: ${formatUsd ? formatUsd(withdrawable, isEn ? "en-GB" : "fr-FR") : `$${withdrawable.toFixed(2)}`}`
         )}
       </p>
       {!user?.mfaTotpEnabled ? (
@@ -61,14 +54,6 @@ export default function BillingWithdrawals({
           <option value="USD">USD</option>
           <option value="CDF">CDF</option>
         </select>
-        {totalPreview != null && amount > 0 ? (
-          <p className="app-meta">
-            {t(
-              `Frais 4% : $${feePreview.toFixed(2)} · débit total : $${totalPreview.toFixed(2)}`,
-              `4% fee: $${feePreview.toFixed(2)} · total debit: $${totalPreview.toFixed(2)}`
-            )}
-          </p>
-        ) : null}
         <input
           placeholder={t("Téléphone bénéficiaire", "Beneficiary phone")}
           value={withdrawalForm.phoneNumber}
@@ -109,12 +94,6 @@ export default function BillingWithdrawals({
             header: t("Montant", "Amount"),
             sortKey: "amountUsd",
             cell: (w) => `${w.amountUsd ?? "-"} ${w.currency || ""}`.trim()
-          },
-          {
-            key: "feeUsd",
-            header: t("Frais", "Fee"),
-            sortKey: "feeUsd",
-            cell: (w) => (w.feeUsd != null ? `$${Number(w.feeUsd).toFixed(2)}` : "-")
           },
           {
             key: "phoneNumber",

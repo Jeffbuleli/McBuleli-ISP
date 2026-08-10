@@ -2569,7 +2569,7 @@ app.post("/api/portal/mobile-money/initiate", authenticatePortal, async (req, re
       feeRate: TRANSACTION_FEE_RATE,
       chargedAmountUsd: chargedUsd,
       pawapay: pw,
-      message: "Demande envoyée au téléphone (facture + frais 4%). Validez le PIN Mobile Money."
+      message: "Demande envoyée au téléphone. Validez le PIN Mobile Money."
     });
   } catch (err) {
     return res.status(400).json({ message: err.message || "Pawapay initiation failed" });
@@ -3802,7 +3802,7 @@ app.post(
     if (debit.total > cashbox.withdrawableMobileMoneyUsd) {
       return res.status(400).json({
         message:
-          "Withdrawal exceeds available Pawapay balance (amount + 4% fee). Cash and TID are not withdrawable.",
+          "Withdrawal exceeds available Pawapay balance. Cash and TID are not withdrawable.",
         requestedAmount,
         requestedCurrency: cur,
         requestedAmountUsd: amountUsdForBalance,
