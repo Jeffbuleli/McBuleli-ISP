@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
+import { IconCopy } from "./icons.jsx";
 import "./docs.css";
 
 const NAV = [
@@ -14,15 +15,62 @@ const NAV = [
   { id: "deploy", label: "Deploy" }
 ];
 
+const NAV_IDS = NAV.map((item) => item.id);
+
 function Code({ children }) {
   return <code className="docs-code">{children}</code>;
 }
 
-function Pre({ children }) {
+function codeText(children) {
+  if (typeof children === "string") return children;
+  if (Array.isArray(children)) return children.map(codeText).join("");
+  if (children == null) return "";
+  return String(children);
+}
+
+function IconCheck(props) {
   return (
-    <pre className="docs-pre">
-      <code>{children}</code>
-    </pre>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden {...props}>
+      <path
+        d="M5 12.5 9.5 17 19 7.5"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function Pre({ children }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    const text = codeText(children).replace(/\n$/, "");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <div className="docs-pre-wrap">
+      <button
+        type="button"
+        className={`docs-copy${copied ? " is-copied" : ""}`}
+        onClick={copy}
+        aria-label={copied ? "Copied" : "Copy code"}
+        title={copied ? "Copied" : "Copy"}
+      >
+        {copied ? <IconCheck width={15} height={15} /> : <IconCopy width={15} height={15} />}
+      </button>
+      <pre className="docs-pre">
+        <code>{children}</code>
+      </pre>
+    </div>
   );
 }
 
@@ -34,15 +82,67 @@ export default function DocsSite() {
 
   useEffect(() => {
     document.title = "McBuleli ISP · Docs";
-    const onHash = () => {
+
+    const goToHash = () => {
       const id = String(window.location.hash || "").replace(/^#/, "") || "overview";
+      if (!NAV_IDS.includes(id)) return;
       setActive(id);
       const el = document.getElementById(id);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     };
-    onHash();
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+
+    if (window.location.hash) goToHash();
+
+    window.addEventListener("hashchange", goToHash);
+    return () => window.removeEventListener("hashchange", goToHash);
+  }, []);
+
+  // Scroll spy: nav pill tracks the section in view while reading
+  useEffect(() => {
+    const sections = NAV_IDS.map((id) => document.getElementById(id)).filter(Boolean);
+    if (!sections.length) return undefined;
+
+    const visible = new Map();
+
+    const pickActive = () => {
+      let bestId = null;
+      let bestTop = Number.POSITIVE_INFINITY;
+      for (const [id, ratio] of visible) {
+        if (ratio <= 0) continue;
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const top = el.getBoundingClientRect().top;
+        // Prefer the section nearest the reading line under the sticky header
+        const score = Math.abs(top - 110);
+        if (score < bestTop) {
+          bestTop = score;
+          bestId = id;
+        }
+      }
+      if (!bestId) return;
+      setActive((prev) => (prev === bestId ? prev : bestId));
+      if (window.location.hash !== `#${bestId}`) {
+        history.replaceState(null, "", `#${bestId}`);
+      }
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          visible.set(entry.target.id, entry.intersectionRatio);
+        }
+        pickActive();
+      },
+      {
+        root: null,
+        // Sticky header ~76px; keep lower half less sensitive so the top section wins
+        rootMargin: "-90px 0px -45% 0px",
+        threshold: [0, 0.1, 0.25, 0.5, 0.75, 1]
+      }
+    );
+
+    sections.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
   }, []);
 
   const year = useMemo(() => new Date().getFullYear(), []);
