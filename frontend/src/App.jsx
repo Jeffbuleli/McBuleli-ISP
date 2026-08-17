@@ -806,7 +806,8 @@ function App() {
   const [resetTokenState, setResetTokenState] = useState("");
   const [resetPasswordForm, setResetPasswordForm] = useState({ password: "", confirm: "" });
   const [teamRowDraft, setTeamRowDraft] = useState({});
-  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [passwordBusy, setPasswordBusy] = useState(false);
   const [isps, setIsps] = useState([]);
   const [selectedIspId, setSelectedIspId] = useState("");
   const [superDashboard, setSuperDashboard] = useState(null);
@@ -3796,9 +3797,35 @@ api.getPaymentNotifications(activeIspId)
 
   async function onChangePassword(e) {
     e.preventDefault();
-    await api.changePassword(passwordForm);
-    setPasswordForm({ currentPassword: "", newPassword: "" });
-    refresh();
+    setError("");
+    const currentPassword = String(passwordForm.currentPassword || "");
+    const newPassword = String(passwordForm.newPassword || "");
+    const confirmPassword = String(passwordForm.confirmPassword || "");
+    if (newPassword.length < 6) {
+      setError(
+        t("Le nouveau mot de passe doit contenir au moins 6 caractères.", "New password must be at least 6 characters.")
+      );
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError(t("Les mots de passe ne correspondent pas.", "Passwords do not match."));
+      return;
+    }
+    setPasswordBusy(true);
+    try {
+      const payload = await api.changePassword({ currentPassword, newPassword });
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      if (payload?.user) {
+        setUser(payload.user);
+        await refresh(payload.user.ispId || "");
+      } else {
+        await refresh();
+      }
+    } catch (err) {
+      setError(audienceErr(err.message || t("Impossible d'enregistrer le mot de passe.", "Could not save password.")));
+    } finally {
+      setPasswordBusy(false);
+    }
   }
 
   const tenantSurfaceLogoSrc =
@@ -4102,15 +4129,29 @@ api.getPaymentNotifications(activeIspId)
             onChange={(e) =>
               setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
             }
+            required
           />
           <input
             type="password"
               autoComplete="new-password"
-            placeholder={t("Nouveau mot de passe", "New password")}
+            placeholder={t("Nouveau mot de passe (min. 6)", "New password (min. 6)")}
             value={passwordForm.newPassword}
             onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+            required
+            minLength={6}
           />
-          <button type="submit">{t("Enregistrer", "Save")}</button>
+          <input
+            type="password"
+              autoComplete="new-password"
+            placeholder={t("Confirmer le mot de passe", "Confirm password")}
+            value={passwordForm.confirmPassword}
+            onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+            required
+            minLength={6}
+          />
+          <button type="submit" disabled={passwordBusy}>
+            {passwordBusy ? t("Enregistrement…", "Saving...") : t("Enregistrer", "Save")}
+          </button>
         </form>
         </div>
       </main>

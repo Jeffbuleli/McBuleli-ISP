@@ -4420,8 +4420,10 @@ body:has(.auth-simple--dark) {
   -webkit-tap-highlight-color: transparent;
 }
 
-.auth-simple--dark .auth-simple-panel button[type="submit"]:hover {
-  filter: brightness(1.06);
+.auth-simple--dark .auth-simple-panel button[type="submit"]:disabled {
+  opacity: 0.65;
+  cursor: wait;
+  filter: none;
 }
 
 .auth-simple-or {

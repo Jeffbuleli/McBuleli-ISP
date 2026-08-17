@@ -105,6 +105,14 @@ import {
   verifyPasskeyLogin
 } from "./webauthn.js";
 import { createHealthRouter } from "./routes/health.js";
+import {
+  notifyAdminPasswordReset,
+  notifyPasswordChanged,
+  notifyPasswordResetLink,
+  notifyStaffAccountCreated,
+  notifyStaffInvite,
+  notifyWorkspaceWelcome
+} from "./securityNotify.js";
 
 function authenticate(req, res, next) {
   authenticateJwt(req, res, () => enforcePlatformAccess(req, res, next));
@@ -551,47 +559,8 @@ function resolvePlatformPublicOrigin() {
   return raw.replace(/\/$/, "") || "http://localhost:5173";
 }
 
-/** Optional PLATFORM_SMTP_* env — no third-party API; link is logged in dev if SMTP is unset. */
-async function sendPlatformPasswordResetEmail(toEmail, resetUrl) {
-  const host = String(process.env.PLATFORM_SMTP_HOST || "").trim();
-  const from = String(process.env.PLATFORM_SMTP_FROM || "").trim();
-  if (!host || !from) {
-    if (process.env.NODE_ENV !== "production") {
-      // eslint-disable-next-line no-console
-      console.info("[password-reset] Set PLATFORM_SMTP_HOST and PLATFORM_SMTP_FROM to send email; URL:", resetUrl);
-    } else {
-      // eslint-disable-next-line no-console
-      console.warn("[password-reset] PLATFORM_SMTP_* not set — reset email not sent. Configure SMTP or check logs.");
-    }
-    return { ok: false, skipped: true };
-  }
-  let nodemailer;
-  try {
-    nodemailer = await import("nodemailer");
-  } catch (_e) {
-    return { ok: false, error: "nodemailer unavailable" };
-  }
-  const transport = nodemailer.createTransport({
-    host,
-    port: Number(process.env.PLATFORM_SMTP_PORT) || 587,
-    secure: String(process.env.PLATFORM_SMTP_SECURE || "").toLowerCase() === "true",
-    auth:
-      process.env.PLATFORM_SMTP_USER && process.env.PLATFORM_SMTP_PASS
-        ? {
-            user: String(process.env.PLATFORM_SMTP_USER).trim(),
-            pass: String(process.env.PLATFORM_SMTP_PASS).trim()
-          }
-        : undefined
-  });
-  const subject = "McBuleli — password reset / réinitialisation du mot de passe";
-  const text = `McBuleli — password reset\n\nOpen this link (valid 1 hour):\n${resetUrl}\n\nIf you did not request this, ignore this email.\n\n---\nMcBuleli — réinitialisation\nOuvrez ce lien (valable 1 h) :\n${resetUrl}\n\nSi vous n'avez pas demandé cette réinitialisation, ignorez ce message.`;
-  await transport.sendMail({
-    from,
-    to: toEmail,
-    subject,
-    text: String(text).slice(0, 50000)
-  });
-  return { ok: true };
+function sendPlatformPasswordResetEmail(toEmail, resetUrl) {
+  notifyPasswordResetLink({ to: toEmail, resetUrl });
 }
 
 app.use(async (req, _res, next) => {
@@ -1507,6 +1476,12 @@ app.post("/api/public/signup", rlSignup, async (req, res) => {
       email: userRow.email
     });
     const isp = insertedIsp.rows[0];
+    const publicUrl = publicUrlForSlug(isp.subdomain);
+    notifyWorkspaceWelcome({
+      to: userRow.email,
+      publicUrl,
+      companyName: isp.name
+    });
     return res.status(201).json({
       token,
       user: {
@@ -1520,7 +1495,7 @@ app.post("/api/public/signup", rlSignup, async (req, res) => {
       },
       isp: {
         ...isp,
-        publicUrl: publicUrlForSlug(isp.subdomain)
+        publicUrl
       },
       platformSubscription: insertedSub.rows[0],
       trialDays: TRIAL_DAYS
@@ -1594,6 +1569,8 @@ app.post("/api/public/reset-password", rlResetPasswordToken, async (req, res) =>
     t.user_id
   ]);
   await query(`DELETE FROM password_reset_tokens WHERE user_id = $1`, [t.user_id]);
+  const mailUser = await query("SELECT email FROM users WHERE id = $1", [t.user_id]);
+  if (mailUser.rows[0]?.email) notifyPasswordChanged({ to: mailUser.rows[0].email });
   await logAudit({
     actorUserId: t.user_id,
     action: "user.password_reset_via_token",
@@ -3093,17 +3070,37 @@ app.post("/api/auth/change-password", authenticate, async (req, res) => {
   if (!currentPassword || !newPassword || newPassword.length < 6) {
     return res.status(400).json({ message: "currentPassword and valid newPassword are required" });
   }
-  const result = await query("SELECT id, password_hash FROM users WHERE id = $1", [req.user.sub]);
+  const result = await query("SELECT * FROM users WHERE id = $1", [req.user.sub]);
   const user = result.rows[0];
   if (!user) return res.status(404).json({ message: "User not found" });
   const ok = await bcrypt.compare(currentPassword, user.password_hash);
-  if (!ok) return res.status(401).json({ message: "Current password is incorrect" });
+  if (!ok) {
+    return res.status(400).json({
+      code: "INVALID_PASSWORD",
+      message: "Current password is incorrect"
+    });
+  }
   const hash = await bcrypt.hash(newPassword, 10);
   await query("UPDATE users SET password_hash = $1, must_change_password = FALSE WHERE id = $2", [
     hash,
     req.user.sub
   ]);
-  return res.json({ message: "Password changed successfully" });
+  user.password_hash = hash;
+  user.must_change_password = false;
+  if (user.email) notifyPasswordChanged({ to: user.email });
+  await logAudit({
+    ispId: user.isp_id || req.user.ispId || null,
+    actorUserId: req.user.sub,
+    action: "user.password_changed",
+    entityType: "user",
+    entityId: req.user.sub,
+    details: {}
+  });
+  return res.json({
+    ok: true,
+    message: "Password changed successfully",
+    user: await attachDashboardPayload(publicUserPayload(user))
+  });
 });
 
 app.post("/api/auth/accept-invite", async (req, res) => {
@@ -4874,6 +4871,16 @@ app.post(
     details: { role, accreditationLevel: effectiveAccreditationLevel, email: emailLower }
   });
   const row = await fetchTeamUserRow(targetIspId, newId);
+  const ispRow = await query(
+    `SELECT COALESCE(b.display_name, i.name) AS name, i.subdomain
+     FROM isps i LEFT JOIN isp_branding b ON b.isp_id = i.id WHERE i.id = $1`,
+    [targetIspId]
+  );
+  notifyStaffAccountCreated({
+    to: emailLower,
+    loginUrl: `${publicUrlForSlug(ispRow.rows[0]?.subdomain)}/login`,
+    workspaceName: ispRow.rows[0]?.name
+  });
   return res.status(201).json(row);
   }
 );
@@ -4915,6 +4922,17 @@ app.post(
     entityType: "user",
     entityId: userId
   });
+  const targetMail = await query(
+    `SELECT u.email, i.subdomain FROM users u
+     JOIN isps i ON i.id = $2 WHERE u.id = $1`,
+    [userId, targetIspId]
+  );
+  if (targetMail.rows[0]?.email) {
+    notifyAdminPasswordReset({
+      to: targetMail.rows[0].email,
+      loginUrl: `${publicUrlForSlug(targetMail.rows[0].subdomain)}/login`
+    });
+  }
   return res.json({ message: "Password reset successful" });
   }
 );
@@ -5168,9 +5186,25 @@ app.post(
     entityType: "user",
     entityId: userId
   });
+  const inviteLink = `${PLATFORM_PUBLIC_BASE_URL}/invite?token=${token}`;
+  const invited = await query(
+    `SELECT u.email, COALESCE(b.display_name, i.name) AS "workspaceName"
+     FROM users u
+     JOIN isps i ON i.id = $2
+     LEFT JOIN isp_branding b ON b.isp_id = i.id
+     WHERE u.id = $1`,
+    [userId, targetIspId]
+  );
+  if (invited.rows[0]?.email) {
+    notifyStaffInvite({
+      to: invited.rows[0].email,
+      inviteLink,
+      workspaceName: invited.rows[0].workspaceName
+    });
+  }
   return res.json({
     token,
-    inviteLink: `${PLATFORM_PUBLIC_BASE_URL}/invite?token=${token}`,
+    inviteLink,
     expiresIn: "7 days"
   });
   }
