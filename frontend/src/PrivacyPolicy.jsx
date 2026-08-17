@@ -75,7 +75,7 @@ export default function PrivacyPolicy() {
             <h2>Contact</h2>
             <p>
               Privacy questions:{" "}
-              <a href="mailto:mcbuleli@gmail.com">mcbuleli@gmail.com</a>
+              <a href="mailto:hi@mcbuleli.org">hi@mcbuleli.org</a>
             </p>
           </>
         ) : (
@@ -108,7 +108,7 @@ export default function PrivacyPolicy() {
             <p>
               Selon votre juridiction : accès, rectification, portabilité ou effacement lorsque rien ne l&apos;interdit.
               Mentionnez l&apos;entreprise concernée depuis{" "}
-              <a href="mailto:mcbuleli@gmail.com">mcbuleli@gmail.com</a> ; nous suivons vos demandes aussi vite que la petite équipe le permet.
+              <a href="mailto:hi@mcbuleli.org">hi@mcbuleli.org</a> ; nous suivons vos demandes aussi vite que la petite équipe le permet.
             </p>
           </>
         )}

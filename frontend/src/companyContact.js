@@ -2,7 +2,7 @@
 export const COMPANY_CONTACT = {
   legalName: "McBuleli",
   address: "Av. des Ecuries, Jolis Parcs, Ngaliema Kinshasa",
-  email: "mcbuleli@gmail.com",
+  email: "hi@mcbuleli.org",
   /** Pour attribut href="tel:…" (sans espaces). */
   phoneTel: "+243997366736",
   /** Affichage lisible. */
