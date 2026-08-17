@@ -14,6 +14,29 @@ const DocsSite = lazy(() => import("./DocsSite.jsx"));
 
 registerServiceWorker();
 
+function applyHostIndexing() {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  const host = String(window.location.hostname || "").toLowerCase();
+  const indexable =
+    host === "isp.mcbuleli.org" ||
+    host === "docs.isp.mcbuleli.org" ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host.endsWith(".localhost");
+  if (indexable) return;
+  let meta = document.querySelector('meta[name="robots"]');
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.setAttribute("name", "robots");
+    document.head.appendChild(meta);
+  }
+  meta.setAttribute("content", "noindex, nofollow");
+  const canonical = document.querySelector('link[rel="canonical"]');
+  if (canonical) canonical.remove();
+}
+
+applyHostIndexing();
+
 const LazyFallback = () => (
   <main className="global-loading-screen" role="status" aria-live="polite">
     <div className="global-loading-screen__card">

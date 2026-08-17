@@ -1310,8 +1310,8 @@ async function getCashboxSummary(
     [ispId]
   );
   const withdrawnUsd = Number(withdrawals.rows[0]?.total) || 0;
-  /* Deposit fee: client pays invoice+4% at portal; tenant cashbox keeps face value.
-     Withdrawal fee: amount_usd + fee_usd deducted from withdrawable. */
+  /* Deposit fee: client pays invoice+5% at portal / guest Wi-Fi; tenant cashbox keeps face value.
+     Withdrawal fee: amount_usd + fee_usd deducted from withdrawable (5%). */
   return {
     ...breakdown,
     feeRate: TRANSACTION_FEE_RATE,
@@ -1983,7 +1983,10 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
     [ispId]
   );
   const redirectUrl = defaultRedirectUrl(plan, brandRow.rows[0] || {});
-  const amount = usdAmountString(plan.priceUsd);
+  const planUsd = Number(plan.priceUsd) || 0;
+  const chargedUsd = amountWithDepositFee(planUsd);
+  const guestFeeUsd = feeOnAmount(planUsd);
+  const amount = usdAmountString(chargedUsd);
   const depositId = uuidv4();
   if (resolvedMethodType !== "mobile_money") {
     if (!allowedManualMethods.has(resolvedMethodType)) {
@@ -2007,6 +2010,7 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
     if (!activeMethod.rows[0]) {
       return res.status(400).json({ message: `No active payment method configured for ${resolvedMethodType}.` });
     }
+    const manualAmount = usdAmountString(planUsd);
     const manualPurchase = await query(
       `INSERT INTO wifi_guest_purchases
        (id, isp_id, plan_id, deposit_id, phone, pawapay_provider, currency, amount, status, redirect_url, method_type, external_ref, payer_contact)
@@ -2018,7 +2022,7 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
         depositId,
         phone,
         resolvedMethodType,
-        amount,
+        manualAmount,
         redirectUrl,
         resolvedMethodType,
         manualRef,
@@ -2038,7 +2042,7 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
       sourceTable: "wifi_guest_purchases",
       sourceId: manualPurchase.rows[0].id,
       methodType: resolvedMethodType,
-      amountUsd: Number(amount || 0),
+      amountUsd: Number(manualAmount || 0),
       tid: manualRef,
       note: "Guest Wi-Fi manual checkout",
       status: "PENDING",
@@ -2046,7 +2050,7 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
     });
     return res.status(201).json({
       depositId,
-      amount,
+      amount: manualAmount,
       currency: "USD",
       methodType: resolvedMethodType,
       status: "pending_manual",
@@ -2133,6 +2137,10 @@ app.post("/api/public/wifi-purchase/initiate", rlWifiInit, async (req, res) => {
       depositId,
       amount,
       currency: "USD",
+      planAmountUsd: planUsd,
+      feeUsd: guestFeeUsd,
+      feeRate: TRANSACTION_FEE_RATE,
+      chargedAmountUsd: chargedUsd,
       redirectUrlAfterPayment: redirectUrl,
       message:
         pw.status === "ACCEPTED"

@@ -1,4 +1,4 @@
-/** Platform fee on Mobile Money deposits and withdrawals — same rate as mcbuleli.org/wallet. */
+/** Keep in sync with backend/src/transactionFees.js — 5% like mcbuleli.org/wallet. */
 export const TRANSACTION_FEE_RATE = 0.05;
 export const TRANSACTION_FEE_PERCENT = 5;
 
@@ -6,22 +6,14 @@ export function roundMoney(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
-/** Fee amount for a principal (5%). */
 export function feeOnAmount(amount) {
   return roundMoney(Number(amount) * TRANSACTION_FEE_RATE);
 }
 
-/** Client pays invoice + fee (deposit). Tenant cashbox keeps the invoice face value. */
 export function amountWithDepositFee(amount) {
   return roundMoney(Number(amount) + feeOnAmount(amount));
 }
 
-/** Net credited after a 5% deposit fee taken from gross. */
-export function netAfterDepositFee(gross) {
-  return roundMoney(Number(gross) - feeOnAmount(gross));
-}
-
-/** Total debit from withdrawable balance for a payout principal (amount sent to phone + 5%). */
 export function withdrawalDebit(amount) {
   const principal = roundMoney(amount);
   const fee = feeOnAmount(principal);

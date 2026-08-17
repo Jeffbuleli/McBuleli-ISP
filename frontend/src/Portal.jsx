@@ -11,6 +11,7 @@ import { portalBrandTitle, portalInvoiceStatusLabel, portalT } from "./portalCop
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 import { setIndependentPublicPageTitle, setWorkspaceTabTitle } from "./pageTitle.js";
 import { normalizeDrCongoMsisdn } from "./phoneNormalize.js";
+import { TRANSACTION_FEE_PERCENT, amountWithDepositFee, feeOnAmount } from "./transactionFees.js";
 
 const SUBSCRIBER_JWT_KEY = "subscriberJwt";
 const DEFAULT_PAWAPAY_NETWORKS = [
@@ -663,7 +664,9 @@ export default function Portal() {
           <form className="panel" onSubmit={onStartMobileMoneyPayment}>
             <h2>{t("payMobileTitle")}</h2>
             <p className="app-meta">
-              {isEnPortal ? "Mobile Money USD / CDF" : "Mobile Money USD / CDF"}
+              {isEnPortal
+                ? `Mobile Money USD / CDF. Platform fee ${TRANSACTION_FEE_PERCENT}% is added to the invoice.`
+                : `Mobile Money USD / CDF. Frais plateforme ${TRANSACTION_FEE_PERCENT} % ajoutés à la facture.`}
             </p>
             <select
               value={mobilePayForm.invoiceId}
@@ -700,11 +703,32 @@ export default function Portal() {
                 </option>
               ))}
             </select>
+            {(() => {
+              const inv = (session.invoices || []).find((i) => i.id === mobilePayForm.invoiceId);
+              const face = Number(inv?.amountUsd);
+              if (!inv || !Number.isFinite(face) || face <= 0) return null;
+              const fee = feeOnAmount(face);
+              const total = amountWithDepositFee(face);
+              return (
+                <p className="app-meta">
+                  {isEnPortal
+                    ? `Invoice ${face.toFixed(2)} USD · ${TRANSACTION_FEE_PERCENT}% fee ${fee.toFixed(2)} · You pay ${total.toFixed(2)} USD`
+                    : `Facture ${face.toFixed(2)} USD · Frais ${TRANSACTION_FEE_PERCENT} % ${fee.toFixed(2)} · Vous payez ${total.toFixed(2)} USD`}
+                </p>
+              );
+            })()}
             <button type="submit" disabled={!mobilePayForm.invoiceId || !mobilePayForm.phoneNumber}>
               {t("payInvoiceBtn")}
             </button>
             {mobilePaySession?.depositId ? (
               <p>
+                {mobilePaySession.chargedAmountUsd != null ? (
+                  <span>
+                    {isEnPortal
+                      ? `Charged ${mobilePaySession.chargedAmountUsd} ${mobilePaySession.currency || ""} (incl. ${TRANSACTION_FEE_PERCENT}% fee). `
+                      : `Prélevé ${mobilePaySession.chargedAmountUsd} ${mobilePaySession.currency || ""} (frais ${TRANSACTION_FEE_PERCENT} % inclus). `}
+                  </span>
+                ) : null}
                 {t("depositRef")}: <code>{mobilePaySession.depositId}</code>{" "}
                 <button type="button" onClick={onCheckMobileMoneyPayment}>
                   {t("checkPayment")}

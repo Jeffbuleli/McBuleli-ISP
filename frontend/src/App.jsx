@@ -5097,13 +5097,18 @@ api.getPaymentNotifications(activeIspId)
         mobile={gateMobile}
         active={mobileScreen}
         id="billing"
-        hash="#billing-ops"
+        hashes={["#billing-ops", "#billing-wallet"]}
         isFieldAgent={isFieldAgent}
       >
       <section className="grid" id="billing-ops">
         <PaymentPrimaryToggle t={t} />
 <section className="panel billing-invoices-panel">
         <h2>{t("Factures", "Invoices")}</h2>
+        <p className="app-meta">
+          <a href="#billing-wallet">
+            {t("Portefeuille : encaissements Mobile Money et retrait (frais 5 %).", "Wallet: Mobile Money collections and withdrawal (5% fee).")}
+          </a>
+        </p>
         <DataTable
           t={t}
           title={null}
@@ -6322,7 +6327,7 @@ api.getPaymentNotifications(activeIspId)
         mobile={gateMobile}
         active={mobileScreen}
         id="billing"
-        hash="#billing-ops"
+        hashes={["#billing-ops", "#billing-wallet"]}
         isFieldAgent={isFieldAgent}
       >
       <section className="grid">

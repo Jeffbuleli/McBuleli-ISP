@@ -10,7 +10,7 @@ import PublicCeoSection from "./PublicCeoSection.jsx";
 import PwaInstallPrompt from "./PwaInstallPrompt.jsx";
 import { mcbuleliLogoUrl } from "./brandAssets.js";
 import { COMPANY_CONTACT } from "./companyContact.js";
-import { setIndependentPublicPageTitle } from "./pageTitle.js";
+import { setPublicHomePageTitle } from "./pageTitle.js";
 import {
   IconBuilding,
   IconMail,
@@ -441,7 +441,7 @@ export default function PublicSite() {
   }, [uiLang]);
 
   useEffect(() => {
-    setIndependentPublicPageTitle();
+    setPublicHomePageTitle();
   }, []);
 
   useEffect(() => {

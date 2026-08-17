@@ -22,6 +22,7 @@ import { wifiT } from "./wifiCopy.js";
 import { sanitizeApiErrorForAudience } from "./httpErrorCopy.js";
 import { setIndependentPublicPageTitle } from "./pageTitle.js";
 import { isLikelyDrCongoMsisdn, normalizeDrCongoMsisdn } from "./phoneNormalize.js";
+import { TRANSACTION_FEE_PERCENT, amountWithDepositFee, feeOnAmount } from "./transactionFees.js";
 
 function wifiDisplayName(name, lang) {
   const s = name != null ? String(name).trim() : "";
@@ -622,7 +623,9 @@ export default function WifiPortal() {
               <p className="wifi-checkout-modal__plan">{selectedPlan.name}</p>
               <p id="wifi-checkout-summary" className="wifi-checkout-modal__summary">
                 <strong className="wifi-checkout-modal__amount">
-                  {Number(selectedPlan.priceUsd).toFixed(2)} $
+                  {checkoutMode === "mm"
+                    ? `${amountWithDepositFee(Number(selectedPlan.priceUsd)).toFixed(2)} $`
+                    : `${Number(selectedPlan.priceUsd).toFixed(2)} $`}
                 </strong>
                 <span className="wifi-checkout-modal__sep">·</span>
                 <span>
@@ -669,6 +672,12 @@ export default function WifiPortal() {
             {checkoutMode === "mm" ? (
               <>
                 <p className="wifi-checkout-section-title">{t("pawapayBlockTitle")}</p>
+                <p className="wifi-checkout-foot">
+                  {t("feeHint").replace("{pct}", String(TRANSACTION_FEE_PERCENT)).replace(
+                    "{fee}",
+                    feeOnAmount(Number(selectedPlan.priceUsd)).toFixed(2)
+                  ).replace("{total}", amountWithDepositFee(Number(selectedPlan.priceUsd)).toFixed(2))}
+                </p>
                 <form className="wifi-checkout-form" onSubmit={onStartPawapayPayment}>
                   <label className="wifi-field">
                     <span className="wifi-field__label">{t("phoneLabel")}</span>

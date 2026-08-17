@@ -5,6 +5,16 @@ export default defineConfig({
   plugins: [
     react(),
     {
+      name: "gsc-meta",
+      transformIndexHtml(html) {
+        const token = String(process.env.VITE_GOOGLE_SITE_VERIFICATION || "").trim();
+        const tag = token
+          ? `<meta name="google-site-verification" content="${token}" />`
+          : "";
+        return html.replace("<!--GSC_META-->", tag);
+      }
+    },
+    {
       name: "spa-fallback-portal",
       configureServer(server) {
         server.middlewares.use((req, _res, next) => {

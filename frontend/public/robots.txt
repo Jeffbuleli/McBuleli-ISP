@@ -1,0 +1,19 @@
+User-agent: *
+Allow: /
+Allow: /signup
+Allow: /privacy
+Allow: /wifi-zone
+Allow: /docs
+Disallow: /api/
+Disallow: /login
+Disallow: /portal
+Disallow: /wifi
+Disallow: /buy/
+Disallow: /dashboard
+Disallow: /network
+Disallow: /billing
+Disallow: /users
+Disallow: /settings
+
+Host: https://isp.mcbuleli.org
+Sitemap: https://isp.mcbuleli.org/sitemap.xml

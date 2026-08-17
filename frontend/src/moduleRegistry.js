@@ -87,6 +87,14 @@ export function buildModuleRegistry(t, user, { isFieldAgent } = {}) {
     mobileScreen: "billing"
   });
 
+  modules.push({
+    key: "finance.wallet",
+    nav: { category: "wallet", categoryLabel: t("Portefeuille", "Wallet"), categoryIcon: IconWallet },
+    href: "#billing-wallet",
+    label: t("Portefeuille", "Wallet"),
+    mobileScreen: "billing"
+  });
+
   if (role !== "system_owner") {
     modules.push({
       key: "finance.subscription",

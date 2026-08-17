@@ -9787,3 +9787,44 @@ label > input[type="checkbox"]:not(.dashboard-team-chat-sound-toggle__input):fir
     min-width: 640px;
   }
 }
+
+
+.isp-wallet-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.isp-wallet-kpi {
+  background: #eaf6ee;
+  border: 1px solid #e5e5e0;
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+.isp-wallet-kpi span {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1f6b43;
+}
+.isp-wallet-kpi strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.15rem;
+  color: #222;
+}
+.isp-wallet-kpi--accent {
+  background: #1f6b43;
+}
+.isp-wallet-kpi--accent span,
+.isp-wallet-kpi--accent strong {
+  color: #fff;
+}
+.isp-wallet-fee {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #6b6b6b;
+}

@@ -12,6 +12,7 @@ const NAV = [
   { id: "api", label: "API" },
   { id: "mikrotik", label: "MikroTik" },
   { id: "payments", label: "Payments" },
+  { id: "google", label: "Google" },
   { id: "deploy", label: "Deploy" }
 ];
 
@@ -340,8 +341,9 @@ Authorization: Bearer <token>`}</Pre>
             <p className="docs-kicker">Billing</p>
             <h2>Payments</h2>
             <p>
-              Customer invoices: portal Mobile Money (USD/CDF). Platform fee is applied server-side
-              (do not surface provider brand names in product UI).
+              Customer invoices and guest Wi-Fi Mobile Money: 5% platform fee on deposit (payer).
+              Tenant wallet payout to Mobile Money: 5% on withdrawal (same as mcbuleli.org/wallet).
+              Do not surface provider brand names in product UI.
             </p>
             <ul className="docs-list">
               <li>
@@ -350,8 +352,43 @@ Authorization: Bearer <token>`}</Pre>
               <li>
                 Unified webhook: <Code>POST /api/webhooks/pawapay</Code>
               </li>
-              <li>Tenant withdrawals: Facturation → Retrait Mobile Money (TOTP required)</li>
+              <li>Tenant wallet: Portefeuille → Retirer vers Mobile Money (TOTP required)</li>
             </ul>
+          </section>
+
+          <section id="google" className="docs-section">
+            <p className="docs-kicker">Discovery</p>
+            <h2>Google Search Console</h2>
+            <p>
+              Public index: <Code>https://isp.mcbuleli.org</Code> and{" "}
+              <Code>https://docs.isp.mcbuleli.org</Code>. Tenant hosts{" "}
+              <Code>{"{slug}.isp.mcbuleli.org"}</Code> send <Code>X-Robots-Tag: noindex</Code>.
+            </p>
+            <ol className="docs-list">
+              <li>
+                Open{" "}
+                <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer">
+                  Google Search Console
+                </a>
+              </li>
+              <li>
+                Add property <Code>https://isp.mcbuleli.org</Code> (URL prefix). If you already
+                verified the domain <Code>mcbuleli.org</Code>, this subdomain is included.
+              </li>
+              <li>
+                Verify ownership: DNS TXT on <Code>isp.mcbuleli.org</Code>, or HTML tag (set{" "}
+                <Code>VITE_GOOGLE_SITE_VERIFICATION</Code> in <Code>ops/vps/.env</Code> then
+                redeploy).
+              </li>
+              <li>
+                Sitemaps → add <Code>https://isp.mcbuleli.org/sitemap.xml</Code> then Request
+                indexing for the homepage.
+              </li>
+            </ol>
+            <p>
+              Crawl files: <Code>/robots.txt</Code> and <Code>/sitemap.xml</Code>. Login, portal,
+              Wi-Fi checkout and <Code>/api/</Code> are disallowed.
+            </p>
           </section>
 
           <section id="deploy" className="docs-section">
