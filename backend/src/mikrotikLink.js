@@ -67,18 +67,25 @@ a{color:#63b38f}
 function buildLinkScript({ token, apiOrigin, deviceName }) {
   const origin = String(apiOrigin || platformPublicOrigin()).replace(/\/$/, "");
   const regUrl = `${origin}/api/public/mikrotik/register`;
-  const bootUrl = `${origin}/api/public/mikrotik/bootstrap.rsc?token=${encodeURIComponent(token)}`;
   const name = escapeRosString(deviceName || "McBuleli");
   const tok = escapeRosString(token);
+  const reg = escapeRosString(regUrl);
+  const bootBase = escapeRosString(`${origin}/api/public/mikrotik/bootstrap.rsc?token=`);
 
   return `# McBuleli - Link MikroTik
 # Coller dans Terminal (Winbox / SSH). Routeur doit avoir Internet.
 :put "McBuleli: liaison ${name}..."
+:local regUrl "${reg}"
 :local token "${tok}"
+:local bootBase "${bootBase}"
 :local identity [/system identity get name]
-/tool fetch http-method=post url="${regUrl}" http-data=("token=" . $token . "&identity=" . $identity) http-header-field="content-type: application/x-www-form-urlencoded" dst-path=mcbuleli-reg.txt keep-result=yes
+:local postData ("token=" . $token . "&identity=" . $identity)
+:local bootUrl ($bootBase . $token)
+:do { /file remove [find where name="mcbuleli-reg.txt"] } on-error={}
+:do { /file remove [find where name="mcbuleli.rsc"] } on-error={}
+/tool fetch http-method=post url=$regUrl http-data=$postData http-header-field="content-type: application/x-www-form-urlencoded" dst-path=mcbuleli-reg.txt keep-result=yes
 :delay 2s
-/tool fetch url="${bootUrl}" dst-path=mcbuleli.rsc keep-result=yes
+/tool fetch url=$bootUrl dst-path=mcbuleli.rsc keep-result=yes
 :delay 2s
 /import file-name=mcbuleli.rsc
 :put "McBuleli: termine."
