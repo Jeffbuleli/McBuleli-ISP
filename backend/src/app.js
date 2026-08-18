@@ -532,6 +532,7 @@ app.use(
   })
 );
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 app.use(morgan("dev"));
 
 const PLATFORM_PUBLIC_BASE_URL =
