@@ -31,6 +31,9 @@ export default function PwaInstallPrompt({ enabled = false, workspaceLabel = "",
   );
   const [relatedInstalled, setRelatedInstalled] = useState(false);
   const [checkedRelated, setCheckedRelated] = useState(false);
+  const forceInstall =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("pwaInstall") === "1";
 
   useEffect(() => {
     if (typeof window === "undefined" || !import.meta.env.PROD) return undefined;
@@ -72,11 +75,19 @@ export default function PwaInstallPrompt({ enabled = false, workspaceLabel = "",
 
   useEffect(() => {
     if (!import.meta.env.PROD || typeof window === "undefined") return;
+    if (!forceInstall) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("pwaInstall");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [forceInstall]);
+
+  useEffect(() => {
+    if (!import.meta.env.PROD || typeof window === "undefined") return;
     if (!enabled) {
       setDeferred(null);
       return;
     }
-    if (isStandaloneDisplay() || window.localStorage.getItem(DISMISS_KEY) === "1") {
+    if (isStandaloneDisplay() || (!forceInstall && window.localStorage.getItem(DISMISS_KEY) === "1")) {
       return;
     }
     const onBeforeInstall = (e) => {
@@ -85,7 +96,7 @@ export default function PwaInstallPrompt({ enabled = false, workspaceLabel = "",
     };
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
     return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
-  }, [enabled]);
+  }, [enabled, forceInstall]);
 
   async function onInstallClick() {
     if (!deferred) return;
@@ -110,7 +121,7 @@ export default function PwaInstallPrompt({ enabled = false, workspaceLabel = "",
   if (!import.meta.env.PROD || isStandalone || !enabled) {
     return null;
   }
-  if (typeof window !== "undefined" && window.localStorage.getItem(DISMISS_KEY) === "1") {
+  if (!forceInstall && typeof window !== "undefined" && window.localStorage.getItem(DISMISS_KEY) === "1") {
     return null;
   }
 
